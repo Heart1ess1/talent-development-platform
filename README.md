@@ -13,7 +13,7 @@
 
 ### Windows 图形启动器（推荐）
 
-发布目录为 `release/TalentPlatform`。安装并启动 Docker Desktop 后，双击 `人才培养平台启动器.exe`，点击“启动平台”即可；启动器不调用 PowerShell 或 CMD，也不需要系统预装 Java、Node.js、Maven 或 .NET。
+发布包目录为 `release/TalentPlatform`，该目录是本地构建产物，不提交到源码仓库。使用发布版时，请从 GitHub Releases 下载发布包并解压；解压后安装并启动 Docker Desktop，双击 `人才培养平台启动器.exe`，点击“启动平台”即可。启动器不调用 PowerShell 或 CMD，也不需要系统预装 Java、Node.js、Maven 或 .NET。
 
 启动器提供两种启动方式：`启动平台`直接运行当前发布版本；`更新并启动`会在检测到同一项目中的 `frontend`、`backend` 源码时，通过 Docker 自动构建前后端、替换发布 JAR，然后启动最新版本。构建日志会实时显示在启动器中。关闭启动器会停止应用进程；数据库默认继续运行，可通过“停止数据库”按钮关闭。
 
