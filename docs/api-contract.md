@@ -61,8 +61,12 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/auth/login` | 公开 | 登录 | `username`、`password` | `token`、`user` |
 | `GET` | `/api/v1/auth/me` | 登录 | 获取当前用户 | 无 | `CurrentUser` |
 | `POST` | `/api/v1/auth/change-password` | 登录 | 修改当前用户密码 | `oldPassword`、`newPassword` | 新 `token`、新 `user` |
+| `GET` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 查询本人可维护个人资料 | 无 | 员工个人资料 |
+| `PUT` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 维护本人非工作安排类个人资料 | `phone`、`email`、`birthDate`、`nativePlace`、`residence`、`school`、`major`、`education` | 空 |
 
 `CurrentUser` 关键字段：`id`、`username`、`displayName`、`role`、`mustChangePassword`、`securityVersion`、`permissions`、`dataScope`。
+
+员工个人资料接口只允许维护非工作安排字段。工号、姓名、批次、服务站、导师、入职日期和状态不接受员工自改。
 
 ## 仪表盘
 
@@ -75,7 +79,7 @@ Authorization: Bearer <token>
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/employees` | `employee:read`，按数据范围过滤 | 分页查询员工 | `page`、`size`、`keyword`、`batchId`、`stationId`、`mentorId` | 分页员工列表 |
-| `POST` | `/api/v1/employees` | `employee:write` | 创建员工和关联员工账号 | `employeeNo`、`name`、`batchId`、`stationId`、`mentorUserId` 等 | 员工 ID |
+| `POST` | `/api/v1/employees` | `employee:write` | 创建员工和关联员工账号 | `employeeNo`、`name`、`batchId`、`stationId`、`mentorUserId`、`email` 等 | 员工 ID |
 | `PUT` | `/api/v1/employees/{id}` | `employee:write` | 更新员工和关联账号基础信息 | 同创建员工 | 空 |
 | `POST` | `/api/v1/employees/bind-mentor` | `employee:write` | 批量绑定导师 | `employeeIds`、`mentorUserId` | 更新数量 |
 | `GET` | `/api/v1/employees/{id}` | `employee:read`，按数据范围校验 | 查询员工详情 | 路径 `id` | 员工详情 |
@@ -86,8 +90,8 @@ Authorization: Bearer <token>
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/employee-directory` | `employee:read` | 人员目录分页查询 | `page`、`size`、`keyword`、`batchId`、`stationId`、`mentorId`、`education`、`status` | 分页人员目录 |
-| `GET` | `/api/v1/employee-directory/export` | `employee:export` | 导出人员目录 Excel | 同目录筛选参数 | Excel 文件 |
+| `GET` | `/api/v1/employee-directory` | `employee:read`，按数据范围过滤 | 人员目录分页查询 | `page`、`size`、`keyword`、`batchId`、`stationId`、`mentorId`、`education`、`status` | 分页人员目录 |
+| `GET` | `/api/v1/employee-directory/export` | `employee:export`，按数据范围过滤 | 导出人员目录 Excel | 同目录筛选参数 | Excel 文件 |
 | `GET` | `/api/v1/imports/employees/template` | `employee:write` | 下载员工导入模板 | 无 | Excel 文件 |
 | `POST` | `/api/v1/imports/employees` | `employee:write` | 导入员工 | `multipart/form-data` 字段 `file` | `imported`、`errors` |
 
@@ -190,12 +194,12 @@ Authorization: Bearer <token>
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/users` | `user:employee:manage` | 查询账号 | 可选 `role`；无 `user:admin:manage` 时只返回员工账号 | 账号列表 |
-| `POST` | `/api/v1/users` | `user:admin:manage` | 创建非员工账号 | `username`、`displayName`、`role=MENTOR|STATION_MANAGER|TRAINING_ADMIN|ADMIN`、`stationIds` | `id`、`temporaryPassword` |
-| `PUT` | `/api/v1/users/{id}/enabled` | 员工账号需 `user:employee:manage`，非员工账号需 `user:admin:manage` | 启停账号 | `enabled` | 空 |
+| `GET` | `/api/v1/users` | `user:employee:manage` | 查询账号 | 可选 `role`；按当前账号可管理角色返回，站点负责人含 `station_ids`、`station_names` | 账号列表 |
+| `POST` | `/api/v1/users` | 运营角色需 `user:ops-role:manage`，管理员需 `user:admin:manage` | 创建非员工账号 | `username`、`displayName`、`role=MENTOR|STATION_MANAGER|TRAINING_ADMIN|ADMIN`、`stationIds` | `id`、`temporaryPassword` |
+| `PUT` | `/api/v1/users/{id}/enabled` | 员工账号需 `user:employee:manage`，运营角色需 `user:ops-role:manage`，管理员角色需 `user:admin:manage` | 启停账号 | `enabled` | 空 |
 | `PUT` | `/api/v1/users/{id}/role` | `user:admin:manage` | 修改非当前账号角色 | `role=MENTOR|STATION_MANAGER|TRAINING_ADMIN|ADMIN|SUPER_ADMIN` | 空 |
-| `POST` | `/api/v1/users/{id}/reset-password` | 员工账号需 `user:employee:manage`，非员工账号需 `user:admin:manage` | 重置密码 | 路径 `id` | `temporaryPassword` |
-| `PUT` | `/api/v1/users/{id}/stations` | `user:admin:manage` | 设置站点负责人服务站范围 | `stationIds` | 空 |
+| `POST` | `/api/v1/users/{id}/reset-password` | 员工账号需 `user:employee:manage`，运营角色需 `user:ops-role:manage`，管理员角色需 `user:admin:manage` | 重置密码 | 路径 `id` | `temporaryPassword` |
+| `PUT` | `/api/v1/users/{id}/stations` | `user:ops-role:manage` | 设置站点负责人服务站范围 | `stationIds` | 空 |
 
 站点负责人必须至少绑定一个服务站。账号创建和重置密码返回临时密码，用户后续需要修改密码。
 

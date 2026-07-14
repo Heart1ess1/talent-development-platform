@@ -21,7 +21,7 @@ public class PermissionService {
     var p=new LinkedHashSet<String>();p.add(Permissions.EMPLOYEE_READ);p.add(Permissions.EVALUATION_VIEW);
     if(List.of("MENTOR","STATION_MANAGER","TRAINING_ADMIN").contains(role))p.add(Permissions.EVALUATION_SUBMIT);
     if(List.of("TRAINING_ADMIN","ADMIN","SUPER_ADMIN").contains(role))p.addAll(List.of(Permissions.EMPLOYEE_EXPORT,Permissions.COURSE_MANAGE,Permissions.ATTENDANCE_MANAGE,Permissions.TASK_MANAGE,Permissions.TASK_REVIEW,Permissions.EVALUATION_MANAGE,Permissions.EXAM_MANAGE));
-    if(List.of("ADMIN","SUPER_ADMIN").contains(role))p.addAll(List.of(Permissions.EMPLOYEE_WRITE,Permissions.USER_EMPLOYEE_MANAGE,Permissions.MASTER_MANAGE,Permissions.AUDIT_READ));
+    if(List.of("ADMIN","SUPER_ADMIN").contains(role))p.addAll(List.of(Permissions.EMPLOYEE_WRITE,Permissions.USER_EMPLOYEE_MANAGE,Permissions.USER_OPS_ROLE_MANAGE,Permissions.MASTER_MANAGE,Permissions.AUDIT_READ));
     if("SUPER_ADMIN".equals(role))p.add(Permissions.USER_ADMIN_MANAGE);
     return Collections.unmodifiableSet(p);
   }

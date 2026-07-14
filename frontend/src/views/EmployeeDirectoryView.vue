@@ -42,6 +42,7 @@ onMounted(()=>{load();masters()});
       <el-table-column prop="native_place" label="籍贯" width="120"/>
       <el-table-column prop="residence" label="常住地" width="140"/>
       <el-table-column prop="phone" label="手机号" width="130"/>
+      <el-table-column prop="email" label="常用邮箱" min-width="160"/>
       <el-table-column prop="onboard_date" label="入职日期" width="120"/>
       <el-table-column prop="status" label="状态" width="90"/>
     </el-table>

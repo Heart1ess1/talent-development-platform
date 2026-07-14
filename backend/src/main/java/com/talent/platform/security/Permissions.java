@@ -14,6 +14,7 @@ public final class Permissions {
   public static final String EVALUATION_MANAGE="evaluation:manage";
   public static final String EXAM_MANAGE="exam:manage";
   public static final String USER_EMPLOYEE_MANAGE="user:employee:manage";
+  public static final String USER_OPS_ROLE_MANAGE="user:ops-role:manage";
   public static final String USER_ADMIN_MANAGE="user:admin:manage";
   public static final String MASTER_MANAGE="master:manage";
   public static final String AUDIT_READ="audit:read";

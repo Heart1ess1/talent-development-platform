@@ -16,6 +16,7 @@ public class EmployeeDirectoryExportRow {
   @ExcelProperty("籍贯") private String nativePlace;
   @ExcelProperty("常住地") private String residence;
   @ExcelProperty("手机号") private String phone;
+  @ExcelProperty("常用邮箱") private String email;
   @ExcelProperty("入职日期") private LocalDate onboardDate;
   @ExcelProperty("状态") private String status;
 
@@ -31,6 +32,7 @@ public class EmployeeDirectoryExportRow {
   public String getNativePlace(){return nativePlace;} public void setNativePlace(String v){nativePlace=v;}
   public String getResidence(){return residence;} public void setResidence(String v){residence=v;}
   public String getPhone(){return phone;} public void setPhone(String v){phone=v;}
+  public String getEmail(){return email;} public void setEmail(String v){email=v;}
   public LocalDate getOnboardDate(){return onboardDate;} public void setOnboardDate(LocalDate v){onboardDate=v;}
   public String getStatus(){return status;} public void setStatus(String v){status=v;}
 }

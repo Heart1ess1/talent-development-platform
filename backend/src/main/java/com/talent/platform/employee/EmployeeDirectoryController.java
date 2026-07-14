@@ -24,7 +24,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/employee-directory")
 public class EmployeeDirectoryController {
-  private static final String SELECT = "select e.id,e.employee_no,e.name,e.school,e.major,e.education,e.birth_date,e.native_place,e.residence,e.phone,e.onboard_date,e.status,b.name batch_name,s.name station_name,m.display_name mentor_name";
+  private static final String SELECT = "select e.id,e.employee_no,e.name,e.school,e.major,e.education,e.birth_date,e.native_place,e.residence,e.phone,e.email,e.onboard_date,e.status,b.name batch_name,s.name station_name,m.display_name mentor_name";
   private static final String FROM = " from employee e left join talent_batch b on b.id=e.batch_id left join service_station s on s.id=e.station_id left join sys_user m on m.id=e.mentor_user_id";
   private final JdbcTemplate db;
   private final PermissionService permissions;
@@ -71,6 +71,7 @@ public class EmployeeDirectoryController {
   private FilterQuery filters(String keyword,Long batchId,Long stationId,Long mentorId,String education,String status){
     var where=new StringBuilder(" where 1=1");
     var args=new ArrayList<Object>();
+    var scope=permissions.employeeFilter("e");where.append(scope.sql());args.addAll(scope.args());
     if(keyword!=null&&!keyword.isBlank()){where.append(" and (e.name like ? or e.employee_no like ?)");String value="%"+keyword.trim()+"%";args.add(value);args.add(value);}
     if(batchId!=null){where.append(" and e.batch_id=?");args.add(batchId);}
     if(stationId!=null){where.append(" and e.station_id=?");args.add(stationId);}
@@ -82,7 +83,7 @@ public class EmployeeDirectoryController {
 
   private EmployeeDirectoryExportRow toExportRow(Map<String,Object> row){
     var out=new EmployeeDirectoryExportRow();
-    out.setEmployeeNo(string(row,"employee_no"));out.setName(string(row,"name"));out.setBatchName(string(row,"batch_name"));out.setStationName(string(row,"station_name"));out.setMentorName(string(row,"mentor_name"));out.setSchool(string(row,"school"));out.setMajor(string(row,"major"));out.setEducation(string(row,"education"));out.setBirthDate(date(row.get("birth_date")));out.setNativePlace(string(row,"native_place"));out.setResidence(string(row,"residence"));out.setPhone(string(row,"phone"));out.setOnboardDate(date(row.get("onboard_date")));out.setStatus(string(row,"status"));
+    out.setEmployeeNo(string(row,"employee_no"));out.setName(string(row,"name"));out.setBatchName(string(row,"batch_name"));out.setStationName(string(row,"station_name"));out.setMentorName(string(row,"mentor_name"));out.setSchool(string(row,"school"));out.setMajor(string(row,"major"));out.setEducation(string(row,"education"));out.setBirthDate(date(row.get("birth_date")));out.setNativePlace(string(row,"native_place"));out.setResidence(string(row,"residence"));out.setPhone(string(row,"phone"));out.setEmail(string(row,"email"));out.setOnboardDate(date(row.get("onboard_date")));out.setStatus(string(row,"status"));
     return out;
   }
 

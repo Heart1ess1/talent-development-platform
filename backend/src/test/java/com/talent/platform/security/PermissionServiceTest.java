@@ -10,7 +10,7 @@ class PermissionServiceTest {
     assertThat(service.permissions("MENTOR")).contains(Permissions.EMPLOYEE_READ,Permissions.EVALUATION_SUBMIT).doesNotContain(Permissions.TASK_MANAGE,Permissions.TASK_REVIEW);
     assertThat(service.permissions("STATION_MANAGER")).contains(Permissions.EVALUATION_SUBMIT).doesNotContain(Permissions.ATTENDANCE_MANAGE);
     assertThat(service.permissions("TRAINING_ADMIN")).contains(Permissions.COURSE_MANAGE,Permissions.TASK_MANAGE,Permissions.TASK_REVIEW,Permissions.EXAM_MANAGE).doesNotContain(Permissions.EMPLOYEE_WRITE,Permissions.USER_EMPLOYEE_MANAGE);
-    assertThat(service.permissions("ADMIN")).contains(Permissions.EMPLOYEE_WRITE,Permissions.USER_EMPLOYEE_MANAGE,Permissions.MASTER_MANAGE,Permissions.EVALUATION_VIEW).doesNotContain(Permissions.USER_ADMIN_MANAGE,Permissions.EVALUATION_SUBMIT);
+    assertThat(service.permissions("ADMIN")).contains(Permissions.EMPLOYEE_WRITE,Permissions.USER_EMPLOYEE_MANAGE,Permissions.USER_OPS_ROLE_MANAGE,Permissions.MASTER_MANAGE,Permissions.EVALUATION_VIEW).doesNotContain(Permissions.USER_ADMIN_MANAGE,Permissions.EVALUATION_SUBMIT);
     assertThat(service.permissions("SUPER_ADMIN")).contains(Permissions.USER_ADMIN_MANAGE,Permissions.AUDIT_READ);
   }
   @Test void scopeFiltersAreDerivedFromAuthenticatedContext(){
