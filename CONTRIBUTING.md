@@ -335,28 +335,6 @@ git push -u origin feature/name
 git log --oneline --decorate -10
 ```
 
-## 新手常见问题
-
-### 我应该点 GitHub 的 New project 还是 New repository？
-
-放代码要用 Repository。Project 是任务看板，不是代码仓库。本项目代码已经在 Repository 中，后续无需再新建仓库，直接在当前仓库协作。
-
-### 我可以直接上传 zip 到仓库吗？
-
-不要把发布 zip、exe、JAR、数据库文件直接作为普通代码提交。发布包应上传到 GitHub Releases。
-
-### 我能直接在 main 上改代码吗？
-
-不建议。新功能和修复应从 `main` 创建分支，通过 Pull Request 合并。
-
-### 我只改了一个小文件，也需要 PR 吗？
-
-多人协作时建议需要。PR 能留下讨论、验证和审查记录，方便之后追溯。
-
-### 我提交错文件了怎么办？
-
-如果还没有 push，可以用 Git 命令调整提交。如果已经 push，先联系维护者确认处理方式。涉及密钥或真实数据时必须立即通知维护者。
-
 ## 协作底线
 
 - 先同步，再开发。
