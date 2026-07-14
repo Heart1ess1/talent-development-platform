@@ -1,0 +1,1 @@
+{"extends":"@vue/tsconfig/tsconfig.dom.json","include":["src/**/*.ts","src/**/*.vue"],"compilerOptions":{"target":"ES2022","baseUrl":".","paths":{"@/*":["src/*"]},"types":["vite/client"]}}

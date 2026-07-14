@@ -1,0 +1,9 @@
+package com.talent.platform.dashboard;
+
+import com.talent.platform.common.ApiResponse;import com.talent.platform.security.*;import org.springframework.jdbc.core.JdbcTemplate;import org.springframework.web.bind.annotation.*;import java.util.*;
+
+@RestController @RequestMapping("/api/v1/dashboard")
+public class DashboardController {
+  private final JdbcTemplate db;private final PermissionService permissions;public DashboardController(JdbcTemplate db,PermissionService permissions){this.db=db;this.permissions=permissions;}
+  @GetMapping public ApiResponse<Map<String,Object>> dashboard(){var out=new LinkedHashMap<String,Object>();var f=permissions.employeeFilter("e");String scope=f.sql();var p=f.args().toArray();out.put("employeeCount",db.queryForObject("select count(*) from employee e where 1=1"+scope,Long.class,p));out.put("taskTotal",db.queryForObject("select count(*) from task_assignment a join employee e on e.id=a.employee_id where 1=1"+scope,Long.class,p));out.put("taskCompleted",db.queryForObject("select count(*) from task_assignment a join employee e on e.id=a.employee_id where a.status='APPROVED'"+scope,Long.class,p));out.put("averageScore",db.queryForObject("select coalesce(round(avg(a.final_score),1),0) from task_assignment a join employee e on e.id=a.employee_id where a.status='APPROVED'"+scope,Double.class,p));out.put("attendanceCount",db.queryForObject("select count(*) from attendance a join employee e on e.id=a.employee_id where 1=1"+scope,Long.class,p));out.put("scoreDistribution",db.queryForList("select case when a.final_score<60 then '0-59' when a.final_score<80 then '60-79' when a.final_score<90 then '80-89' else '90-100' end score_range,count(*) count from task_assignment a join employee e on e.id=a.employee_id where a.status='APPROVED'"+scope+" group by score_range order by score_range",p));return ApiResponse.ok(out);}
+}
