@@ -11,6 +11,7 @@
 适合新协作者先阅读：
 
 - [CONTRIBUTING.md](CONTRIBUTING.md)：GitHub 协作、分支、提交、推送、Pull Request 和版本发布规则。
+- [docs/README.md](docs/README.md)：需求口径、API 合同、权限矩阵和任务表等项目文档入口。
 - 本 README：项目能力、目录结构、运行方式、验证命令和发布包说明。
 
 ## 技术栈
@@ -32,6 +33,7 @@
 │   ├── src/                  # 页面、路由、状态、接口封装
 │   └── package.json          # 前端脚本与依赖
 ├── launcher/                 # Windows 图形启动器源码
+├── docs/                     # 需求、API、权限和任务文档
 ├── docker-compose.yml        # 本地 MySQL
 ├── .gitignore                # Git 忽略规则
 └── CONTRIBUTING.md           # 协作开发指南
@@ -53,6 +55,19 @@
 - 综合评价：批次评分方案、三方月评、加扣分、月度和季度锁定快照。
 - 考试管理：题库、试卷、考试计划、自动保存、客观题自动阅卷、主观阅卷、补考次数和防作弊事件。
 - 审计和权限：按角色和数据范围控制可访问内容，关键操作写入审计记录。
+
+## 项目文档
+
+GitHub 仓库首页只会自动显示根目录的 `README.md`。`docs/` 下的 Markdown 文件不会自动展开到首页，需要通过链接进入。
+
+当前文档入口：
+
+- [docs/requirements.md](docs/requirements.md)：阶段 1 MVP 需求口径、目标用户、核心业务闭环和已支持范围。
+- [docs/api-contract.md](docs/api-contract.md)：当前 `/api/v1` 接口约定、认证、响应结构、错误码和主要接口清单。
+- [docs/permissions-matrix.md](docs/permissions-matrix.md)：角色、权限点、数据范围和前端路由权限。
+- [docs/task-board.md](docs/task-board.md)：轻量任务表，用于在未配置 GitHub Project 前追踪协作任务。
+
+也可以从 [docs/README.md](docs/README.md) 进入文档目录。
 
 ## 环境要求
 
