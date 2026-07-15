@@ -118,6 +118,14 @@ http://localhost:5173
 
 首次登录必须修改密码。部署或真实使用前必须通过环境变量覆盖默认密码和 `JWT_SECRET`。
 
+新协作者本地启动时建议按以下顺序检查：
+
+1. 确认 Docker Desktop 已启动，再执行 `docker compose up -d` 启动 MySQL。
+2. 在 `backend/` 目录执行 `mvn spring-boot:run`，等待 Flyway 迁移完成并看到 Spring Boot 启动成功。
+3. 新开终端进入 `frontend/`，首次运行执行 `npm install`，之后执行 `npm run dev`。
+4. 打开 `http://localhost:5173`，使用 `superadmin / ChangeMe123!` 登录并按提示修改密码。
+5. 本地演示或联调前确认未使用生产密码、真实用户数据、OSS 密钥或生产 `JWT_SECRET`。
+
 ## Windows 图形启动器
 
 发布包目录为 `release/TalentPlatform`，该目录是本地构建产物，不提交到源码仓库。使用发布版时，应从 GitHub Releases 下载发布包并解压。
@@ -172,6 +180,18 @@ npm run build
 
 提交 Pull Request 前至少应运行与本次修改相关的测试。涉及后端接口、权限、数据库迁移或评价/考试规则时，应优先运行后端测试；涉及页面、路由、状态管理或前端工具函数时，应优先运行前端测试和构建。
 
+## 阶段验收状态
+
+阶段 1-5 验证与收口已在本地完成以下检查：
+
+| 检查项 | 命令 | 结果 |
+| --- | --- | --- |
+| 后端测试 | `cd backend && mvn test` | 通过，36 个测试全部成功。 |
+| 前端测试 | `cd frontend && npm run test` | 通过，3 个测试全部成功。 |
+| 前端生产构建 | `cd frontend && npm run build` | 通过，产物生成到 `frontend/dist/`。 |
+
+本次收口已同步 README、API 合同、权限矩阵和任务表；P0 目标任务均为 `Done`。P2/P3 后续项保留在 `docs/task-board.md` 中，作为下一阶段明确剩余工作。
+
 ## 数据库和迁移
 
 数据库升级由 Flyway 自动执行，迁移脚本位于：
@@ -217,6 +237,13 @@ v1.0.0
 - 本次变更说明
 - 已知问题
 - 升级注意事项，尤其是数据库迁移和环境变量变化
+
+## 已知问题
+
+- `npm run build` 当前会输出来自第三方依赖 `@vueuse/core` 的 PURE 注释位置警告，不影响构建结果。
+- 前端构建会提示部分 chunk 超过 500 kB。当前 MVP 暂不引入代码分割优化，后续可在页面稳定后按路由和图表依赖拆包。
+- 自动化 API 契约校验、端到端核心流程脚本、生产部署/备份恢复说明和页面文案一致性梳理仍是后续任务，详见 `docs/task-board.md` 的 QA、OPS 和 UX 条目。
+- 当前生产化运维方案不属于 MVP 验收范围；真实部署前仍需补充备份、恢复、升级演练和密钥管理流程。
 
 ## 安全注意事项
 

@@ -61,12 +61,12 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/auth/login` | 公开 | 登录 | `username`、`password` | `token`、`user` |
 | `GET` | `/api/v1/auth/me` | 登录 | 获取当前用户 | 无 | `CurrentUser` |
 | `POST` | `/api/v1/auth/change-password` | 登录 | 修改当前用户密码 | `oldPassword`、`newPassword` | 新 `token`、新 `user` |
-| `GET` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 查询本人可维护个人资料 | 无 | 员工个人资料 |
+| `GET` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 查询本人工作信息和可维护个人资料 | 无 | 员工个人资料，包含只读 `employee_no`、`name`、`batch_name`、`station_name`、`mentor_name`、`onboard_date`、`status` |
 | `PUT` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 维护本人非工作安排类个人资料 | `phone`、`email`、`birthDate`、`nativePlace`、`residence`、`school`、`major`、`education` | 空 |
 
 `CurrentUser` 关键字段：`id`、`username`、`displayName`、`role`、`mustChangePassword`、`securityVersion`、`permissions`、`dataScope`。
 
-员工个人资料接口只允许维护非工作安排字段。工号、姓名、批次、服务站、导师、入职日期和状态不接受员工自改。
+员工个人资料接口只允许维护非工作安排字段。工号、姓名、批次、服务站、导师、入职日期和状态只读展示，不接受员工自改。
 
 ## 仪表盘
 
@@ -78,13 +78,13 @@ Authorization: Bearer <token>
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/employees` | `employee:read`，按数据范围过滤 | 分页查询员工 | `page`、`size`、`keyword`、`batchId`、`stationId`、`mentorId` | 分页员工列表 |
+| `GET` | `/api/v1/employees` | `employee:read`，非 `EMPLOYEE`，按数据范围过滤 | 分页查询员工 | `page`、`size`、`keyword`、`batchId`、`stationId`、`mentorId` | 分页员工列表 |
 | `POST` | `/api/v1/employees` | `employee:write` | 创建员工和关联员工账号 | `employeeNo`、`name`、`batchId`、`stationId`、`mentorUserId`、`email` 等 | 员工 ID |
 | `PUT` | `/api/v1/employees/{id}` | `employee:write` | 更新员工和关联账号基础信息 | 同创建员工 | 空 |
 | `POST` | `/api/v1/employees/bind-mentor` | `employee:write` | 批量绑定导师 | `employeeIds`、`mentorUserId` | 更新数量 |
-| `GET` | `/api/v1/employees/{id}` | `employee:read`，按数据范围校验 | 查询员工详情 | 路径 `id` | 员工详情 |
+| `GET` | `/api/v1/employees/{id}` | `employee:read`，非 `EMPLOYEE`，按数据范围校验 | 查询员工详情 | 路径 `id` | 员工详情 |
 
-员工创建会同步创建 `EMPLOYEE` 账号，默认停用并要求改密。
+员工创建会同步创建 `EMPLOYEE` 账号，默认停用并要求改密。员工本人不通过员工台账查看本人资料，应使用 `/api/v1/profile/employee`。
 
 ## 人员目录与导入
 
@@ -130,13 +130,19 @@ Authorization: Bearer <token>
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/tasks` | 登录，按数据范围过滤 | 查询任务 | 无 | 任务列表 |
 | `POST` | `/api/v1/tasks` | `task:manage` | 创建任务 | `title`、`description`、`requirements`、`deadline` | 任务 ID |
+| `GET` | `/api/v1/tasks/{id}` | 登录，按数据范围过滤 | 查询任务详情 | 路径 `id` | 任务完整内容 |
+| `PUT` | `/api/v1/tasks/{id}` | `task:manage` | 编辑任务完整内容 | `title`、`description`、`requirements`、`deadline` | 空 |
 | `POST` | `/api/v1/assignments/assign` | `task:manage` | 分配任务 | `taskId`，以及 `employeeIds`、`batchId`、`stationId` 至少一类 | 新增分配数量 |
+| `POST` | `/api/v1/tasks/dispatch-manual` | `task:manage` | 手动创建并下达任务 | `title`、`description`、`requirements`、`deadline`，以及目标人员条件 | `taskId`、`assignedEmployees` |
+| `GET` | `/api/v1/tasks/{id}/progress` | 登录，按数据范围过滤 | 查询任务对应员工的完成情况 | 路径 `id` | 下达日期、提交日期、状态、评分 |
+| `DELETE` | `/api/v1/tasks/{id}` | `task:manage` | 删除无提交记录的任务 | 路径 `id` | 空 |
 | `GET` | `/api/v1/assignments` | 登录，按数据范围过滤 | 查询任务分配 | 可选 `status` | 分配列表 |
+| `GET` | `/api/v1/assignments/pending-review` | `task:review`，按数据范围过滤 | 查询待审核任务 | 无 | 待审核的任务分配与最新提交信息 |
 | `GET` | `/api/v1/assignments/{id}/submissions` | 登录，按任务员工范围校验 | 查询提交历史 | 路径 `id` | 提交版本和附件列表 |
 | `POST` | `/api/v1/assignments/{id}/submissions` | 角色 `EMPLOYEE`，本人任务 | 提交任务成果 | `multipart/form-data` 字段 `content`、`files` | 提交 ID |
 | `POST` | `/api/v1/submissions/{id}/review` | `task:review` | 审核任务提交 | `decision=APPROVE|RETURN`、`comment`、`score` | 空 |
 
-任务提交仅允许 `NOT_SUBMITTED` 或 `RETURNED` 状态，且不能超过任务截止时间。单次最多上传 5 个附件，文件扩展名限制为 `pdf`、`doc`、`docx`、`xls`、`xlsx`、`ppt`、`pptx`、`png`、`jpg`、`jpeg`、`zip`。
+任务提交允许 `NOT_SUBMITTED`、`RETURNED` 与截止前的 `PENDING_REVIEW` 重新提交；系统维护最近一项未提交任务的截止时间定时器，在截止时间到达时立即将仍未提交的分配固化为 `OVERDUE` 并记 0 分，服务启动和任务变更后会自动重排该定时器。审核接口同时校验 `task:review` 权限和提交员工的数据范围。单次最多上传 5 个附件，文件扩展名限制为 `pdf`、`doc`、`docx`、`xls`、`xlsx`、`ppt`、`pptx`、`png`、`jpg`、`jpeg`、`zip`。
 
 ## 综合评价
 
@@ -177,8 +183,8 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/exams/plans` | `exam:manage` | 创建考试计划 | `paperId`、`name`、`batchId`、`startsAt`、`endsAt`、`durationMinutes`、`maxAttempts`、`scoreMonth`、`employeeIds` | 计划 ID |
 | `POST` | `/api/v1/exams/plans/{id}/publish` | `exam:manage` | 发布考试计划 | 路径 `id` | 空 |
 | `POST` | `/api/v1/exams/plans/{id}/assign` | `exam:manage` | 补充分配考试 | `employeeIds` | 新增分配数量 |
-| `GET` | `/api/v1/exams/plans` | 登录，按数据范围过滤 | 查询考试计划 | 无 | 计划列表 |
-| `POST` | `/api/v1/exams/plans/{id}/attempts` | 角色 `EMPLOYEE`，本人已分配 | 开始考试 | 路径 `id` | 答题记录和题目 |
+| `GET` | `/api/v1/exams/plans` | 登录，按数据范围过滤 | 查询考试计划 | 无 | 计划列表；员工记录额外包含 `plan_phase`、`participation_status` 和 `attempt_count` |
+| `POST` | `/api/v1/exams/plans/{id}/attempts` | 角色 `EMPLOYEE`，本人已分配 | 开始或继续考试 | 路径 `id` | 答题记录和题目 |
 | `GET` | `/api/v1/exams/attempts/{id}` | `exam:manage` 或考生本人 | 查看答卷 | 路径 `id` | 答卷和题目 |
 | `PUT` | `/api/v1/exams/attempts/{id}/answers` | 考生本人，进行中 | 保存答案 | `questionId`、`answer` | 空 |
 | `POST` | `/api/v1/exams/attempts/{id}/events` | 考生本人，进行中 | 记录防作弊事件 | `type=BLUR|HIDDEN|EXIT_FULLSCREEN|RECONNECT`、`detail` | 空 |
@@ -186,9 +192,9 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/exams/review` | `exam:manage` | 查询阅卷队列 | 无 | 待阅卷/已评分答卷 |
 | `PUT` | `/api/v1/exams/attempts/{attemptId}/questions/{questionId}/grade` | `exam:manage` | 主观题评分 | `score`、`comment` | 空 |
 | `POST` | `/api/v1/exams/attempts/{id}/publish` | `exam:manage` | 发布考试结果 | 路径 `id` | 空 |
-| `GET` | `/api/v1/exams/results` | 登录，按数据范围过滤 | 查询已发布考试结果 | 可选 `employeeId` | 结果列表 |
+| `GET` | `/api/v1/exams/results` | 登录，按数据范围过滤 | 查询已发布考试结果与已结束考试的缺考记录 | 可选 `employeeId` | 结果列表，包含 `result_status=COMPLETED|ABSENT`；缺考记录的 `total_score=0` |
 
-当前题型校验只允许 `SINGLE`、`MULTIPLE`、`TRUE_FALSE`。试卷总分必须等于 100 分。
+当前题型校验只允许 `SINGLE`、`MULTIPLE`、`TRUE_FALSE`。试卷总分必须等于 100 分。考试计划的 `plan_phase` 为 `DRAFT`、`UPCOMING`、`OPEN`、`ENDED`；员工的 `participation_status` 为 `NOT_STARTED`、`READY`、`IN_PROGRESS`、`PENDING_REVIEW`、`COMPLETED`、`ABSENT`。其中 `ABSENT` 为实时派生状态：计划已结束且员工从未产生答卷时显示为缺考，不额外创建考试记录。
 
 ## 账号管理
 
@@ -197,7 +203,8 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/users` | `user:employee:manage` | 查询账号 | 可选 `role`；按当前账号可管理角色返回，站点负责人含 `station_ids`、`station_names` | 账号列表 |
 | `POST` | `/api/v1/users` | 运营角色需 `user:ops-role:manage`，管理员需 `user:admin:manage` | 创建非员工账号 | `username`、`displayName`、`role=MENTOR|STATION_MANAGER|TRAINING_ADMIN|ADMIN`、`stationIds` | `id`、`temporaryPassword` |
 | `PUT` | `/api/v1/users/{id}/enabled` | 员工账号需 `user:employee:manage`，运营角色需 `user:ops-role:manage`，管理员角色需 `user:admin:manage` | 启停账号 | `enabled` | 空 |
-| `PUT` | `/api/v1/users/{id}/role` | `user:admin:manage` | 修改非当前账号角色 | `role=MENTOR|STATION_MANAGER|TRAINING_ADMIN|ADMIN|SUPER_ADMIN` | 空 |
+| `PUT` | `/api/v1/users/{id}/role` | `user:admin:manage` | 修改非当前账号角色 | 普通账号支持 `MENTOR|TRAINING_ADMIN|ADMIN|SUPER_ADMIN`；关联员工档案的账号角色固定为 `EMPLOYEE`，仅允许将历史异常角色恢复为 `EMPLOYEE` | 空 |
+| `PUT` | `/api/v1/users/{id}/display-name` | `user:admin:manage` | 修改账号姓名 | `displayName`；关联员工档案的账号会同步更新员工姓名 | 空 |
 | `POST` | `/api/v1/users/{id}/reset-password` | 员工账号需 `user:employee:manage`，运营角色需 `user:ops-role:manage`，管理员角色需 `user:admin:manage` | 重置密码 | 路径 `id` | `temporaryPassword` |
 | `PUT` | `/api/v1/users/{id}/stations` | `user:ops-role:manage` | 设置站点负责人服务站范围 | `stationIds` | 空 |
 
@@ -211,3 +218,20 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/audit-logs` | `audit:read` | 查询审计日志 | `limit`，范围 1 到 500，默认 100 | 审计日志列表 |
 
 审计日志记录操作人、动作、目标类型、目标 ID、请求 ID、变更前后值和创建时间。
+
+## 阶段 3 培养计划与任务模板
+
+| 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/v1/training-plans` | `task:manage` | 查询培养计划 | 无 | 计划列表和任务数量 |
+| `POST` | `/api/v1/training-plans` | `task:manage` | 创建培养计划 | `name`、`description` | 计划 ID |
+| `PUT` | `/api/v1/training-plans/{id}` | `task:manage` | 编辑培养计划 | `name`、`description` | 空 |
+| `PUT` | `/api/v1/training-plans/{id}/enabled` | `task:manage` | 启停培养计划 | `enabled` | 空 |
+| `GET` | `/api/v1/training-plans/{id}/tasks` | `task:manage` | 查询计划任务编排 | 路径 `id` | 编排列表 |
+| `POST` | `/api/v1/training-plans/{id}/tasks` | `task:manage` | 新建计划任务 | `title`、`description`、`requirements` | 计划任务 ID |
+| `PUT` | `/api/v1/training-plans/{planId}/tasks/{taskId}` | `task:manage` | 编辑计划任务 | `title`、`description`、`requirements` | 空 |
+| `DELETE` | `/api/v1/training-plans/{planId}/tasks/{taskId}` | `task:manage` | 删除未下达的计划任务 | 路径 `planId`、`taskId` | 空 |
+| `PUT` | `/api/v1/training-plans/{id}/tasks/order` | `task:manage` | 调整计划任务顺序 | `items: [{id, sortOrder}]` | 空 |
+| `POST` | `/api/v1/tasks/dispatch-plan` | `task:manage` | 从计划下达选定任务 | `planId`、`planTaskIds`、可选 `taskTitle`、`deadlineMode`、目标人员条件 | `targetEmployees`、`createdTasks`、`createdAssignments` |
+
+培养计划仅编排任务标题、任务说明和成果要求，不包含截止时间。计划任务应在闯关任务页面按需下达，目标人员条件可组合 `employeeIds`、`batchId`、`stationId`，并按并集筛选 `ACTIVE` 员工。`taskTitle` 可选，留空时使用每个计划任务的名称，填写后作为本次下达任务的统一名称。`deadlineMode` 支持：`OFFSET`（`baseDate + offsetDays`）和 `ABSOLUTE`（`deadlineDate`）；均在当日 `23:59:59` 截止。下达结果关联 `training_plan_task_id`，同一计划任务和截止日期会复用任务，避免重复分配。手动创建和下达任务接口保持不变。
