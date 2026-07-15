@@ -141,7 +141,7 @@ public class EvaluationService {
   private MonthlyCalculation calculate(Long employeeId, YearMonth month, Map<String,Object> scheme) {
     LocalDate start = month.atDay(1), end = month.atEndOfMonth();
     BigDecimal exam = avg("select avg(total_score) from exam_attempt a join exam_plan p on p.id=a.plan_id where a.employee_id=? and a.published=true and p.score_month=?", employeeId, start);
-    BigDecimal task = avg("select avg(a.final_score) from task_assignment a join challenge_task t on t.id=a.task_id where a.employee_id=? and a.status='APPROVED' and date(t.deadline) between ? and ?", employeeId, start, end);
+    BigDecimal task = avg("select avg(a.final_score) from task_assignment a join challenge_task t on t.id=a.task_id where a.employee_id=? and a.status in ('APPROVED','OVERDUE') and date(t.deadline) between ? and ?", employeeId, start, end);
     Map<String,Map<String,Object>> manual = manualScores(employeeId, start);
     Map<String,Map<String,Object>> overrides = overrideScores(employeeId, start);
     Map<String,BigDecimal> sourceScores = new LinkedHashMap<>();
