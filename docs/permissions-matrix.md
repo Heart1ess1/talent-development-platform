@@ -19,7 +19,7 @@
 
 | 权限点 | 用途 | EMPLOYEE | MENTOR | STATION_MANAGER | TRAINING_ADMIN | ADMIN | SUPER_ADMIN |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `employee:read` | 员工台账、人员范围内查询、导师列表依赖 | 是 | 是 | 是 | 是 | 是 | 是 |
+| `employee:read` | 人员范围内查询、导师列表依赖；员工不进入人员台账页面 | 是 | 是 | 是 | 是 | 是 | 是 |
 | `employee:write` | 创建/更新员工、导入员工、绑定导师 | 否 | 否 | 否 | 否 | 是 | 是 |
 | `employee:export` | 人员目录导出 | 否 | 否 | 否 | 是 | 是 | 是 |
 | `course:manage` | 创建课程、场次、安排课程 | 否 | 否 | 否 | 是 | 是 | 是 |
@@ -49,7 +49,8 @@
 - 考试答卷查看允许 `exam:manage` 用户查看；否则只允许考生本人查看。
 - 月度评价明细 `/evaluation/monthly/detail` 不允许 `EMPLOYEE` 直接查看，员工只能查看已发布结果。
 - 评分项覆盖、删除覆盖和重开已发布月度汇总要求当前角色是 `ADMIN` 或 `SUPER_ADMIN`。
-- 员工可直接维护本人非工作安排类个人资料，包括联系电话、常用邮箱、生日、籍贯、常住地、毕业学校、专业和学历；工号、姓名、批次、服务站、导师、入职日期和状态仍只能由管理员维护。
+- `EMPLOYEE` 不进入人员台账 `/employees`，应在个人信息页查看本人工作信息。
+- 员工可直接维护本人非工作安排类个人资料，包括联系电话、常用邮箱、生日、籍贯、常住地、毕业学校、专业和学历；工号、姓名、批次、服务站、导师、入职日期和状态只读展示，仍只能由管理员维护。
 - 导师、服务站负责人和培训管理员账号创建、启停、重置密码和服务站范围设置要求 `user:ops-role:manage`，当前 `ADMIN` 和 `SUPER_ADMIN` 拥有。
 - 管理员和超级管理员账号创建、系统角色调整要求 `user:admin:manage`，当前只有 `SUPER_ADMIN` 拥有。
 - 停用当前账号被禁止；停用最后一个启用状态的 `SUPER_ADMIN` 被禁止。
@@ -60,14 +61,15 @@
 | --- | --- | --- |
 | 登录 | `/login` | 未登录可访问。 |
 | 进度概览 | `/dashboard` | 已登录。 |
-| 人员台账 | `/employees` | `employee:read`。 |
+| 人员台账 | `/employees` | `employee:read` 且非 `EMPLOYEE`。 |
 | 人员目录 | `/employee-directory` | `employee:export`。 |
 | 课程与签到 | `/courses` | 已登录，页面内按钮按权限显示。 |
 | 闯关任务 | `/tasks` | 已登录，页面内按钮按权限显示。 |
+| 培养计划 | `/training-plans` | 需要 `task:manage`，复用闯关任务管理权限。 |
 | 综合评价 | `/evaluation` | `evaluation:view`。 |
 | 考试中心 | `/exams` | 已登录，页面内功能按权限和角色区分。 |
 | 账号管理 | `/users` | `user:employee:manage`。 |
-| 个人设置 | `/profile` | 已登录；首次登录强制进入。 |
+| 个人设置/个人信息 | `/profile` | 已登录；首次登录强制进入；员工在此查看本人工作信息并维护个人资料。 |
 
 ## 维护规则
 

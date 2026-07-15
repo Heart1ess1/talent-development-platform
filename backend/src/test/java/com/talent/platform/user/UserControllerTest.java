@@ -25,5 +25,44 @@ class UserControllerTest {
     assertThatThrownBy(()->controller.create(new UserController.UserRequest("station1","站点负责人","STATION_MANAGER",List.of()))).isInstanceOf(BusinessException.class).hasMessageContaining("站长至少需要绑定一个服务站");
   }
 
+  @Test void superAdminCanChangeLinkedAccountToEmployeeRole(){
+    authenticate("SUPER_ADMIN");
+    when(db.queryForObject(eq("select role from sys_user where id=?"),eq(String.class),eq(2L))).thenReturn("MENTOR");
+    when(db.queryForObject(eq("select count(*) from employee where user_id=?"),eq(Integer.class),eq(2L))).thenReturn(1);
+    controller.role(2L,Map.of("role","EMPLOYEE"));
+    verify(db).update(eq("update sys_user set role=?,version=version+1,security_version=security_version+1 where id=?"),eq("EMPLOYEE"),eq(2L));
+  }
+
+  @Test void accountWithoutEmployeeProfileCannotBecomeEmployeeRole(){
+    authenticate("SUPER_ADMIN");
+    when(db.queryForObject(eq("select role from sys_user where id=?"),eq(String.class),eq(2L))).thenReturn("MENTOR");
+    when(db.queryForObject(eq("select count(*) from employee where user_id=?"),eq(Integer.class),eq(2L))).thenReturn(0);
+    assertThatThrownBy(()->controller.role(2L,Map.of("role","EMPLOYEE"))).isInstanceOf(BusinessException.class).hasMessageContaining("未关联员工档案");
+  }
+
+  @Test void linkedEmployeeAccountCannotBecomeOperationalRole(){
+    authenticate("SUPER_ADMIN");
+    when(db.queryForObject(eq("select role from sys_user where id=?"),eq(String.class),eq(2L))).thenReturn("EMPLOYEE");
+    when(db.queryForObject(eq("select count(*) from employee where user_id=?"),eq(Integer.class),eq(2L))).thenReturn(1);
+    assertThatThrownBy(()->controller.role(2L,Map.of("role","MENTOR"))).isInstanceOf(BusinessException.class).hasMessageContaining("员工账号角色不可修改");
+  }
+
+  @Test void superAdminCanChangeNonEmployeeDisplayName(){
+    authenticate("SUPER_ADMIN");
+    when(db.queryForObject(eq("select count(*) from employee where user_id=?"),eq(Integer.class),eq(3L))).thenReturn(0);
+    when(db.queryForMap(eq("select id,display_name from sys_user where id=?"),eq(3L))).thenReturn(Map.of("id",3L,"display_name","旧姓名"));
+    controller.displayName(3L,new UserController.DisplayNameRequest("新姓名"));
+    verify(db).update(eq("update sys_user set display_name=?,version=version+1 where id=?"),eq("新姓名"),eq(3L));
+  }
+
+  @Test void employeeDisplayNameUpdatesLinkedEmployeeName(){
+    authenticate("SUPER_ADMIN");
+    when(db.queryForObject(eq("select count(*) from employee where user_id=?"),eq(Integer.class),eq(2L))).thenReturn(1);
+    when(db.queryForMap(eq("select id,display_name from sys_user where id=?"),eq(2L))).thenReturn(Map.of("id",2L,"display_name","旧姓名"));
+    controller.displayName(2L,new UserController.DisplayNameRequest("新姓名"));
+    verify(db).update(eq("update sys_user set display_name=?,version=version+1 where id=?"),eq("新姓名"),eq(2L));
+    verify(db).update(eq("update employee set name=?,version=version+1 where user_id=?"),eq("新姓名"),eq(2L));
+  }
+
   private void authenticate(String role){var u=new CurrentUser(7L,"u","U",role,false,1,permissionService.permissions(role),"ALL");SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(u,null,List.of()));}
 }
