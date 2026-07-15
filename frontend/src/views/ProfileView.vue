@@ -6,9 +6,9 @@ import {useAuthStore} from '@/stores/auth';
 
 const auth=useAuthStore(),isEmployee=computed(()=>auth.user?.role==='EMPLOYEE');
 const form=reactive({oldPassword:'',newPassword:'',confirm:''}),loading=ref(false),profileLoading=ref(false);
-const profile=reactive<any>({phone:'',email:'',birthDate:null,nativePlace:'',residence:'',school:'',major:'',education:''});
+const profile=reactive<any>({employeeNo:'',name:'',batchName:'',stationName:'',mentorName:'',onboardDate:null,status:'',phone:'',email:'',birthDate:null,nativePlace:'',residence:'',school:'',major:'',education:''});
 
-async function loadProfile(){if(!isEmployee.value)return;const r=await api.get<any,Envelope<any>>('/profile/employee');Object.assign(profile,{phone:r.data.phone||'',email:r.data.email||'',birthDate:r.data.birth_date,nativePlace:r.data.native_place||'',residence:r.data.residence||'',school:r.data.school||'',major:r.data.major||'',education:r.data.education||''})}
+async function loadProfile(){if(!isEmployee.value)return;const r=await api.get<any,Envelope<any>>('/profile/employee');Object.assign(profile,{employeeNo:r.data.employee_no||'',name:r.data.name||'',batchName:r.data.batch_name||'',stationName:r.data.station_name||'',mentorName:r.data.mentor_name||'',onboardDate:r.data.onboard_date,status:r.data.status||'',phone:r.data.phone||'',email:r.data.email||'',birthDate:r.data.birth_date,nativePlace:r.data.native_place||'',residence:r.data.residence||'',school:r.data.school||'',major:r.data.major||'',education:r.data.education||''})}
 async function save(){if(form.newPassword!==form.confirm)return ElMessage.warning('两次密码不一致');loading.value=true;try{await auth.changePassword(form.oldPassword,form.newPassword);ElMessage.success('密码已修改');Object.assign(form,{oldPassword:'',newPassword:'',confirm:''})}finally{loading.value=false}}
 async function saveProfile(){profileLoading.value=true;try{await api.put('/profile/employee',profile);ElMessage.success('个人资料已保存')}finally{profileLoading.value=false}}
 onMounted(loadProfile);
@@ -16,7 +16,7 @@ onMounted(loadProfile);
 
 <template>
   <div class="page">
-    <div class="page-head"><h2>个人设置</h2></div>
+    <div class="page-head"><h2>{{isEmployee?'个人信息':'个人设置'}}</h2></div>
     <el-alert v-if="auth.user?.mustChangePassword" title="当前使用临时密码，修改后才能使用其他功能" type="warning" show-icon :closable="false"/>
     <el-row :gutter="16" style="margin-top:16px">
       <el-col :md="isEmployee?12:24">
@@ -38,6 +38,18 @@ onMounted(loadProfile);
       </el-col>
       <el-col v-if="isEmployee" :md="12">
         <el-card>
+          <template #header>工作信息</template>
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="工号">{{profile.employeeNo||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="姓名">{{profile.name||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="批次">{{profile.batchName||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="服务站">{{profile.stationName||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="导师">{{profile.mentorName||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="入职日期">{{profile.onboardDate||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="状态">{{profile.status||'-'}}</el-descriptions-item>
+          </el-descriptions>
+        </el-card>
+        <el-card style="margin-top:16px">
           <template #header>个人资料</template>
           <el-form label-position="top">
             <div class="form-grid">

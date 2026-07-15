@@ -44,7 +44,13 @@ function editScheme(row:any){editingSchemeId.value=row.id;Object.assign(scheme,{
 function cancelEdit(){editingSchemeId.value=undefined}
 
 async function load(){
-  const employeeResponse=await api.get<any,Envelope<any>>('/employees',{params:{size:100}});employees.value=employeeResponse.data.records;
+  if(isEmployee.value){
+    const profile=await api.get<any,Envelope<any>>('/profile/employee');
+    employees.value=[profile.data];
+  }else{
+    const employeeResponse=await api.get<any,Envelope<any>>('/employees',{params:{size:100}});
+    employees.value=employeeResponse.data.records;
+  }
   if(!selected.value&&employees.value.length)selected.value=employees.value[0].id;
   if(canManage.value){const [s,b]=await Promise.all([api.get<any,Envelope<any[]>>('/evaluation/schemes'),api.get<any,Envelope<any[]>>('/batches')]);schemes.value=s.data;batches.value=b.data}
   await loadSelected();
@@ -83,7 +89,7 @@ watch([selected,selectedMonth],loadSelected);onMounted(load);
 <template>
   <div class="page" v-loading="loading">
     <div class="page-head"><h2>综合评价</h2><div v-if="canManage"><el-button @click="generateMonth">生成月度汇总</el-button><el-button @click="generateQuarter">生成季度汇总</el-button></div></div>
-    <div class="toolbar"><el-select v-model="selected" filterable placeholder="选择员工"><el-option v-for="x in employees" :key="x.id" :label="`${x.name} (${x.employee_no})`" :value="x.id"/></el-select><el-date-picker v-if="!isEmployee" v-model="selectedMonth" type="month" value-format="YYYY-MM"/></div>
+    <div class="toolbar"><span v-if="isEmployee&&employees[0]" class="self-label">本人：{{employees[0].name}}（{{employees[0].employee_no}}）</span><el-select v-else v-model="selected" filterable placeholder="选择员工"><el-option v-for="x in employees" :key="x.id" :label="`${x.name} (${x.employee_no})`" :value="x.id"/></el-select><el-date-picker v-if="!isEmployee" v-model="selectedMonth" type="month" value-format="YYYY-MM"/></div>
 
     <template v-if="detail&&!isEmployee">
       <el-alert v-if="detail.locked" title="该月评价已经发布并锁定；如需修改，请由管理员重开月度汇总。" type="warning" :closable="false"/>
@@ -112,5 +118,5 @@ watch([selected,selectedMonth],loadSelected);onMounted(load);
 </template>
 
 <style scoped>
-.component-grid{display:grid;grid-template-columns:repeat(5,minmax(180px,1fr));gap:12px;margin:16px 0}.component-grid .disabled{opacity:.55}.card-head,.total,.score-line,.meta{display:flex;align-items:center;justify-content:space-between}.score-line b{font-size:28px;color:#1769aa}.meta{font-size:13px;color:#667085;margin:10px 0}.component-grid :deep(.el-textarea),.component-grid :deep(.el-input-number){margin-bottom:8px;width:100%}.override,.missing,.bad{color:#d97706}.total-card,.section{margin-top:16px}.total strong{font-size:22px}.snapshot{display:grid;gap:8px;padding:8px 24px}.snapshot>div{display:grid;grid-template-columns:140px repeat(3,120px)}.scheme-form{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:16px}.weight-item{display:flex;align-items:center;gap:6px}.weight-item :deep(.el-input-number){width:110px}.quarter{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.quarter :deep(.el-input-number){width:110px}@media(max-width:1200px){.component-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.component-grid{grid-template-columns:1fr}.snapshot>div{grid-template-columns:1fr 1fr}}
+.component-grid{display:grid;grid-template-columns:repeat(5,minmax(180px,1fr));gap:12px;margin:16px 0}.component-grid .disabled{opacity:.55}.card-head,.total,.score-line,.meta{display:flex;align-items:center;justify-content:space-between}.score-line b{font-size:28px;color:#1769aa}.meta{font-size:13px;color:#667085;margin:10px 0}.component-grid :deep(.el-textarea),.component-grid :deep(.el-input-number){margin-bottom:8px;width:100%}.override,.missing,.bad{color:#d97706}.total-card,.section{margin-top:16px}.total strong{font-size:22px}.self-label{font-weight:600;color:#344054}.snapshot{display:grid;gap:8px;padding:8px 24px}.snapshot>div{display:grid;grid-template-columns:140px repeat(3,120px)}.scheme-form{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:16px}.weight-item{display:flex;align-items:center;gap:6px}.weight-item :deep(.el-input-number){width:110px}.quarter{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.quarter :deep(.el-input-number){width:110px}@media(max-width:1200px){.component-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.component-grid{grid-template-columns:1fr}.snapshot>div{grid-template-columns:1fr 1fr}}
 </style>

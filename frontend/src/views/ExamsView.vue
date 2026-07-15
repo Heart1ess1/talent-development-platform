@@ -14,6 +14,9 @@ const answers=reactive<Record<number,any>>({}),grades=reactive<Record<number,num
 const question=reactive<any>({type:'SINGLE',stem:'',options:['选项A','选项B'],answer:'选项A',score:5,explanation:''})
 const paper=reactive<any>({name:'',description:'',randomAssembly:false,randomizeQuestions:false,randomizeOptions:true,selected:[],scores:{},rules:{SINGLE:{count:0,score:5},MULTIPLE:{count:0,score:10},TRUE_FALSE:{count:0,score:5}}})
 const plan=reactive<any>({paperId:null,name:'',batchId:null,startsAt:'',endsAt:'',durationMinutes:60,maxAttempts:1,scoreMonth:new Date().toISOString().slice(0,7),employeeIds:[]})
+const planPhaseLabels:Record<string,{label:string,type:'info'|'success'|'warning'|'danger'|'primary'}>={DRAFT:{label:'草稿',type:'info'},UPCOMING:{label:'未开始',type:'info'},OPEN:{label:'进行中',type:'success'},ENDED:{label:'已结束',type:'warning'}}
+const participationLabels:Record<string,{label:string,type:'info'|'success'|'warning'|'danger'|'primary'}>={NOT_STARTED:{label:'未开始',type:'info'},READY:{label:'待参加',type:'warning'},IN_PROGRESS:{label:'考试中',type:'primary'},PENDING_REVIEW:{label:'已提交，待阅卷',type:'warning'},COMPLETED:{label:'已完成',type:'success'},ABSENT:{label:'缺考',type:'danger'}}
+const resultStatusLabels:Record<string,{label:string,type:'success'|'danger'}>={COMPLETED:{label:'已完成',type:'success'},ABSENT:{label:'缺考',type:'danger'}}
 
 const enabledQuestions=computed(()=>questions.value.filter(q=>q.enabled===true||q.enabled===1))
 const filteredQuestions=computed(()=>questions.value.filter(q=>(!questionType.value||q.question_type===questionType.value)&&(!questionKeyword.value||q.stem.includes(questionKeyword.value))))
@@ -66,6 +69,16 @@ async function createPaper(){
 }
 async function createPlan(){await api.post('/exams/plans',plan);ElMessage.success('考试计划已创建');await load()}
 async function publishPlan(id:number){await api.post(`/exams/plans/${id}/publish`);await load()}
+function planPhase(row:any){return planPhaseLabels[row.plan_phase]??{label:row.status,type:'info'}}
+function participation(row:any){return participationLabels[row.participation_status]??{label:'--',type:'info'}}
+function resultStatus(row:any){return resultStatusLabels[row.result_status]??{label:'--',type:'success'}}
+function scoreMonth(value:any){return typeof value==='string'?value.slice(0,7):value}
+function dateTimeParts(value:any){
+  if(typeof value!=='string')return {date:'--',time:''}
+  const [date,time='']=value.replace(' ','T').split('T')
+  return {date,time:time.slice(0,5)}
+}
+function canStart(row:any){return ['READY','IN_PROGRESS'].includes(row.participation_status)}
 async function start(row:any){attempt.value=(await api.post<any,Envelope<any>>(`/exams/plans/${row.id}/attempts`)).data;attempt.value.questions.forEach((q:any)=>answers[q.id]=q.saved_answer??(q.question_type==='MULTIPLE'?[]:null));dialog.value=true;document.addEventListener('visibilitychange',visibility);document.addEventListener('fullscreenchange',fullscreen);document.documentElement.requestFullscreen?.().catch(()=>{})}
 async function save(q:any){await api.put(`/exams/attempts/${attempt.value.id}/answers`,{questionId:q.id,answer:answers[q.id]})}
 async function submit(){await api.post(`/exams/attempts/${attempt.value.id}/submit`);closeExam();ElMessage.success('试卷已提交');await load()}
@@ -89,9 +102,20 @@ onBeforeUnmount(closeExam);onMounted(load)
 
     <el-card class="section-card">
       <template #header>考试计划</template>
-      <el-table :data="plans" empty-text="暂无考试计划">
-        <el-table-column prop="name" label="考试"/><el-table-column prop="paper_name" label="试卷"/><el-table-column prop="starts_at" label="开始时间"/><el-table-column prop="ends_at" label="结束时间"/><el-table-column prop="duration_minutes" label="时长(分钟)"/>
-        <el-table-column label="操作" width="120"><template #default="s"><el-button v-if="!canManage" link type="primary" @click="start(s.row)">进入考试</el-button><el-button v-if="canManage&&s.row.status==='DRAFT'" link type="primary" @click="publishPlan(s.row.id)">发布</el-button></template></el-table-column>
+      <el-table :data="plans" empty-text="暂无考试计划" class="plan-table">
+        <el-table-column prop="name" label="考试" min-width="90" show-overflow-tooltip/>
+        <el-table-column prop="paper_name" label="试卷" min-width="90" show-overflow-tooltip/>
+        <el-table-column label="开始时间" width="112">
+          <template #default="s"><span class="datetime-cell"><span>{{dateTimeParts(s.row.starts_at).date}}</span><span>{{dateTimeParts(s.row.starts_at).time}}</span></span></template>
+        </el-table-column>
+        <el-table-column label="结束时间" width="112">
+          <template #default="s"><span class="datetime-cell"><span>{{dateTimeParts(s.row.ends_at).date}}</span><span>{{dateTimeParts(s.row.ends_at).time}}</span></span></template>
+        </el-table-column>
+        <el-table-column prop="duration_minutes" label="时长(分钟)" width="90"/>
+        <el-table-column label="计划状态" width="94"><template #default="s"><el-tag :type="planPhase(s.row).type" effect="plain">{{planPhase(s.row).label}}</el-tag></template></el-table-column>
+        <el-table-column v-if="canManage" label="参考人数" width="86"><template #default="s">{{s.row.assigned_count ?? 0}}</template></el-table-column>
+        <el-table-column v-else label="我的状态" width="100"><template #default="s"><el-tag :type="participation(s.row).type" effect="plain">{{participation(s.row).label}}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="94"><template #default="s"><el-button v-if="!canManage&&canStart(s.row)" link type="primary" @click="start(s.row)">{{s.row.participation_status==='IN_PROGRESS'?'继续考试':'进入考试'}}</el-button><el-button v-if="canManage&&s.row.status==='DRAFT'" link type="primary" @click="publishPlan(s.row.id)">发布</el-button><span v-if="!canManage&&!canStart(s.row)" class="muted">--</span></template></el-table-column>
       </el-table>
     </el-card>
 
@@ -146,7 +170,7 @@ onBeforeUnmount(closeExam);onMounted(load)
       <el-card class="section-card"><template #header>阅卷队列</template><el-table :data="review"><el-table-column prop="employee_name" label="员工"/><el-table-column prop="exam_name" label="考试"/><el-table-column prop="status" label="状态"/><el-table-column prop="objective_score" label="客观分"/><el-table-column prop="event_count" label="异常事件"/><el-table-column label="操作"><template #default="s"><el-button link @click="openReview(s.row)">阅卷/发布</el-button></template></el-table-column></el-table></el-card>
     </template>
 
-    <el-card class="section-card"><template #header>已发布成绩</template><el-table :data="results"><el-table-column prop="employee_name" label="员工"/><el-table-column prop="exam_name" label="考试"/><el-table-column prop="total_score" label="成绩"/><el-table-column prop="score_month" label="计分月份"/></el-table></el-card>
+    <el-card class="section-card"><template #header>已发布成绩</template><el-table :data="results"><el-table-column prop="employee_name" label="员工"/><el-table-column prop="exam_name" label="考试"/><el-table-column prop="total_score" label="成绩"/><el-table-column label="状态" width="110"><template #default="s"><el-tag :type="resultStatus(s.row).type" effect="plain">{{resultStatus(s.row).label}}</el-tag></template></el-table-column><el-table-column label="计分月份"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column></el-table></el-card>
 
     <el-dialog v-model="dialog" :title="attempt?.exam_name" width="760px" :close-on-click-modal="false" :show-close="false"><div v-for="(q,i) in attempt?.questions" :key="q.id" class="exam-question"><h4>{{i+1}}. {{q.stem}}（{{q.score}}分）</h4><el-radio-group v-if="['SINGLE','TRUE_FALSE'].includes(q.question_type)" v-model="answers[q.id]" @change="save(q)"><el-radio v-for="o in options(q)" :key="String(o)" :value="o">{{optionLabel(o)}}</el-radio></el-radio-group><el-checkbox-group v-else v-model="answers[q.id]" @change="save(q)"><el-checkbox v-for="o in options(q)" :key="String(o)" :value="o">{{optionLabel(o)}}</el-checkbox></el-checkbox-group></div><template #footer><el-button type="primary" @click="submit">提交试卷</el-button></template></el-dialog>
     <el-dialog v-model="reviewDialog" title="主观题阅卷"><div v-for="q in reviewAttempt?.questions?.filter((x:any)=>x.question_type==='SHORT')" :key="q.id"><h4>{{q.stem}}（{{q.score}}分）</h4><p>考生答案：{{q.saved_answer}}</p><el-input-number v-model="grades[q.id]" :min="0" :max="Number(q.score)"/><el-button @click="grade(q)">保存评分</el-button></div><template #footer><el-button type="primary" @click="publishResult">发布成绩</el-button></template></el-dialog>
@@ -154,5 +178,5 @@ onBeforeUnmount(closeExam);onMounted(load)
 </template>
 
 <style scoped>
-.section-card{margin-bottom:16px}.card-head{display:flex;align-items:center;justify-content:space-between}.question-form{max-width:760px}.import-panel{padding:12px 4px}.paper-options{display:flex;gap:24px;margin:18px 0}.paper-table{margin-top:16px}.manual-paper-list{margin-top:16px;border:1px solid #e4e7ed;border-radius:6px;max-height:420px;overflow:auto}.question-pick{display:flex;align-items:center;gap:12px;min-height:52px;padding:8px 14px;border-bottom:1px solid #ebeef5}.question-pick:last-child{border-bottom:0}.question-pick .el-checkbox{flex:1;height:auto}.paper-submit{display:flex;align-items:center;justify-content:flex-end;gap:20px;margin-top:18px;font-weight:600}.score-ok{color:#16a34a}.exam-question{padding:8px 0 16px;border-bottom:1px solid #ebeef5}.form-grid{margin-bottom:16px}.form-grid>*{width:100%}
+.section-card{margin-bottom:16px}.card-head{display:flex;align-items:center;justify-content:space-between}.plan-table :deep(.el-table__cell){padding:10px 0}.datetime-cell{display:inline-flex;flex-direction:column;line-height:1.35;white-space:nowrap}.datetime-cell span:last-child{color:#606266}.question-form{max-width:760px}.import-panel{padding:12px 4px}.paper-options{display:flex;gap:24px;margin:18px 0}.paper-table{margin-top:16px}.manual-paper-list{margin-top:16px;border:1px solid #e4e7ed;border-radius:6px;max-height:420px;overflow:auto}.question-pick{display:flex;align-items:center;gap:12px;min-height:52px;padding:8px 14px;border-bottom:1px solid #ebeef5}.question-pick:last-child{border-bottom:0}.question-pick .el-checkbox{flex:1;height:auto}.paper-submit{display:flex;align-items:center;justify-content:flex-end;gap:20px;margin-top:18px;font-weight:600}.score-ok{color:#16a34a}.exam-question{padding:8px 0 16px;border-bottom:1px solid #ebeef5}.form-grid{margin-bottom:16px}.form-grid>*{width:100%}
 </style>
