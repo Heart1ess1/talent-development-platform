@@ -109,21 +109,24 @@ npm run dev
 http://localhost:5173
 ```
 
-开发环境初始超级管理员：
+当前测试版内置以下测试账号，首次登录无需修改密码：
 
-```text
-用户名：superadmin
-密码：ChangeMe123!
-```
+| 权限 | 用户名 | 密码 |
+| --- | --- | --- |
+| 新员工 | `employee` | `12345678` |
+| 管理员 | `admin` | `12345678` |
+| 培训管理员 | `trainadmin` | `12345678` |
+| 导师 | `mentor` | `12345678` |
+| 超级管理员 | `superadmin` | `superadmin` |
 
-首次登录必须修改密码。部署或真实使用前必须通过环境变量覆盖默认密码和 `JWT_SECRET`。
+这些账号仅用于测试和演示。部署或真实使用前必须关闭测试账号引导，设置正式管理员账号，并通过环境变量覆盖默认密码和 `JWT_SECRET`。
 
 新协作者本地启动时建议按以下顺序检查：
 
 1. 确认 Docker Desktop 已启动，再执行 `docker compose up -d` 启动 MySQL。
 2. 在 `backend/` 目录执行 `mvn spring-boot:run`，等待 Flyway 迁移完成并看到 Spring Boot 启动成功。
 3. 新开终端进入 `frontend/`，首次运行执行 `npm install`，之后执行 `npm run dev`。
-4. 打开 `http://localhost:5173`，使用 `superadmin / ChangeMe123!` 登录并按提示修改密码。
+4. 打开 `http://localhost:5173`，使用上方测试账号登录。
 5. 本地演示或联调前确认未使用生产密码、真实用户数据、OSS 密钥或生产 `JWT_SECRET`。
 
 ## Windows 图形启动器
@@ -154,6 +157,7 @@ http://localhost:5173
 | `JWT_SECRET` | 仅开发默认值 | 生产环境必须使用随机长密钥 |
 | `JWT_EXPIRATION_MINUTES` | `120` | JWT 有效期 |
 | `SUPER_ADMIN_USERNAME` / `SUPER_ADMIN_PASSWORD` | 开发账号 | 首次启动创建超级管理员 |
+| `DEMO_USERS_ENABLED` | `true` | 是否启用测试账号引导；真实部署应设为 `false` |
 | `STORAGE_TYPE` | `local` | 设置为 `oss` 切换阿里云 OSS |
 | `LOCAL_STORAGE_ROOT` | `../data/uploads` | 本地私有文件目录 |
 | `OSS_ENDPOINT` / `OSS_BUCKET` | 空 | OSS 基础配置 |
@@ -249,5 +253,5 @@ v1.0.0
 
 - 不要提交 `.env`、数据库备份、真实用户数据、OSS 密钥、JWT 密钥或任何生产环境密码。
 - `data/`、`release/` 和构建产物目录已被 `.gitignore` 忽略，除非明确有理由，否则不要改为提交。
-- README 中的 `superadmin / ChangeMe123!` 只用于本地开发，真实部署必须覆盖。
+- README 中的测试账号只用于测试和演示，真实部署必须关闭测试账号引导并覆盖默认密钥。
 - 任何涉及权限放宽、认证流程、文件上传、考试防作弊、评价锁定和审计日志的改动，都应在 Pull Request 中明确说明影响范围。

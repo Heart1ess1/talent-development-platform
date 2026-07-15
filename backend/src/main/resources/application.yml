@@ -23,6 +23,7 @@ app:
   bootstrap:
     username: ${SUPER_ADMIN_USERNAME:superadmin}
     password: ${SUPER_ADMIN_PASSWORD:ChangeMe123!}
+    demo-users-enabled: ${DEMO_USERS_ENABLED:true}
   storage:
     type: ${STORAGE_TYPE:local}
     local-root: ${LOCAL_STORAGE_ROOT:../data/uploads}
@@ -31,4 +32,3 @@ app:
     oss-access-key: ${OSS_ACCESS_KEY:}
     oss-secret-key: ${OSS_SECRET_KEY:}
   cors-origins: ${CORS_ORIGINS:http://localhost:5173}
-
