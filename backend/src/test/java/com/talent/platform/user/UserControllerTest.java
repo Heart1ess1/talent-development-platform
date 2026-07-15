@@ -64,5 +64,27 @@ class UserControllerTest {
     verify(db).update(eq("update employee set name=?,version=version+1 where user_id=?"),eq("新姓名"),eq(2L));
   }
 
+  @Test void superAdminCanChangeUsernameAndRevokeTheTargetSession(){
+    authenticate("SUPER_ADMIN");
+    when(db.queryForMap(eq("select id,username,role from sys_user where id=?"),eq(3L))).thenReturn(Map.of("id",3L,"username","mentor-old","role","MENTOR"));
+    when(db.queryForObject(eq("select count(*) from employee where user_id=?"),eq(Integer.class),eq(3L))).thenReturn(0);
+    controller.username(3L,new UserController.UsernameRequest("mentor-new"));
+    verify(db).update(eq("update sys_user set username=?,version=version+1,security_version=security_version+1 where id=?"),eq("mentor-new"),eq(3L));
+  }
+
+  @Test void employeeUsernameAlsoUpdatesEmployeeNumber(){
+    authenticate("SUPER_ADMIN");
+    when(db.queryForMap(eq("select id,username,role from sys_user where id=?"),eq(2L))).thenReturn(Map.of("id",2L,"username","010200001111","role","EMPLOYEE"));
+    when(db.queryForObject(eq("select count(*) from employee where user_id=?"),eq(Integer.class),eq(2L))).thenReturn(1);
+    controller.username(2L,new UserController.UsernameRequest("010200001112"));
+    verify(db).update(eq("update employee set employee_no=?,version=version+1 where user_id=?"),eq("010200001112"),eq(2L));
+  }
+
+  @Test void superAdminUsernameCannotBeChanged(){
+    authenticate("SUPER_ADMIN");
+    when(db.queryForMap(eq("select id,username,role from sys_user where id=?"),eq(1L))).thenReturn(Map.of("id",1L,"username","superadmin","role","SUPER_ADMIN"));
+    assertThatThrownBy(()->controller.username(1L,new UserController.UsernameRequest("another-admin"))).isInstanceOf(BusinessException.class).hasMessageContaining("不能修改超级管理员");
+  }
+
   private void authenticate(String role){var u=new CurrentUser(7L,"u","U",role,false,1,permissionService.permissions(role),"ALL");SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(u,null,List.of()));}
 }

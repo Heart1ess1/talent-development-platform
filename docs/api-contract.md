@@ -205,6 +205,7 @@ Authorization: Bearer <token>
 | `PUT` | `/api/v1/users/{id}/enabled` | 员工账号需 `user:employee:manage`，运营角色需 `user:ops-role:manage`，管理员角色需 `user:admin:manage` | 启停账号 | `enabled` | 空 |
 | `PUT` | `/api/v1/users/{id}/role` | `user:admin:manage` | 修改非当前账号角色 | 普通账号支持 `MENTOR|TRAINING_ADMIN|ADMIN|SUPER_ADMIN`；关联员工档案的账号角色固定为 `EMPLOYEE`，仅允许将历史异常角色恢复为 `EMPLOYEE` | 空 |
 | `PUT` | `/api/v1/users/{id}/display-name` | `user:admin:manage` | 修改账号姓名 | `displayName`；关联员工档案的账号会同步更新员工姓名 | 空 |
+| `PUT` | `/api/v1/users/{id}/username` | `user:admin:manage`（仅超级管理员） | 修改非超级管理员账号的用户名 | `username`，仅支持字母、数字、点、下划线、连字符；员工账号会同步更新工号并使原登录态失效 | 空 |
 | `POST` | `/api/v1/users/{id}/reset-password` | 员工账号需 `user:employee:manage`，运营角色需 `user:ops-role:manage`，管理员角色需 `user:admin:manage` | 重置密码 | 路径 `id` | `temporaryPassword` |
 | `PUT` | `/api/v1/users/{id}/stations` | `user:ops-role:manage` | 设置站点负责人服务站范围 | `stationIds` | 空 |
 

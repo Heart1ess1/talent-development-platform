@@ -22,6 +22,7 @@ async function copyTemporaryPassword(){try{if(navigator.clipboard?.writeText)awa
 async function toggle(row:any){await api.put(`/users/${row.id}/enabled`,{enabled:!row.enabled});ElMessage.success('状态已更新');load()}
 async function changeRole(row:any,role:string){await api.put(`/users/${row.id}/role`,{role});ElMessage.success('角色已更新，旧令牌已失效');load()}
 async function changeDisplayName(row:any){const {value}=await ElMessageBox.prompt('请输入姓名','修改姓名',{inputValue:row.display_name,inputPattern:/\S/,inputErrorMessage:'姓名不能为空'});await api.put(`/users/${row.id}/display-name`,{displayName:value});ElMessage.success('姓名已更新');if(row.id===auth.user?.id)await auth.refresh();load()}
+async function changeUsername(row:any){const {value}=await ElMessageBox.prompt('用户名仅支持字母、数字、点、下划线和连字符','修改用户名',{inputValue:row.username,inputPattern:/^[A-Za-z0-9._-]+$/,inputErrorMessage:'请输入合法用户名'});await api.put(`/users/${row.id}/username`,{username:value.trim()});ElMessage.success('用户名已更新，原登录状态已失效');load()}
 function stationIds(row:any){return String(row.station_ids||'').split(',').filter(Boolean).map((x:string)=>Number(x))}
 function openScope(row:any){scopeUser.value=row;scopeForm.stationIds=stationIds(row);scopeDialog.value=true}
 async function saveScope(){await api.put(`/users/${scopeUser.value.id}/stations`,{stationIds:scopeForm.stationIds});ElMessage.success('服务站范围已更新');scopeDialog.value=false;load()}
@@ -29,6 +30,7 @@ function canOperate(row:any){return row.role==='EMPLOYEE'||['MENTOR','STATION_MA
 function isEmployeeAccount(row:any){return row.has_employee_profile||row.role==='EMPLOYEE'}
 function canChangeRole(row:any){return superAdmin.value&&row.id!==auth.user?.id&&!isEmployeeAccount(row)&&row.role!=='STATION_MANAGER'}
 function canChangeDisplayName(){return superAdmin.value}
+function canChangeUsername(row:any){return superAdmin.value&&row.role!=='SUPER_ADMIN'}
 function needsEmployeeRoleRepair(row:any){return superAdmin.value&&row.id!==auth.user?.id&&row.has_employee_profile&&row.role!=='EMPLOYEE'}
 onMounted(load);
 </script>
@@ -37,7 +39,12 @@ onMounted(load);
   <div class="page">
     <div class="page-head"><h2>账号管理</h2><el-button v-if="canOps||superAdmin" type="primary" @click="openCreate">创建账号</el-button></div>
     <el-table :data="rows">
-      <el-table-column prop="username" label="用户名"/>
+      <el-table-column label="用户名">
+        <template #default="s">
+          <span>{{s.row.username}}</span>
+          <el-button v-if="canChangeUsername(s.row)" link type="primary" @click="changeUsername(s.row)">修改</el-button>
+        </template>
+      </el-table-column>
       <el-table-column label="姓名">
         <template #default="s">
           <span>{{s.row.display_name}}</span>
