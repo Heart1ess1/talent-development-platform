@@ -2,7 +2,7 @@ spring:
   application:
     name: talent-platform
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/talent_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    url: ${DB_URL:jdbc:mysql://localhost:3307/talent_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
     username: ${DB_USERNAME:talent}
     password: ${DB_PASSWORD:talent_dev}
   servlet:

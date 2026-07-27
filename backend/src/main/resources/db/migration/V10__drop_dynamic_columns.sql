@@ -1,0 +1,9 @@
+ALTER TABLE employee
+  DROP COLUMN department,
+  DROP COLUMN tech_mentor,
+  DROP COLUMN skill_mentor,
+  DROP COLUMN regional_rep,
+  DROP COLUMN station_head,
+  DROP COLUMN leave_date,
+  DROP COLUMN leave_notes,
+  DROP COLUMN days_on_site;

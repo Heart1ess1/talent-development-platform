@@ -8,7 +8,7 @@ const auth=useAuthStore(),canWrite=computed(()=>auth.can('employee:write')),canM
 const rows=ref<any[]>([]),selectedRows=ref<any[]>([]),total=ref(0),page=ref(1),dialog=ref(false),bindDialog=ref(false),importing=ref(false);
 const batches=ref<any[]>([]),stations=ref<any[]>([]),mentors=ref<any[]>([]),editingId=ref<number|null>(null),bindMentorId=ref<number|null>(null);
 const filters=reactive({keyword:'',batchId:null as number|null,stationId:null as number|null,mentorId:null as number|null});
-const emptyForm=()=>({employeeNo:'',name:'',batchId:null,stationId:null,mentorUserId:null,school:'',major:'',education:'',birthDate:null,nativePlace:'',residence:'',phone:'',email:'',onboardDate:null});
+	const emptyForm=()=>({employeeNo:'',name:'',batchId:null,stationId:null,mentorUserId:null,school:'',major:'',education:'',birthDate:null,nativePlace:'',residence:'',phone:'',email:'',onboardDate:null,politicalStatus:'',hobbies:'',speciality:'',idCard:''});
 const form=reactive<any>(emptyForm());
 
 function params(){return {...filters,page:page.value,size:20}}
@@ -17,7 +17,7 @@ async function masters(){const [b,s,m]=await Promise.all([api.get<any,Envelope<a
 function search(){page.value=1;load()}
 function reset(){Object.assign(filters,{keyword:'',batchId:null,stationId:null,mentorId:null});search()}
 function openCreate(){editingId.value=null;Object.assign(form,emptyForm());dialog.value=true}
-function openEdit(row:any){editingId.value=row.id;Object.assign(form,{employeeNo:row.employee_no,name:row.name,batchId:row.batch_id,stationId:row.station_id,mentorUserId:row.mentor_user_id,school:row.school||'',major:row.major||'',education:row.education||'',birthDate:row.birth_date,nativePlace:row.native_place||'',residence:row.residence||'',phone:row.phone||'',email:row.email||'',onboardDate:row.onboard_date});dialog.value=true}
+	function openEdit(row:any){editingId.value=row.id;Object.assign(form,{employeeNo:row.employee_no,name:row.name,batchId:row.batch_id,stationId:row.station_id,mentorUserId:row.mentor_user_id,school:row.school||'',major:row.major||'',education:row.education||'',birthDate:row.birth_date,nativePlace:row.native_place||'',residence:row.residence||'',phone:row.phone||'',email:row.email||'',onboardDate:row.onboard_date,politicalStatus:row.political_status||'',hobbies:row.hobbies||'',speciality:row.speciality||'',idCard:row.id_card||''});dialog.value=true}
 async function save(){editingId.value?await api.put(`/employees/${editingId.value}`,form):await api.post('/employees',form);ElMessage.success(editingId.value?'员工已更新':'员工已创建');dialog.value=false;load()}
 async function bindMentor(){if(!selectedRows.value.length)return ElMessage.warning('请选择员工');if(!bindMentorId.value)return ElMessage.warning('请选择导师');const r=await api.post<any,Envelope<number>>('/employees/bind-mentor',{employeeIds:selectedRows.value.map(x=>x.id),mentorUserId:bindMentorId.value});ElMessage.success(`已绑定 ${r.data} 人`);bindDialog.value=false;bindMentorId.value=null;load()}
 async function upload(o:any){importing.value=true;try{const fd=new FormData();fd.append('file',o.file);const r=await api.post<any,Envelope<any>>('/imports/employees',fd);r.data.errors.length?ElMessage.error(`第${r.data.errors[0].row}行：${r.data.errors[0].message}`):ElMessage.success(`已导入 ${r.data.imported} 人`);load()}finally{importing.value=false}}
@@ -54,6 +54,12 @@ onMounted(()=>{load();masters()});
       <el-table-column prop="education" label="学历" width="90"/>
       <el-table-column prop="phone" label="手机号" width="130"/>
       <el-table-column prop="email" label="常用邮箱" min-width="160"/>
+      <el-table-column prop="political_status" label="政治面貌" width="90"/>
+      <el-table-column prop="native_place" label="籍贯" width="100"/>
+      <el-table-column prop="residence" label="住址（公司）" min-width="140"/>
+      <el-table-column prop="id_card" label="身份证号码" width="180"/>
+      <el-table-column prop="hobbies" label="兴趣爱好" width="120"/>
+      <el-table-column prop="speciality" label="特长" width="120"/>
       <el-table-column v-if="canWrite" label="操作" width="90" fixed="right"><template #default="s"><el-button link type="primary" @click="openEdit(s.row)">编辑</el-button></template></el-table-column>
     </el-table>
     <el-pagination v-model:current-page="page" :total="total" :page-size="20" layout="total,prev,pager,next" style="margin-top:16px" @change="load"/>
@@ -69,11 +75,16 @@ onMounted(()=>{load();masters()});
         <el-form-item label="学校"><el-input v-model="form.school"/></el-form-item>
         <el-form-item label="专业"><el-input v-model="form.major"/></el-form-item>
         <el-form-item label="出生日期"><el-date-picker v-model="form.birthDate" type="date" value-format="YYYY-MM-DD"/></el-form-item>
-        <el-form-item label="入职日期"><el-date-picker v-model="form.onboardDate" type="date" value-format="YYYY-MM-DD"/></el-form-item>
+        <el-form-item label="赴段时间"><el-date-picker v-model="form.onboardDate" type="date" value-format="YYYY-MM-DD"/></el-form-item>
         <el-form-item label="籍贯"><el-input v-model="form.nativePlace"/></el-form-item>
         <el-form-item label="常住地"><el-input v-model="form.residence"/></el-form-item>
         <el-form-item label="手机号"><el-input v-model="form.phone"/></el-form-item>
         <el-form-item label="常用邮箱"><el-input v-model="form.email"/></el-form-item>
+        <el-form-item label="政治面貌"><el-input v-model="form.politicalStatus"/></el-form-item>
+        <el-form-item label="兴趣爱好"><el-input v-model="form.hobbies"/></el-form-item>
+        <el-form-item label="特长"><el-input v-model="form.speciality"/></el-form-item>
+        <el-form-item label="身份证号码"><el-input v-model="form.idCard"/></el-form-item>
+
       </div></el-form>
       <template #footer><el-button @click="dialog=false">取消</el-button><el-button type="primary" @click="save">保存</el-button></template>
     </el-dialog>

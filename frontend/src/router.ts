@@ -13,6 +13,7 @@ const routes=[
     {path:'tasks',component:()=>import('@/views/TasksView.vue')},
     {path:'evaluation',component:()=>import('@/views/EvaluationView.vue'),meta:{permission:'evaluation:view'}},
     {path:'exams',component:()=>import('@/views/ExamsView.vue')},
+    {path:'station-change-review',component:()=>import('@/views/StationChangeReviewView.vue'),meta:{permission:'master:manage'}},
     {path:'users',component:()=>import('@/views/UsersView.vue'),meta:{permission:'user:employee:manage'}},
     {path:'profile',component:()=>import('@/views/ProfileView.vue')}
   ]}
