@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed,onMounted,ref} from 'vue'
 import {ElMessage} from 'element-plus'
-import {ArrowRight,Search} from '@element-plus/icons-vue'
+import {ArrowRight,Download,Search} from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import {dateTimeParts,resultStatusLabels,scoreMonth} from './examUi'
@@ -9,7 +9,7 @@ import {dateTimeParts,resultStatusLabels,scoreMonth} from './examUi'
 const auth=useAuthStore(),canManage=computed(()=>auth.can('exam:manage'))
 const plans=ref<any[]>([]),results=ref<any[]>([]),planResults=ref<any[]>([])
 const keyword=ref(''),phase=ref(''),detailKeyword=ref(''),detailStatus=ref('')
-const detailVisible=ref(false),detailLoading=ref(false),selectedPlan=ref<any>(null)
+const detailVisible=ref(false),detailLoading=ref(false),exporting=ref(false),selectedPlan=ref<any>(null)
 
 const filteredPlans=computed(()=>plans.value.filter(row=>{
   const matchesKeyword=!keyword.value||`${row.name} ${row.paper_name}`.toLowerCase().includes(keyword.value.trim().toLowerCase())
@@ -47,6 +47,17 @@ async function publishResult(row:any){
   ElMessage.success('成绩已发布')
   await load()
 }
+async function exportResults(planId?:number){
+  exporting.value=true
+  try{
+    const blob=await api.get<any,Blob>('/exams/results/export',{params:planId?{planId}:{},responseType:'blob'})
+    const url=URL.createObjectURL(blob),link=document.createElement('a')
+    link.href=url
+    link.download=planId&&selectedPlan.value?`${selectedPlan.value.name}-考试成绩.xlsx`:'考试成绩.xlsx'
+    link.click()
+    URL.revokeObjectURL(url)
+  }finally{exporting.value=false}
+}
 function resultStatus(row:any){return resultStatusLabels[row.result_status]??{label:'--',type:'success'}}
 function isPublished(row:any){return row.published===true||row.published===1}
 function planPhase(row:any){
@@ -65,6 +76,7 @@ onMounted(load)
         <h2>{{canManage?'成绩管理':'我的成绩'}}</h2>
         <p class="muted">{{canManage?'按考试查看完成情况，点击考试可进入员工成绩单':'查看已发布的考试成绩和缺考记录'}}</p>
       </div>
+      <el-button v-if="canManage" :icon="Download" :loading="exporting" @click="exportResults()">导出已发布成绩</el-button>
     </div>
 
     <template v-if="canManage">
@@ -119,6 +131,7 @@ onMounted(load)
       <template #header>
         <div class="drawer-title">
           <div><h3>{{selectedPlan?.name}}</h3><p>{{selectedPlan?.paper_name}} · {{dateTimeParts(selectedPlan?.starts_at).date}} {{dateTimeParts(selectedPlan?.starts_at).time}} 至 {{dateTimeParts(selectedPlan?.ends_at).date}} {{dateTimeParts(selectedPlan?.ends_at).time}}</p></div>
+          <el-button :icon="Download" :loading="exporting" @click="exportResults(selectedPlan?.id)">导出本场成绩</el-button>
         </div>
       </template>
       <div class="detail-overview">
@@ -152,5 +165,5 @@ onMounted(load)
 </template>
 
 <style scoped>
-.page-head p{margin:6px 0 0}.overview-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}.overview-item{padding:18px 20px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 2px 8px rgba(31,41,55,.04)}.overview-item span{display:block;color:#7b8799;font-size:13px;margin-bottom:7px}.overview-item strong{font-size:25px;color:#253044}.overview-item.success{border-left:3px solid #67c23a}.overview-item.warning{border-left:3px solid #e6a23c}.card-head,.detail-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px}.card-title{font-weight:600}.header-tip{color:#8a96a8;font-size:12px;margin-left:12px}.filters{display:flex;gap:10px}.filters .el-input{width:190px}.filters .el-select{width:130px}.summary-table :deep(.el-table__row){cursor:pointer}.summary-table :deep(.el-table__row:hover) .row-arrow{color:#409eff;transform:translateX(2px)}.exam-name{font-weight:600;color:#303846}.sub-text{color:#8a96a8;font-size:12px;margin-top:4px}.time-range{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#596579;white-space:nowrap}.row-arrow{color:#a9b1bd;transition:.2s}.drawer-title h3{font-size:20px;margin:0;color:#253044}.drawer-title p{font-size:13px;color:#7b8799;margin:7px 0 0}.detail-overview{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}.detail-overview>div{background:#f7f9fc;border-radius:6px;padding:14px 18px}.detail-overview span{display:block;color:#7b8799;font-size:12px}.detail-overview strong{display:block;font-size:22px;margin-top:5px;color:#253044}.detail-overview .green{color:#4d9f2f}.detail-overview .orange{color:#d88a1d}.detail-overview .red{color:#e34d59}.detail-toolbar{margin-bottom:14px}.datetime-cell{display:inline-flex;flex-direction:column;line-height:1.35;white-space:nowrap}.datetime-cell span:last-child{color:#606266}@media(max-width:900px){.overview-grid{grid-template-columns:repeat(2,1fr)}.card-head,.detail-toolbar{align-items:flex-start;flex-direction:column}.detail-overview{grid-template-columns:repeat(2,1fr)}.filters{width:100%}.filters .el-input{flex:1}}
+.page-head p{margin:6px 0 0}.overview-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}.overview-item{padding:18px 20px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 2px 8px rgba(31,41,55,.04)}.overview-item span{display:block;color:#7b8799;font-size:13px;margin-bottom:7px}.overview-item strong{font-size:25px;color:#253044}.overview-item.success{border-left:3px solid #67c23a}.overview-item.warning{border-left:3px solid #e6a23c}.card-head,.detail-toolbar,.drawer-title{display:flex;align-items:center;justify-content:space-between;gap:16px}.card-title{font-weight:600}.header-tip{color:#8a96a8;font-size:12px;margin-left:12px}.filters{display:flex;gap:10px}.filters .el-input{width:190px}.filters .el-select{width:130px}.summary-table :deep(.el-table__row){cursor:pointer}.summary-table :deep(.el-table__row:hover) .row-arrow{color:#409eff;transform:translateX(2px)}.exam-name{font-weight:600;color:#303846}.sub-text{color:#8a96a8;font-size:12px;margin-top:4px}.time-range{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#596579;white-space:nowrap}.row-arrow{color:#a9b1bd;transition:.2s}.drawer-title{width:100%}.drawer-title h3{font-size:20px;margin:0;color:#253044}.drawer-title p{font-size:13px;color:#7b8799;margin:7px 0 0}.detail-overview{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}.detail-overview>div{background:#f7f9fc;border-radius:6px;padding:14px 18px}.detail-overview span{display:block;color:#7b8799;font-size:12px}.detail-overview strong{display:block;font-size:22px;margin-top:5px;color:#253044}.detail-overview .green{color:#4d9f2f}.detail-overview .orange{color:#d88a1d}.detail-overview .red{color:#e34d59}.detail-toolbar{margin-bottom:14px}.datetime-cell{display:inline-flex;flex-direction:column;line-height:1.35;white-space:nowrap}.datetime-cell span:last-child{color:#606266}@media(max-width:900px){.overview-grid{grid-template-columns:repeat(2,1fr)}.card-head,.detail-toolbar,.drawer-title{align-items:flex-start;flex-direction:column}.detail-overview{grid-template-columns:repeat(2,1fr)}.filters{width:100%}.filters .el-input{flex:1}}
 </style>

@@ -97,6 +97,19 @@ Authorization: Bearer <token>
 
 导入员工采用整批校验；如存在错误，返回 `imported=0` 和行级错误，不写入任何员工。
 
+## 服务站变更申请
+
+| 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
+| --- | --- | --- | --- | --- | --- |
+| `POST` | `/api/v1/station-change-requests` | 角色 `EMPLOYEE` | 申请变更本人服务站 | `stationId` | 申请 ID |
+| `GET` | `/api/v1/station-change-requests?mine=true` | 角色 `EMPLOYEE` | 查询本人申请记录 | 无 | 申请列表 |
+| `GET` | `/api/v1/station-change-requests` | `master:manage` | 查询待审或历史申请 | 可选 `status` | 申请列表 |
+| `PUT` | `/api/v1/station-change-requests/{id}/approve` | `master:manage` | 审批通过并更新员工服务站 | 可选 `comment` | 空 |
+| `PUT` | `/api/v1/station-change-requests/{id}/reject` | `master:manage` | 拒绝申请 | 可选 `comment` | 空 |
+| `GET` | `/api/v1/station-change-requests/employee/{employeeId}` | `master:manage` | 查询员工已通过的调站历史 | 路径 `employeeId` | 历史列表 |
+
+员工同一时间只能有一条待审批申请；目标服务站必须存在、启用且不同于当前服务站。
+
 ## 基础数据
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
@@ -173,28 +186,29 @@ Authorization: Bearer <token>
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
-| `POST` | `/api/v1/exams/questions` | `exam:manage` | 创建题目 | `type=SINGLE|MULTIPLE|TRUE_FALSE`、`stem`、`options`、`answer`、`explanation`、`score` | 题目 ID |
+| `POST` | `/api/v1/exams/questions` | `exam:manage` | 创建题目 | `type=SINGLE|MULTIPLE|TRUE_FALSE`、`stem`、`options`、`answer`、`explanation`、`score`、可选 `tags` | 题目 ID |
 | `GET` | `/api/v1/exams/questions` | `exam:manage` | 查询题库 | 可选 `type`、`keyword` | 题目列表 |
 | `PUT` | `/api/v1/exams/questions/{id}/enabled` | `exam:manage` | 启用或停用题目 | `enabled` | 空 |
 | `GET` | `/api/v1/exams/questions/template` | `exam:manage` | 下载题库导入模板 | 无 | Excel 文件 |
 | `POST` | `/api/v1/exams/questions/import` | `exam:manage` | 导入题库 | `multipart/form-data` 字段 `file` | `imported`、`errors` |
-| `POST` | `/api/v1/exams/papers` | `exam:manage` | 创建试卷 | `name`、`description`、`randomAssembly`、`randomizeQuestions`、`randomizeOptions`、`questions` 或 `randomRules` | 试卷 ID |
+| `POST` | `/api/v1/exams/papers` | `exam:manage` | 创建试卷 | `name`、`description`、`randomAssembly`、`dynamicAssembly`、`randomizeQuestions`、`randomizeOptions`、`questions` 或含 `tags` 的 `randomRules` | 试卷 ID |
 | `GET` | `/api/v1/exams/papers` | `exam:manage` | 查询试卷 | 无 | 试卷列表 |
-| `POST` | `/api/v1/exams/plans` | `exam:manage` | 创建考试计划 | `paperId`、`name`、`batchId`、`startsAt`、`endsAt`、`durationMinutes`、`maxAttempts`、`scoreMonth`、`employeeIds` | 计划 ID |
+| `POST` | `/api/v1/exams/plans` | `exam:manage` | 创建考试计划 | `paperId`、`name`、`batchIds`、`stationIds`、`startsAt`、`endsAt`、`durationMinutes`、`maxAttempts`、`employeeIds` | 计划 ID |
 | `POST` | `/api/v1/exams/plans/{id}/publish` | `exam:manage` | 发布考试计划 | 路径 `id` | 空 |
 | `POST` | `/api/v1/exams/plans/{id}/assign` | `exam:manage` | 补充分配考试 | `employeeIds` | 新增分配数量 |
 | `GET` | `/api/v1/exams/plans` | 登录，按数据范围过滤 | 查询考试计划 | 无 | 计划列表；员工记录额外包含 `plan_phase`、`participation_status` 和 `attempt_count` |
 | `POST` | `/api/v1/exams/plans/{id}/attempts` | 角色 `EMPLOYEE`，本人已分配 | 开始或继续考试 | 路径 `id` | 答题记录和题目 |
 | `GET` | `/api/v1/exams/attempts/{id}` | `exam:manage` 或考生本人 | 查看答卷 | 路径 `id` | 答卷和题目 |
 | `PUT` | `/api/v1/exams/attempts/{id}/answers` | 考生本人，进行中 | 保存答案 | `questionId`、`answer` | 空 |
-| `POST` | `/api/v1/exams/attempts/{id}/events` | 考生本人，进行中 | 记录防作弊事件 | `type=BLUR|HIDDEN|EXIT_FULLSCREEN|RECONNECT`、`detail` | 空 |
+| `POST` | `/api/v1/exams/attempts/{id}/events` | 考生本人，进行中 | 记录防作弊事件 | `type=BLUR|HIDDEN|EXIT_FULLSCREEN|RECONNECT`、唯一 `eventId`、`detail` | 违规次数、允许次数和自动交卷状态 |
 | `POST` | `/api/v1/exams/attempts/{id}/submit` | 考生本人，进行中 | 提交答卷并触发评分 | 路径 `id` | 评分结果 |
 | `GET` | `/api/v1/exams/review` | `exam:manage` | 查询阅卷队列 | 无 | 待阅卷/已评分答卷 |
 | `PUT` | `/api/v1/exams/attempts/{attemptId}/questions/{questionId}/grade` | `exam:manage` | 主观题评分 | `score`、`comment` | 空 |
 | `POST` | `/api/v1/exams/attempts/{id}/publish` | `exam:manage` | 发布考试结果 | 路径 `id` | 空 |
 | `GET` | `/api/v1/exams/results` | 登录，按数据范围过滤 | 查询已发布考试结果与已结束考试的缺考记录 | 可选 `employeeId` | 结果列表，包含 `result_status=COMPLETED|ABSENT`；缺考记录的 `total_score=0` |
+| `GET` | `/api/v1/exams/results/export` | `exam:manage`，按数据范围过滤 | 导出已发布成绩 | 可选 `planId`、`month=yyyy-MM`、`major` | Excel 文件 |
 
-当前题型校验只允许 `SINGLE`、`MULTIPLE`、`TRUE_FALSE`。试卷总分必须等于 100 分。考试计划的 `plan_phase` 为 `DRAFT`、`UPCOMING`、`OPEN`、`ENDED`；员工的 `participation_status` 为 `NOT_STARTED`、`READY`、`IN_PROGRESS`、`PENDING_REVIEW`、`COMPLETED`、`ABSENT`。其中 `ABSENT` 为实时派生状态：计划已结束且员工从未产生答卷时显示为缺考，不额外创建考试记录。
+当前题型校验只允许 `SINGLE`、`MULTIPLE`、`TRUE_FALSE`。试卷总分必须等于 100 分。`dynamicAssembly=true` 时必须同时使用随机组卷；员工开始考试时，系统按员工档案 `major` 匹配题目 `tags`，无标签题作为公共题，每次答卷保存实际抽取题目。考试计划的 `plan_phase` 为 `DRAFT`、`UPCOMING`、`OPEN`、`ENDED`；员工的 `participation_status` 为 `NOT_STARTED`、`READY`、`IN_PROGRESS`、`PENDING_REVIEW`、`COMPLETED`、`ABSENT`。其中 `ABSENT` 为实时派生状态：计划已结束且员工从未产生答卷时显示为缺考，不额外创建考试记录。
 
 ## 账号管理
 

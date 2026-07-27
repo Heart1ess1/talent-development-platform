@@ -94,6 +94,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `importer/ImportController.java` | 员工与签到 Excel 模板下载、整批校验和导入；任一行错误时不写入。 |
 | `importer/EmployeeImportRow.java` | 员工导入 Excel 行模型和列映射。 |
 | `importer/AttendanceImportRow.java` | 签到导入 Excel 行模型和列映射。 |
+| `station/StationChangeRequestController.java` | 员工服务站变更申请、本人记录查询、管理员审批及已通过历史查询。 |
 | `course/CourseController.java` | 课程、场次、员工安排、签到码自助签到、人工补录和签到记录查询。 |
 
 ### 3.4 任务、文件与培养计划
@@ -118,10 +119,11 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `evaluation/EvaluationService.java` | 评价核心计算：匹配适用方案、聚合考试/任务/人工评分、处理覆盖与加扣分、写入月度和季度汇总、锁定规则。 |
 | `evaluation/EvaluationRules.java` | 纯规则函数：校验月度评分项权重、季度权重，并计算限定在 0–100 的最终分数。 |
 | `evaluation/EvaluationScheduler.java` | 每月 1 日 02:00 自动生成上月月评；每季度首月 03:00 自动生成上季度汇总。 |
-| `exam/ExamController.java` | 题库导入与维护、手动/随机组卷、考试计划与分配、考生作答、防作弊事件、阅卷、结果发布与查询。 |
-| `exam/ExamScoringService.java` | 自动阅卷服务；客观题比对答案，多选题按集合比较；主观题进入待阅卷；同时处理超时交卷。 |
+| `exam/ExamController.java` | 题库标签与导入、手动/随机/一人一卷组卷、考试计划与分配、考生作答、防作弊事件、阅卷、结果发布与 Excel 导出。 |
+| `exam/ExamScoringService.java` | 自动阅卷服务；统一读取静态试卷题目或动态答卷题目，客观题比对答案，主观题进入待阅卷，并处理超时交卷。 |
 | `exam/ExamScheduler.java` | 每分钟扫描超时进行中的答卷，调用评分服务自动提交。 |
 | `exam/QuestionImportRow.java` | 题库 Excel 导入行模型和字段映射。 |
+| `exam/ResultExportRow.java` | 已发布考试成绩 Excel 导出的列定义。 |
 
 ## 4. 后端资源、构建与数据库
 
@@ -129,7 +131,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | --- | --- |
 | `backend/pom.xml` | Maven 构建、Java 17、Spring Boot、MyBatis-Plus、Flyway、JWT、EasyExcel、OSS 等依赖；构建时并入前端静态资源。 |
 | `backend/src/main/resources/application.yml` | 数据库、上传大小、时区、JWT、初始管理员、演示账号、存储策略和 CORS 的环境变量默认值。 |
-| `backend/src/main/resources/templates/question-bank-template.xlsx` | 题库导入模板，考试接口直接以文件流下载。 |
+| `backend/src/main/resources/templates/question-bank-template.xlsx` | 旧版题库模板样例；当前下载接口根据 `QuestionImportRow` 动态生成包含专业标签列的新模板。 |
 
 ### Flyway 迁移（按版本只增不改）
 
@@ -143,6 +145,11 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `db/migration/V6__training_plan_templates.sql` | 新增培养计划、任务模板及计划任务关联，并让任务可关联模板来源。 |
 | `db/migration/V7__direct_training_plan_tasks.sql` | 调整为计划任务直接作为下达来源，迁移关联、索引和唯一约束。 |
 | `db/migration/V8__use_plan_task_title_for_dispatched_tasks.sql` | 迁移既有下达任务标题，使其使用计划任务标题。 |
+| `db/migration/V9__deduplicate_exam_proctor_events.sql` | 为防作弊事件增加客户端事件键和唯一约束，避免重复上报累计。 |
+| `db/migration/V10__exam_plan_target_scopes.sql` | 增加考试计划批次、板块多选目标范围。 |
+| `db/migration/V11__add_employee_extra_fields.sql` | 增加政治面貌、兴趣爱好、特长和身份证号码字段。 |
+| `db/migration/V12__create_station_change_request.sql` | 增加服务站变更申请、审批状态、审核人与查询索引。 |
+| `db/migration/V13__dynamic_exam_labels.sql` | 增加题目标签、动态试卷规则和每次答卷实际抽题表。 |
 
 ## 5. 前端结构
 
@@ -170,13 +177,19 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `views/LoginView.vue` | 登录表单、前端校验、错误提示和登录后路由跳转。 |
 | `views/DashboardView.vue` | 请求概览统计并用 ECharts 展示培养进度和成绩分布。 |
 | `views/EmployeesView.vue` | 员工台账的筛选、分页、新建/编辑、导师绑定与基础资料维护。 |
-| `views/EmployeeDirectoryView.vue` | 人员目录筛选、分页和 Excel 导出入口。 |
-| `views/ProfileView.vue` | 当前用户改密；员工还可查看和编辑本人允许维护的资料。 |
+| `views/EmployeeDirectoryView.vue` | 人员目录筛选、分页、Excel 导出及管理员调站审核入口。 |
+| `views/ProfileView.vue` | 当前用户改密；员工可维护本人资料、提交调站申请并查看审批记录。 |
+| `views/StationChangeReviewView.vue` | 管理员集中查询、通过或拒绝服务站变更申请。 |
 | `views/CoursesView.vue` | 课程、场次、报名、签到码、自助签到、人工签到和签到记录的操作界面。 |
 | `views/TrainingPlansView.vue` | 培养计划与计划任务的创建、编辑、启停、排序和删除界面。 |
 | `views/TasksView.vue` | 任务下达、个人任务、提交/重提、附件下载与安全预览、审核、进度明细和筛选。 |
 | `views/EvaluationView.vue` | 评分方案、评分项录入、分数覆盖、加扣分以及月度/季度汇总生成、发布、重开。 |
-| `views/ExamsView.vue` | 题库 Excel 导入、试卷与考试计划、员工答题、全屏/失焦事件记录、人工阅卷和结果发布。 |
+| `views/exams/ExamQuestionBankView.vue` | 题目标签、手工新增、启停和 Excel 模板/导入。 |
+| `views/exams/ExamPapersView.vue` | 手动、随机和按员工专业动态“一人一卷”组卷。 |
+| `views/exams/ExamPlansView.vue` | 考试时间、试卷、批次/板块范围和参考员工选择及发布。 |
+| `views/exams/MyExamsView.vue` | 员工考试列表、作答自动保存、计时和防作弊事件上报。 |
+| `views/exams/ExamResultsView.vue` | 考试完成情况、员工成绩明细、成绩发布和 Excel 导出。 |
+| `views/exams/examUi.ts` | 考试状态、题型和日期显示的共享前端工具。 |
 | `views/UsersView.vue` | 账号列表、创建、启停、重置密码、改角色/账号名/显示名及站点负责人范围配置。 |
 
 ### 前端构建配置
@@ -184,7 +197,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | 文件 | 职责 |
 | --- | --- |
 | `frontend/package.json` | 前端依赖和 `dev`、`build`、`test` 脚本。 |
-| `frontend/pnpm-lock.yaml` | pnpm 精确依赖锁定文件。 |
+| `frontend/package-lock.json` | npm 精确依赖锁定文件；新协作者使用 `npm ci` 安装一致版本。 |
 | `frontend/pnpm-workspace.yaml` | pnpm 工作区配置。 |
 | `frontend/index.html` | Vite HTML 入口及应用挂载节点。 |
 | `frontend/tsconfig.json` | TypeScript 根项目引用配置。 |
