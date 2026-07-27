@@ -12,9 +12,17 @@ class EmployeeDirectoryControllerTest {
     when(db.queryForList(anyString(),any(Object[].class))).thenReturn(List.of());
     var controller=new EmployeeDirectoryController(db,permissions,mock(AuditService.class));
 
-    controller.list(1,20,null,null,null,null,null,null);
+    controller.list(1,20,null,null,null,null,null,null,null,null);
 
     var sql=ArgumentCaptor.forClass(String.class);verify(db).queryForObject(sql.capture(),eq(Long.class),any(Object[].class));
     assertThat(sql.getValue()).contains("e.mentor_user_id=?");
+    var listSql=ArgumentCaptor.forClass(String.class);verify(db).queryForList(listSql.capture(),any(Object[].class));
+    assertThat(listSql.getValue())
+      .contains(
+        "e.political_status",
+        "business_unit_name",
+        "skill_mentor_name",
+        "station_change_count",
+        "last_station_change_at");
   }
 }

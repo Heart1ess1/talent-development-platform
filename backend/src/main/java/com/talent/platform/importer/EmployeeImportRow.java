@@ -20,8 +20,17 @@ public class EmployeeImportRow {
     @ExcelProperty("批次")
     private String batch;
 
+    @ExcelProperty("所属板块")
+    private String businessUnit;
+
     @ExcelProperty("服务站")
     private String station;
+
+    @ExcelProperty("指导老师（技术）")
+    private String technicalMentor;
+
+    @ExcelProperty("指导老师（技能）")
+    private String skillMentor;
 
     @ExcelProperty("毕业学校")
     private String school;

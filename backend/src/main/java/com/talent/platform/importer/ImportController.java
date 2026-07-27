@@ -45,7 +45,10 @@ public class ImportController {
         sample.setEmployeeNo("20260001");
         sample.setName("示例员工");
         sample.setBatch("2026届");
+        sample.setBusinessUnit("示例板块");
         sample.setStation("示例服务站");
+        sample.setTechnicalMentor("mentor");
+        sample.setSkillMentor("mentor");
         sample.setSchool("示例大学");
         sample.setMajor("示例专业");
         sample.setEducation("本科");
@@ -82,9 +85,14 @@ public class ImportController {
                 errors.add(new RowError(line, "批次", "不能为空"));
             else if (id("talent_batch", r.getBatch()) == null)
                 errors.add(new RowError(line, "批次", "不存在"));
+            if (r.getBusinessUnit() != null && !r.getBusinessUnit().isBlank()
+                    && id("business_unit", r.getBusinessUnit()) == null)
+                errors.add(new RowError(line, "所属板块", "不存在"));
             if (r.getStation() != null && !r.getStation().isBlank()
                     && id("service_station", r.getStation()) == null)
                 errors.add(new RowError(line, "服务站", "不存在"));
+            validateMentor(r.getTechnicalMentor(), line, "指导老师（技术）", errors);
+            validateMentor(r.getSkillMentor(), line, "指导老师（技能）", errors);
             tryDate(r.getBirthDate(), line, "出生日期", errors);
             tryDate(r.getOnboardDate(), line, "入职日期", errors);
         }
@@ -102,17 +110,21 @@ public class ImportController {
             db.update("""
                 insert into employee(
                     user_id, employee_no, name,
-                    batch_id, station_id,
+                    batch_id, business_unit_id, station_id,
+                    mentor_user_id, skill_mentor_user_id,
                     school, major, education,
                     birth_date, native_place, political_status, residence,
                     hobbies, speciality,
                     email, id_card, phone, onboard_date
-                ) values(?,?,?, ?,?, ?,?,?, ?,?,?,?, ?,?, ?,?,?,?)
+                ) values(?,?,?, ?,?,?, ?,?, ?,?,?, ?,?,?,?, ?,?, ?,?,?,?)
                 """,
                     uid,
                     r.getEmployeeNo(), r.getName(),
                     id("talent_batch", r.getBatch()),
+                    id("business_unit", r.getBusinessUnit()),
                     id("service_station", r.getStation()),
+                    mentorId(r.getTechnicalMentor()),
+                    mentorId(r.getSkillMentor()),
                     r.getSchool(), r.getMajor(), r.getEducation(),
                     date(r.getBirthDate()), r.getNativePlace(), r.getPoliticalStatus(), r.getResidence(),
                     r.getHobbies(), r.getSpeciality(),
@@ -183,6 +195,28 @@ public class ImportController {
         if (name == null || name.isBlank()) return null;
         var x = db.queryForList("select id from " + table + " where name=?", Long.class, name);
         return x.isEmpty() ? null : x.get(0);
+    }
+
+    private void validateMentor(
+            String value, int row, String field, List<RowError> errors) {
+        if (value == null || value.isBlank()) return;
+        if (mentorId(value) == null)
+            errors.add(new RowError(row, field, "导师用户名或姓名不存在、重复或未启用"));
+    }
+
+    private Long mentorId(String value) {
+        if (value == null || value.isBlank()) return null;
+        String normalized = value.trim();
+        var usernames = db.queryForList("""
+            select id from sys_user
+            where role='MENTOR' and enabled=true and username=?
+            """, Long.class, normalized);
+        if (usernames.size() == 1) return usernames.get(0);
+        var matches = db.queryForList("""
+            select id from sys_user
+            where role='MENTOR' and enabled=true and display_name=?
+            """, Long.class, normalized);
+        return matches.size() == 1 ? matches.get(0) : null;
     }
 
     private void tryDate(String value, int row, String field, List<RowError> errors) {

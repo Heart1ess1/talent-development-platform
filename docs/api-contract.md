@@ -61,12 +61,12 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/auth/login` | 公开 | 登录 | `username`、`password` | `token`、`user` |
 | `GET` | `/api/v1/auth/me` | 登录 | 获取当前用户 | 无 | `CurrentUser` |
 | `POST` | `/api/v1/auth/change-password` | 登录 | 修改当前用户密码 | `oldPassword`、`newPassword` | 新 `token`、新 `user` |
-| `GET` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 查询本人工作信息和可维护个人资料 | 无 | 员工个人资料，包含只读 `employee_no`、`name`、`batch_name`、`station_name`、`mentor_name`、`onboard_date`、`status` |
+| `GET` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 查询本人工作信息和可维护个人资料 | 无 | 员工个人资料，包含只读批次、所属板块、服务站点、技术/技能导师、入职日期和状态 |
 | `PUT` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 维护本人非工作安排类个人资料 | `phone`、`email`、`birthDate`、`nativePlace`、`residence`、`school`、`major`、`education` | 空 |
 
 `CurrentUser` 关键字段：`id`、`username`、`displayName`、`role`、`mustChangePassword`、`securityVersion`、`permissions`、`dataScope`。
 
-员工个人资料接口只允许维护非工作安排字段。工号、姓名、批次、服务站、导师、入职日期和状态只读展示，不接受员工自改。
+员工个人资料接口只允许维护非工作安排字段。工号、姓名、批次、所属板块、服务站点、技术/技能导师、入职日期和状态只读展示，不接受员工自改。
 
 ## 仪表盘
 
@@ -74,23 +74,23 @@ Authorization: Bearer <token>
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/dashboard` | 登录，按数据范围过滤 | 进度概览 | 无 | `employeeCount`、`taskTotal`、`taskCompleted`、`averageScore`、`attendanceCount`、`scoreDistribution` |
 
-## 员工台账
+## 人员信息维护接口
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/employees` | `employee:read`，非 `EMPLOYEE`，按数据范围过滤 | 分页查询员工 | `page`、`size`、`keyword`、`batchId`、`stationId`、`mentorId` | 分页员工列表 |
-| `POST` | `/api/v1/employees` | `employee:write` | 创建员工和关联员工账号 | `employeeNo`、`name`、`batchId`、`stationId`、`mentorUserId`、`email` 等 | 员工 ID |
-| `PUT` | `/api/v1/employees/{id}` | `employee:write` | 更新员工和关联账号基础信息 | 同创建员工 | 空 |
-| `POST` | `/api/v1/employees/bind-mentor` | `employee:write` | 批量绑定导师 | `employeeIds`、`mentorUserId` | 更新数量 |
+| `POST` | `/api/v1/employees` | `employee:write` | 创建员工和关联员工账号 | `employeeNo`、`name`、`batchId`、`businessUnitId`、`stationId`、`mentorUserId`、`skillMentorUserId`、`status` 及个人资料字段 | 员工 ID |
+| `PUT` | `/api/v1/employees/{id}` | `employee:write` | 更新人员完整档案；站点改变时自动写入已生效历史 | 同创建员工 | 空 |
+| `POST` | `/api/v1/employees/bind-mentor` | `employee:write` | 批量设置技术或技能导师 | `employeeIds`、`mentorUserId`、`mentorType=TECHNICAL|SKILL` | 更新数量 |
 | `GET` | `/api/v1/employees/{id}` | `employee:read`，非 `EMPLOYEE`，按数据范围校验 | 查询员工详情 | 路径 `id` | 员工详情 |
 
-员工创建会同步创建 `EMPLOYEE` 账号，默认停用并要求改密。员工本人不通过员工台账查看本人资料，应使用 `/api/v1/profile/employee`。
+员工创建会同步创建 `EMPLOYEE` 账号，默认停用并要求改密。`/api/v1/employees` 继续供统一人员信息页面及其他业务模块复用，不再对应独立前端页面；员工本人使用 `/api/v1/profile/employee`。
 
 ## 人员目录与导入
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/employee-directory` | `employee:read`，按数据范围过滤 | 人员目录分页查询 | `page`、`size`、`keyword`、`batchId`、`stationId`、`mentorId`、`education`、`status` | 分页人员目录 |
+| `GET` | `/api/v1/employee-directory` | `employee:read`，按数据范围过滤 | 统一人员信息分页查询 | `page`、`size`、`keyword`、`batchId`、`businessUnitId`、`stationId`、`mentorId`、`skillMentorId`、`education`、`status` | 分页人员目录，包含所属板块、双导师、完整档案字段、已生效调站次数和最近调站时间 |
 | `GET` | `/api/v1/employee-directory/export` | `employee:export`，按数据范围过滤 | 导出人员目录 Excel | 同目录筛选参数 | Excel 文件 |
 | `GET` | `/api/v1/imports/employees/template` | `employee:write` | 下载员工导入模板 | 无 | Excel 文件 |
 | `POST` | `/api/v1/imports/employees` | `employee:write` | 导入员工 | `multipart/form-data` 字段 `file` | `imported`、`errors` |
@@ -106,7 +106,7 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/station-change-requests` | `master:manage` | 查询待审或历史申请 | 可选 `status` | 申请列表 |
 | `PUT` | `/api/v1/station-change-requests/{id}/approve` | `master:manage` | 审批通过并更新员工服务站 | 可选 `comment` | 空 |
 | `PUT` | `/api/v1/station-change-requests/{id}/reject` | `master:manage` | 拒绝申请 | 可选 `comment` | 空 |
-| `GET` | `/api/v1/station-change-requests/employee/{employeeId}` | `master:manage` | 查询员工已通过的调站历史 | 路径 `employeeId` | 历史列表 |
+| `GET` | `/api/v1/station-change-requests/employee/{employeeId}` | `employee:read`，按数据范围过滤 | 查询员工已生效的调站历史 | 路径 `employeeId` | 按审批生效时间倒序的历史列表，包含原服务站、目标服务站、审批人和生效时间 |
 
 员工同一时间只能有一条待审批申请；目标服务站必须存在、启用且不同于当前服务站。
 
@@ -118,6 +118,8 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/batches` | `master:manage` | 创建培养批次 | `name` | 批次 ID |
 | `GET` | `/api/v1/stations` | 登录 | 查询服务站 | 无 | 服务站列表 |
 | `POST` | `/api/v1/stations` | `master:manage` | 创建服务站 | `name` | 服务站 ID |
+| `GET` | `/api/v1/business-units` | 登录 | 查询所属板块 | 无 | 板块列表 |
+| `POST` | `/api/v1/business-units` | `master:manage` | 创建所属板块 | `name` | 板块 ID |
 | `GET` | `/api/v1/mentors` | `employee:read` | 查询启用导师账号 | 无 | `id`、`display_name` |
 
 ## 课程与签到

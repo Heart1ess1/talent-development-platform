@@ -86,15 +86,15 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 
 | 文件 | 职责 |
 | --- | --- |
-| `master/MasterDataController.java` | 培养批次、服务站和导师列表的查询及基础数据创建。 |
-| `employee/EmployeeController.java` | 员工台账分页、详情、新建、修改与批量绑定导师；创建时同步创建员工账号。 |
+| `master/MasterDataController.java` | 培养批次、所属板块、服务站点和导师列表的查询及基础数据创建。 |
+| `employee/EmployeeController.java` | 人员详情、新建、修改与批量设置技术/技能导师；创建时同步创建员工账号，直接调站时同步写入历史。 |
 | `employee/EmployeeProfileController.java` | 员工本人查看与维护个人资料；限制修改工作分配类字段。 |
 | `employee/EmployeeDirectoryController.java` | 面向目录场景的多条件人员查询和 Excel 导出，并应用数据范围过滤。 |
 | `employee/EmployeeDirectoryExportRow.java` | 人员目录 Excel 导出的列定义与表头映射。 |
 | `importer/ImportController.java` | 员工与签到 Excel 模板下载、整批校验和导入；任一行错误时不写入。 |
 | `importer/EmployeeImportRow.java` | 员工导入 Excel 行模型和列映射。 |
 | `importer/AttendanceImportRow.java` | 签到导入 Excel 行模型和列映射。 |
-| `station/StationChangeRequestController.java` | 员工服务站变更申请、本人记录查询、管理员审批及已通过历史查询。 |
+| `station/StationChangeRequestController.java` | 员工服务站变更申请、本人记录查询、管理员审批，以及按人员数据范围查询已生效历史。 |
 | `course/CourseController.java` | 课程、场次、员工安排、签到码自助签到、人工补录和签到记录查询。 |
 
 ### 3.4 任务、文件与培养计划
@@ -150,6 +150,8 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `db/migration/V11__add_employee_extra_fields.sql` | 增加政治面貌、兴趣爱好、特长和身份证号码字段。 |
 | `db/migration/V12__create_station_change_request.sql` | 增加服务站变更申请、审批状态、审核人与查询索引。 |
 | `db/migration/V13__dynamic_exam_labels.sql` | 增加题目标签、动态试卷规则和每次答卷实际抽题表。 |
+| `db/migration/V14__station_change_reviewed_at.sql` | 增加服务站变更审批生效时间并为人员历史查询建立索引。 |
+| `db/migration/V15__employee_organization_and_dual_mentors.sql` | 增加所属板块主数据、员工板块和技能导师关联，并允许管理员直接取消站点分配时留存历史。 |
 
 ## 5. 前端结构
 
@@ -161,7 +163,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | --- | --- |
 | `main.ts` | 创建 Vue 应用，注册 Pinia、Vue Router、Element Plus、全局样式并挂载。 |
 | `App.vue` | 应用根组件，仅渲染路由出口。 |
-| `router.ts` | 声明登录页、应用布局和所有业务路由；路由守卫处理登录、强制改密、员工台账跳转和权限拦截。 |
+| `router.ts` | 声明登录页、应用布局和所有业务路由；路由守卫处理登录、强制改密、员工访问人员信息页时的跳转和权限拦截。旧 `/employees` 地址重定向到统一人员信息页。 |
 | `api.ts` | Axios 实例、JWT 与请求 ID 注入、统一错误提示、401 清理本地登录态。 |
 | `env.d.ts` | Vite/Vue 的 TypeScript 环境类型声明。 |
 | `styles.css` | 全局色彩、页面间距、卡片、表单、响应式等基础样式。 |
@@ -176,8 +178,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | --- | --- |
 | `views/LoginView.vue` | 登录表单、前端校验、错误提示和登录后路由跳转。 |
 | `views/DashboardView.vue` | 请求概览统计并用 ECharts 展示培养进度和成绩分布。 |
-| `views/EmployeesView.vue` | 员工台账的筛选、分页、新建/编辑、导师绑定与基础资料维护。 |
-| `views/EmployeeDirectoryView.vue` | 人员目录筛选、分页、Excel 导出及管理员调站审核入口。 |
+| `views/EmployeeDirectoryView.vue` | 统一人员信息工作台：响应式筛选、完整档案、新增编辑、双导师批量设置、基础数据、导入导出和服务站变更轨迹。 |
 | `views/ProfileView.vue` | 当前用户改密；员工可维护本人资料、提交调站申请并查看审批记录。 |
 | `views/StationChangeReviewView.vue` | 管理员集中查询、通过或拒绝服务站变更申请。 |
 | `views/CoursesView.vue` | 课程、场次、报名、签到码、自助签到、人工签到和签到记录的操作界面。 |

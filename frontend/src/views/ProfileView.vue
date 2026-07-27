@@ -14,7 +14,8 @@ const myRequests=ref<any[]>([])
 const form=reactive({oldPassword:'',newPassword:'',confirm:''})
 const loading=ref(false),profileLoading=ref(false)
 const profile=reactive<any>({
-  employeeNo:'',name:'',batchName:'',stationId:null,stationName:'',mentorName:'',
+  employeeNo:'',name:'',batchName:'',businessUnitName:'',stationId:null,stationName:'',
+  technicalMentorName:'',skillMentorName:'',
   onboardDate:null,status:'',phone:'',email:'',birthDate:null,nativePlace:'',
   residence:'',school:'',major:'',education:''
 })
@@ -26,8 +27,11 @@ async function loadProfile(){
   const r=await api.get<any,Envelope<any>>('/profile/employee')
   Object.assign(profile,{
     employeeNo:r.data.employee_no||'',name:r.data.name||'',batchName:r.data.batch_name||'',
+    businessUnitName:r.data.business_unit_name||'',
     stationId:r.data.station_id??null,stationName:r.data.station_name||'',
-    mentorName:r.data.mentor_name||'',onboardDate:r.data.onboard_date,status:r.data.status||'',
+    technicalMentorName:r.data.technical_mentor_name||'',
+    skillMentorName:r.data.skill_mentor_name||'',
+    onboardDate:r.data.onboard_date,status:r.data.status||'',
     phone:r.data.phone||'',email:r.data.email||'',birthDate:r.data.birth_date,
     nativePlace:r.data.native_place||'',residence:r.data.residence||'',
     school:r.data.school||'',major:r.data.major||'',education:r.data.education||''
@@ -114,8 +118,10 @@ onMounted(async()=>{
             <el-descriptions-item label="工号">{{profile.employeeNo||'-'}}</el-descriptions-item>
             <el-descriptions-item label="姓名">{{profile.name||'-'}}</el-descriptions-item>
             <el-descriptions-item label="批次">{{profile.batchName||'-'}}</el-descriptions-item>
-            <el-descriptions-item label="服务站">{{profile.stationName||'-'}}</el-descriptions-item>
-            <el-descriptions-item label="导师">{{profile.mentorName||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="所属板块">{{profile.businessUnitName||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="服务站点">{{profile.stationName||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="指导老师（技术）">{{profile.technicalMentorName||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="指导老师（技能）">{{profile.skillMentorName||'-'}}</el-descriptions-item>
             <el-descriptions-item label="入职日期">{{profile.onboardDate||'-'}}</el-descriptions-item>
             <el-descriptions-item label="状态">{{profile.status||'-'}}</el-descriptions-item>
           </el-descriptions>
@@ -134,14 +140,14 @@ onMounted(async()=>{
           <template #header>个人资料</template>
           <el-form label-position="top">
             <div class="form-grid">
-              <el-form-item label="手机号"><el-input v-model="profile.phone"/></el-form-item>
-              <el-form-item label="常用邮箱"><el-input v-model="profile.email"/></el-form-item>
+              <el-form-item label="联系方式"><el-input v-model="profile.phone"/></el-form-item>
+              <el-form-item label="私人邮箱"><el-input v-model="profile.email"/></el-form-item>
               <el-form-item label="出生日期"><el-date-picker v-model="profile.birthDate" type="date" value-format="YYYY-MM-DD"/></el-form-item>
               <el-form-item label="学历"><el-input v-model="profile.education"/></el-form-item>
               <el-form-item label="毕业学校"><el-input v-model="profile.school"/></el-form-item>
-              <el-form-item label="专业"><el-input v-model="profile.major"/></el-form-item>
+              <el-form-item label="所学专业"><el-input v-model="profile.major"/></el-form-item>
               <el-form-item label="籍贯"><el-input v-model="profile.nativePlace"/></el-form-item>
-              <el-form-item label="常住地"><el-input v-model="profile.residence"/></el-form-item>
+              <el-form-item label="住址（公司）"><el-input v-model="profile.residence"/></el-form-item>
             </div>
             <el-button type="primary" :loading="profileLoading" @click="saveProfile">保存资料</el-button>
           </el-form>

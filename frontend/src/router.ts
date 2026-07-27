@@ -6,8 +6,8 @@ const routes=[
   {path:'/',component:()=>import('@/layout/AppLayout.vue'),children:[
     {path:'',redirect:'/dashboard'},
     {path:'dashboard',component:()=>import('@/views/DashboardView.vue')},
-    {path:'employees',component:()=>import('@/views/EmployeesView.vue'),meta:{permission:'employee:read'}},
-    {path:'employee-directory',component:()=>import('@/views/EmployeeDirectoryView.vue'),meta:{permission:'employee:export'}},
+    {path:'employees',redirect:'/employee-directory'},
+    {path:'employee-directory',component:()=>import('@/views/EmployeeDirectoryView.vue'),meta:{permission:'employee:read'}},
     {path:'courses',component:()=>import('@/views/CoursesView.vue')},
     {path:'training-plans',component:()=>import('@/views/TrainingPlansView.vue'),meta:{permission:'task:manage'}},
     {path:'tasks',component:()=>import('@/views/TasksView.vue')},
@@ -30,7 +30,7 @@ router.beforeEach(to=>{
   if(to.path!='/login'&&!a.user)return '/login';
   if(to.path==='/login'&&a.user)return '/dashboard';
   if(a.user?.mustChangePassword&&to.path!='/profile')return '/profile';
-  if(a.user?.role==='EMPLOYEE'&&to.path==='/employees')return '/profile';
+  if(a.user?.role==='EMPLOYEE'&&to.path==='/employee-directory')return '/profile';
   if(a.user?.role!=='EMPLOYEE'&&to.path==='/exams/my')return a.can('exam:manage')?'/exams/plans':'/exams/results';
   const permission=to.meta.permission as string|undefined;
   if(permission&&!a.can(permission))return '/dashboard';

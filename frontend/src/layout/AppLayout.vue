@@ -17,8 +17,7 @@ const examChildren=computed<MenuItem[]>(()=>{
 })
 const menus=computed<MenuItem[]>(()=>[
   {to:'/dashboard',label:'进度概览'},
-  {to:'/employees',label:'人员台账',permission:'employee:read',hideFor:['EMPLOYEE']},
-  {to:'/employee-directory',label:'人员信息',permission:'employee:export'},
+  {to:'/employee-directory',label:'人员信息',permission:'employee:read',hideFor:['EMPLOYEE']},
   {to:'/station-change-review',label:'调站审批',permission:'master:manage'},
   {to:'/courses',label:'课程与签到'},
   {to:'/training-plans',label:'培养计划',permission:'task:manage'},

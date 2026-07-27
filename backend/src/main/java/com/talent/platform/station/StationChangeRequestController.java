@@ -123,7 +123,7 @@ public class StationChangeRequestController {
         Long requestedStationId = ((Number) row.get("requested_station_id")).longValue();
 
         db.update("update employee set station_id=?,version=version+1 where id=?", requestedStationId, employeeId);
-        db.update("update station_change_request set status='APPROVED',reviewed_by=?,review_comment=?,updated_at=now() where id=?",
+        db.update("update station_change_request set status='APPROVED',reviewed_by=?,review_comment=?,reviewed_at=now(),updated_at=now() where id=?",
                 u.id(), q != null ? q.comment() : null, id);
         audit.log("APPROVE_STATION_CHANGE", "EMPLOYEE", employeeId, row, Map.of("requestId", id));
         return ApiResponse.ok(null);
@@ -141,25 +141,29 @@ public class StationChangeRequestController {
         if (!"PENDING".equals(String.valueOf(row.get("status"))))
             throw new BusinessException(400, "该申请已处理");
 
-        db.update("update station_change_request set status='REJECTED',reviewed_by=?,review_comment=?,updated_at=now() where id=?",
+        db.update("update station_change_request set status='REJECTED',reviewed_by=?,review_comment=?,reviewed_at=now(),updated_at=now() where id=?",
                 u.id(), q != null ? q.comment() : null, id);
         audit.log("REJECT_STATION_CHANGE", "EMPLOYEE", row.get("employee_id"), row, Map.of("requestId", id));
         return ApiResponse.ok(null);
     }
 
-    /** 获取某员工的历史变更记录（管理员用） */
+    /** 按人员数据范围查询已生效的服务站变更记录 */
     @GetMapping("/employee/{employeeId}")
     public ApiResponse<List<Map<String, Object>>> employeeHistory(@PathVariable Long employeeId) {
-        permissions.require(Permissions.MASTER_MANAGE);
+        permissions.require(Permissions.EMPLOYEE_READ);
+        permissions.requireEmployee(employeeId);
         var sql = """
-            select r.*, s.name requested_station_name, cs.name current_station_name,
+            select r.id,r.employee_id,r.current_station_id,r.requested_station_id,
+                   r.review_comment,r.created_at request_at,
+                   coalesce(r.reviewed_at,r.updated_at) effective_at,
+                   s.name requested_station_name,cs.name current_station_name,
                    r2.display_name reviewer_name
             from station_change_request r
             left join service_station s on s.id=r.requested_station_id
             left join service_station cs on cs.id=r.current_station_id
             left join sys_user r2 on r2.id=r.reviewed_by
             where r.employee_id=? and r.status='APPROVED'
-            order by r.created_at desc
+            order by coalesce(r.reviewed_at,r.updated_at) desc,r.id desc
             """;
         return ApiResponse.ok(db.queryForList(sql, employeeId));
     }
