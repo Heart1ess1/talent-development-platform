@@ -11,8 +11,10 @@ const plans=ref<any[]>([]),papers=ref<any[]>([]),questions=ref<any[]>([]),employ
 const dialog=ref(false),reviewDialog=ref(false),attempt=ref<any>(),reviewAttempt=ref<any>(),importFile=ref<File>(),importing=ref(false)
 const questionKeyword=ref(''),questionType=ref('')
 const answers=reactive<Record<number,any>>({}),grades=reactive<Record<number,number>>({})
-const question=reactive<any>({type:'SINGLE',stem:'',options:['选项A','选项B'],answer:'选项A',score:5,explanation:''})
-const paper=reactive<any>({name:'',description:'',randomAssembly:false,randomizeQuestions:false,randomizeOptions:true,selected:[],scores:{},rules:{SINGLE:{count:0,score:5},MULTIPLE:{count:0,score:10},TRUE_FALSE:{count:0,score:5}}})
+// 修改：question 增加 tags 字段
+const question=reactive<any>({type:'SINGLE',stem:'',options:['选项A','选项B'],answer:'选项A',score:5,explanation:'',tags:[]})
+// 修改：paper 增加 dynamicAssembly，rules 结构增加 tags
+const paper=reactive<any>({name:'',description:'',randomAssembly:false,dynamicAssembly:false,randomizeQuestions:false,randomizeOptions:true,selected:[],scores:{},rules:{SINGLE:{count:0,score:5,tags:[]},MULTIPLE:{count:0,score:10,tags:[]},TRUE_FALSE:{count:0,score:5,tags:[]}}})
 const plan=reactive<any>({paperId:null,name:'',batchId:null,startsAt:'',endsAt:'',durationMinutes:60,maxAttempts:1,scoreMonth:new Date().toISOString().slice(0,7),employeeIds:[]})
 const planPhaseLabels:Record<string,{label:string,type:'info'|'success'|'warning'|'danger'|'primary'}>={DRAFT:{label:'草稿',type:'info'},UPCOMING:{label:'未开始',type:'info'},OPEN:{label:'进行中',type:'success'},ENDED:{label:'已结束',type:'warning'}}
 const participationLabels:Record<string,{label:string,type:'info'|'success'|'warning'|'danger'|'primary'}>={NOT_STARTED:{label:'未开始',type:'info'},READY:{label:'待参加',type:'warning'},IN_PROGRESS:{label:'考试中',type:'primary'},PENDING_REVIEW:{label:'已提交，待阅卷',type:'warning'},COMPLETED:{label:'已完成',type:'success'},ABSENT:{label:'缺考',type:'danger'}}
@@ -22,6 +24,15 @@ const enabledQuestions=computed(()=>questions.value.filter(q=>q.enabled===true||
 const filteredQuestions=computed(()=>questions.value.filter(q=>(!questionType.value||q.question_type===questionType.value)&&(!questionKeyword.value||q.stem.includes(questionKeyword.value))))
 const paperTotal=computed(()=>paper.randomAssembly?Object.values(paper.rules).reduce((sum:number,x:any)=>sum+Number(x.count||0)*Number(x.score||0),0):paper.selected.reduce((sum:number,id:number)=>sum+Number(paper.scores[id]||0),0))
 const paperCount=computed(()=>paper.randomAssembly?Object.values(paper.rules).reduce((sum:number,x:any)=>sum+Number(x.count||0),0):paper.selected.length)
+
+// 新增：从题库中提取已有标签列表供选择
+const tagOptions=computed(()=>{
+  const set=new Set<string>()
+  questions.value.forEach((q:any)=>{
+    if(q.tags&&Array.isArray(q.tags)) q.tags.forEach((t:string)=>set.add(t))
+  })
+  return Array.from(set)
+})
 
 async function load(){
   plans.value=(await api.get<any,Envelope<any[]>>('/exams/plans')).data
@@ -40,9 +51,10 @@ function questionTypeChanged(){
 }
 async function createQuestion(){
   const options=question.type==='TRUE_FALSE'?[true,false]:question.options
-  await api.post('/exams/questions',{...question,options})
+  // 修改：发送 tags 字段
+  await api.post('/exams/questions',{...question,options,tags:question.tags.length?question.tags:undefined})
   ElMessage.success('题目已加入题库')
-  question.stem='';question.explanation='';await load()
+  question.stem='';question.explanation='';question.tags=[];await load()
 }
 async function toggleQuestion(row:any){await api.put(`/exams/questions/${row.id}/enabled`,{enabled:row.enabled});ElMessage.success(row.enabled?'题目已启用':'题目已停用')}
 function pickImportFile(e:Event){importFile.value=(e.target as HTMLInputElement).files?.[0]}
@@ -62,10 +74,16 @@ async function createPaper(){
   if(!paper.name.trim())return ElMessage.warning('请填写试卷名称')
   if(paperCount.value===0)return ElMessage.warning('试卷至少需要一道题')
   if(Math.abs(paperTotal.value-100)>0.0001)return ElMessage.warning(`试卷总分必须为100分，当前${paperTotal.value}分`)
+  // 修改：构建 randomRules 时包含 tags
   const questions=paper.randomAssembly?[]:paper.selected.map((id:number,i:number)=>({questionId:id,score:Number(paper.scores[id]),sortOrder:i+1}))
-  const randomRules=Object.entries(paper.rules).map(([type,x]:any)=>({type,count:Number(x.count),score:Number(x.score)}))
-  await api.post('/exams/papers',{name:paper.name,description:paper.description,randomAssembly:paper.randomAssembly,randomizeQuestions:paper.randomizeQuestions,randomizeOptions:paper.randomizeOptions,questions,randomRules})
-  ElMessage.success('试卷创建成功');paper.name='';paper.selected=[];await load()
+  const randomRules=paper.randomAssembly?Object.entries(paper.rules).map(([type,x]:any)=>({type,count:Number(x.count),score:Number(x.score),tags:x.tags?.length?x.tags:undefined})):[]
+  await api.post('/exams/papers',{
+    name:paper.name,description:paper.description,randomAssembly:paper.randomAssembly,
+    randomizeQuestions:paper.randomizeQuestions,randomizeOptions:paper.randomizeOptions,
+    questions,randomRules,
+    dynamicAssembly:paper.randomAssembly?paper.dynamicAssembly:false   // 只有随机组卷才可能动态
+  })
+  ElMessage.success('试卷创建成功');paper.name='';paper.selected=[];paper.dynamicAssembly=false;await load()
 }
 async function createPlan(){await api.post('/exams/plans',plan);ElMessage.success('考试计划已创建');await load()}
 async function publishPlan(id:number){await api.post(`/exams/plans/${id}/publish`);await load()}
@@ -93,6 +111,23 @@ function parse(value:any){if(typeof value!=='string')return value;try{return JSO
 function displayAnswer(row:any){const value=parse(row.answer_json);if(Array.isArray(value))return value.join('、');if(value===true)return '正确';if(value===false)return '错误';return value}
 function options(q:any){const value=parse(q.options_json);return Array.isArray(value)?value:[]}
 function optionLabel(o:any){return o===true?'正确':o===false?'错误':String(o)}
+
+// 新增：导出成绩
+async function exportResults(){
+  try {
+    const blob = await api.get<any, Blob>('/exams/results/export', { responseType: 'blob' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '考试成绩.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch {
+    ElMessage.error('导出失败')
+  }
+}
+
 onBeforeUnmount(closeExam);onMounted(load)
 </script>
 
@@ -126,7 +161,14 @@ onBeforeUnmount(closeExam);onMounted(load)
           <el-tab-pane label="题库列表">
             <div class="toolbar"><el-input v-model="questionKeyword" clearable placeholder="搜索题干" style="width:260px"/><el-select v-model="questionType" clearable placeholder="全部题型" style="width:150px"><el-option v-for="(label,key) in typeLabels" :key="key" :label="label" :value="key"/></el-select></div>
             <el-table :data="filteredQuestions" max-height="430" empty-text="题库暂无题目">
-              <el-table-column prop="id" label="ID" width="70"/><el-table-column label="题型" width="100"><template #default="s">{{typeLabels[s.row.question_type]}}</template></el-table-column><el-table-column prop="stem" label="题干" min-width="280" show-overflow-tooltip/><el-table-column label="正确答案" min-width="150"><template #default="s">{{displayAnswer(s.row)}}</template></el-table-column><el-table-column prop="default_score" label="默认分值" width="100"/><el-table-column label="启用" width="90"><template #default="s"><el-switch v-model="s.row.enabled" @change="toggleQuestion(s.row)"/></template></el-table-column>
+              <el-table-column prop="id" label="ID" width="70"/>
+              <el-table-column label="题型" width="100"><template #default="s">{{typeLabels[s.row.question_type]}}</template></el-table-column>
+              <el-table-column prop="stem" label="题干" min-width="280" show-overflow-tooltip/>
+              <!-- 新增：显示专业标签 -->
+              <el-table-column label="标签" width="150"><template #default="s"><el-tag v-for="t in parse(s.row.tags)" :key="t" size="small" style="margin-right:4px">{{t}}</el-tag></template></el-table-column>
+              <el-table-column label="正确答案" min-width="150"><template #default="s">{{displayAnswer(s.row)}}</template></el-table-column>
+              <el-table-column prop="default_score" label="默认分值" width="100"/>
+              <el-table-column label="启用" width="90"><template #default="s"><el-switch v-model="s.row.enabled" @change="toggleQuestion(s.row)"/></template></el-table-column>
             </el-table>
           </el-tab-pane>
           <el-tab-pane label="手动新增">
@@ -135,6 +177,8 @@ onBeforeUnmount(closeExam);onMounted(load)
               <el-form-item label="题干"><el-input v-model="question.stem" type="textarea" :rows="3" placeholder="请输入题干"/></el-form-item>
               <el-form-item v-if="question.type!=='TRUE_FALSE'" label="选项"><el-select v-model="question.options" multiple allow-create filterable default-first-option placeholder="输入选项后按回车" style="width:100%"/></el-form-item>
               <el-form-item label="正确答案"><el-radio-group v-if="question.type==='TRUE_FALSE'" v-model="question.answer"><el-radio :value="true">正确</el-radio><el-radio :value="false">错误</el-radio></el-radio-group><el-select v-else v-model="question.answer" :multiple="question.type==='MULTIPLE'" placeholder="请选择正确答案" style="width:100%"><el-option v-for="o in question.options" :key="o" :label="o" :value="o"/></el-select></el-form-item>
+              <!-- 新增：专业标签 -->
+              <el-form-item label="专业标签"><el-select v-model="question.tags" multiple allow-create filterable default-first-option placeholder="选择或输入专业方向" style="width:100%"><el-option v-for="t in tagOptions" :key="t" :label="t" :value="t"/></el-select></el-form-item>
               <el-form-item label="答案解析"><el-input v-model="question.explanation" type="textarea" :rows="2"/></el-form-item>
               <el-form-item label="默认分值"><el-input-number v-model="question.score" :min="0.01" :precision="2"/></el-form-item>
               <el-form-item><el-button type="primary" @click="createQuestion">保存到题库</el-button></el-form-item>
@@ -149,10 +193,22 @@ onBeforeUnmount(closeExam);onMounted(load)
       <el-card class="section-card">
         <template #header><div class="card-head"><span>组建试卷</span><el-tag :type="Math.abs(paperTotal-100)<0.0001?'success':'warning'">{{paperCount}} 题 / {{paperTotal}} 分</el-tag></div></template>
         <div class="form-grid"><el-input v-model="paper.name" placeholder="试卷名称"/><el-input v-model="paper.description" placeholder="试卷说明（选填）"/></div>
-        <div class="paper-options"><el-checkbox v-model="paper.randomAssembly">随机组卷</el-checkbox><el-checkbox v-model="paper.randomizeQuestions">考试时打乱题序</el-checkbox><el-checkbox v-model="paper.randomizeOptions">考试时打乱选项</el-checkbox></div>
+        <div class="paper-options">
+          <el-checkbox v-model="paper.randomAssembly">随机组卷</el-checkbox>
+          <!-- 新增：动态抽题开关，仅随机组卷时显示 -->
+          <el-checkbox v-if="paper.randomAssembly" v-model="paper.dynamicAssembly">一人一卷（按员工专业方向动态抽题）</el-checkbox>
+          <el-checkbox v-model="paper.randomizeQuestions">考试时打乱题序</el-checkbox>
+          <el-checkbox v-model="paper.randomizeOptions">考试时打乱选项</el-checkbox>
+        </div>
         <el-alert v-if="paper.randomAssembly" title="随机组卷将在创建试卷时，从当前启用题库中按题型随机抽取；每题分值 × 题数合计必须为100分。" type="info" :closable="false"/>
         <el-table v-if="paper.randomAssembly" :data="Object.keys(typeLabels).map(type=>({type,...paper.rules[type]}))" class="paper-table">
-          <el-table-column label="题型"><template #default="s">{{typeLabels[s.row.type]}}</template></el-table-column><el-table-column label="题库可用量"><template #default="s">{{enabledQuestions.filter(q=>q.question_type===s.row.type).length}}</template></el-table-column><el-table-column label="抽取题数"><template #default="s"><el-input-number v-model="paper.rules[s.row.type].count" :min="0" :max="enabledQuestions.filter(q=>q.question_type===s.row.type).length"/></template></el-table-column><el-table-column label="每题分值"><template #default="s"><el-input-number v-model="paper.rules[s.row.type].score" :min="0.01" :precision="2"/></template></el-table-column><el-table-column label="小计"><template #default="s">{{paper.rules[s.row.type].count*paper.rules[s.row.type].score}} 分</template></el-table-column>
+          <el-table-column label="题型"><template #default="s">{{typeLabels[s.row.type]}}</template></el-table-column>
+          <el-table-column label="题库可用量"><template #default="s">{{enabledQuestions.filter(q=>q.question_type===s.row.type).length}}</template></el-table-column>
+          <el-table-column label="抽取题数"><template #default="s"><el-input-number v-model="paper.rules[s.row.type].count" :min="0" :max="enabledQuestions.filter(q=>q.question_type===s.row.type).length"/></template></el-table-column>
+          <el-table-column label="每题分值"><template #default="s"><el-input-number v-model="paper.rules[s.row.type].score" :min="0.01" :precision="2"/></template></el-table-column>
+          <!-- 新增：限定标签列（动态抽题时有效） -->
+          <el-table-column label="限定标签" v-if="paper.dynamicAssembly"><template #default="s"><el-select v-model="paper.rules[s.row.type].tags" multiple allow-create filterable default-first-option placeholder="不限" size="small"><el-option v-for="t in tagOptions" :key="t" :label="t" :value="t"/></el-select></template></el-table-column>
+          <el-table-column label="小计"><template #default="s">{{paper.rules[s.row.type].count*paper.rules[s.row.type].score}} 分</template></el-table-column>
         </el-table>
         <div v-else class="manual-paper-list">
           <div v-for="q in enabledQuestions" :key="q.id" class="question-pick"><el-checkbox v-model="paper.selected" :value="q.id"><el-tag size="small" effect="plain">{{typeLabels[q.question_type]}}</el-tag> {{q.stem}}</el-checkbox><el-input-number v-if="paper.selected.includes(q.id)" v-model="paper.scores[q.id]" :min="0.01" :precision="2"/><span v-if="paper.selected.includes(q.id)">分</span></div>
@@ -163,14 +219,30 @@ onBeforeUnmount(closeExam);onMounted(load)
 
       <el-card class="section-card">
         <template #header>试卷库</template>
-        <el-table :data="papers" empty-text="暂无试卷"><el-table-column prop="name" label="试卷名称"/><el-table-column label="组卷方式"><template #default="s"><el-tag :type="s.row.assembly_mode==='RANDOM'?'success':'info'">{{s.row.assembly_mode==='RANDOM'?'随机组卷':'手动组卷'}}</el-tag></template></el-table-column><el-table-column prop="question_count" label="题数"/><el-table-column prop="total_score" label="总分"/></el-table>
+        <el-table :data="papers" empty-text="暂无试卷">
+          <el-table-column prop="name" label="试卷名称"/>
+          <el-table-column label="组卷方式"><template #default="s"><el-tag :type="s.row.assembly_mode==='RANDOM'?'success':'info'">{{s.row.assembly_mode==='RANDOM'?'随机组卷':'手动组卷'}}</el-tag></template></el-table-column>
+          <!-- 新增：是否动态 -->
+          <el-table-column label="一人一卷" width="90"><template #default="s"><el-tag v-if="s.row.dynamic_assembly" type="warning" size="small">动态</el-tag><span v-else class="muted">否</span></template></el-table-column>
+          <el-table-column prop="question_count" label="题数"/>
+          <el-table-column prop="total_score" label="总分"/>
+        </el-table>
       </el-card>
 
       <el-card class="section-card"><template #header>创建考试计划</template><div class="form-grid"><el-input v-model="plan.name" placeholder="考试名称"/><el-select v-model="plan.paperId" placeholder="选择试卷"><el-option v-for="x in papers" :key="x.id" :label="x.name" :value="x.id"/></el-select><el-date-picker v-model="plan.startsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="开始时间"/><el-date-picker v-model="plan.endsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="结束时间"/><el-input-number v-model="plan.durationMinutes" :min="1"/><el-input-number v-model="plan.maxAttempts" :min="1"/><el-date-picker v-model="plan.scoreMonth" type="month" value-format="YYYY-MM" placeholder="计分月份"/><el-select v-model="plan.employeeIds" multiple filterable placeholder="参考人员"><el-option v-for="x in employees" :key="x.id" :label="x.name" :value="x.id"/></el-select></div><el-button type="primary" @click="createPlan">创建计划</el-button></el-card>
       <el-card class="section-card"><template #header>阅卷队列</template><el-table :data="review"><el-table-column prop="employee_name" label="员工"/><el-table-column prop="exam_name" label="考试"/><el-table-column prop="status" label="状态"/><el-table-column prop="objective_score" label="客观分"/><el-table-column prop="event_count" label="异常事件"/><el-table-column label="操作"><template #default="s"><el-button link @click="openReview(s.row)">阅卷/发布</el-button></template></el-table-column></el-table></el-card>
     </template>
 
-    <el-card class="section-card"><template #header>已发布成绩</template><el-table :data="results"><el-table-column prop="employee_name" label="员工"/><el-table-column prop="exam_name" label="考试"/><el-table-column prop="total_score" label="成绩"/><el-table-column label="状态" width="110"><template #default="s"><el-tag :type="resultStatus(s.row).type" effect="plain">{{resultStatus(s.row).label}}</el-tag></template></el-table-column><el-table-column label="计分月份"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column></el-table></el-card>
+    <el-card class="section-card">
+      <template #header>
+        <div class="card-head">
+          <span>已发布成绩</span>
+          <!-- 新增：导出成绩按钮 -->
+          <el-button type="primary" size="small" @click="exportResults">导出成绩</el-button>
+        </div>
+      </template>
+      <el-table :data="results"><el-table-column prop="employee_name" label="员工"/><el-table-column prop="exam_name" label="考试"/><el-table-column prop="total_score" label="成绩"/><el-table-column label="状态" width="110"><template #default="s"><el-tag :type="resultStatus(s.row).type" effect="plain">{{resultStatus(s.row).label}}</el-tag></template></el-table-column><el-table-column label="计分月份"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column></el-table>
+    </el-card>
 
     <el-dialog v-model="dialog" :title="attempt?.exam_name" width="760px" :close-on-click-modal="false" :show-close="false"><div v-for="(q,i) in attempt?.questions" :key="q.id" class="exam-question"><h4>{{i+1}}. {{q.stem}}（{{q.score}}分）</h4><el-radio-group v-if="['SINGLE','TRUE_FALSE'].includes(q.question_type)" v-model="answers[q.id]" @change="save(q)"><el-radio v-for="o in options(q)" :key="String(o)" :value="o">{{optionLabel(o)}}</el-radio></el-radio-group><el-checkbox-group v-else v-model="answers[q.id]" @change="save(q)"><el-checkbox v-for="o in options(q)" :key="String(o)" :value="o">{{optionLabel(o)}}</el-checkbox></el-checkbox-group></div><template #footer><el-button type="primary" @click="submit">提交试卷</el-button></template></el-dialog>
     <el-dialog v-model="reviewDialog" title="主观题阅卷"><div v-for="q in reviewAttempt?.questions?.filter((x:any)=>x.question_type==='SHORT')" :key="q.id"><h4>{{q.stem}}（{{q.score}}分）</h4><p>考生答案：{{q.saved_answer}}</p><el-input-number v-model="grades[q.id]" :min="0" :max="Number(q.score)"/><el-button @click="grade(q)">保存评分</el-button></div><template #footer><el-button type="primary" @click="publishResult">发布成绩</el-button></template></el-dialog>
@@ -178,5 +250,5 @@ onBeforeUnmount(closeExam);onMounted(load)
 </template>
 
 <style scoped>
-.section-card{margin-bottom:16px}.card-head{display:flex;align-items:center;justify-content:space-between}.plan-table :deep(.el-table__cell){padding:10px 0}.datetime-cell{display:inline-flex;flex-direction:column;line-height:1.35;white-space:nowrap}.datetime-cell span:last-child{color:#606266}.question-form{max-width:760px}.import-panel{padding:12px 4px}.paper-options{display:flex;gap:24px;margin:18px 0}.paper-table{margin-top:16px}.manual-paper-list{margin-top:16px;border:1px solid #e4e7ed;border-radius:6px;max-height:420px;overflow:auto}.question-pick{display:flex;align-items:center;gap:12px;min-height:52px;padding:8px 14px;border-bottom:1px solid #ebeef5}.question-pick:last-child{border-bottom:0}.question-pick .el-checkbox{flex:1;height:auto}.paper-submit{display:flex;align-items:center;justify-content:flex-end;gap:20px;margin-top:18px;font-weight:600}.score-ok{color:#16a34a}.exam-question{padding:8px 0 16px;border-bottom:1px solid #ebeef5}.form-grid{margin-bottom:16px}.form-grid>*{width:100%}
+.section-card{margin-bottom:16px}.card-head{display:flex;align-items:center;justify-content:space-between}.plan-table :deep(.el-table__cell){padding:10px 0}.datetime-cell{display:inline-flex;flex-direction:column;line-height:1.35;white-space:nowrap}.datetime-cell span:last-child{color:#606266}.question-form{max-width:760px}.import-panel{padding:12px 4px}.paper-options{display:flex;gap:24px;margin:18px 0;flex-wrap:wrap}.paper-table{margin-top:16px}.manual-paper-list{margin-top:16px;border:1px solid #e4e7ed;border-radius:6px;max-height:420px;overflow:auto}.question-pick{display:flex;align-items:center;gap:12px;min-height:52px;padding:8px 14px;border-bottom:1px solid #ebeef5}.question-pick:last-child{border-bottom:0}.question-pick .el-checkbox{flex:1;height:auto}.paper-submit{display:flex;align-items:center;justify-content:flex-end;gap:20px;margin-top:18px;font-weight:600}.score-ok{color:#16a34a}.exam-question{padding:8px 0 16px;border-bottom:1px solid #ebeef5}.form-grid{margin-bottom:16px}.form-grid>*{width:100%}
 </style>
