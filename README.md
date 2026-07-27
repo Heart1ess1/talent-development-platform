@@ -12,6 +12,7 @@
 
 - [CONTRIBUTING.md](CONTRIBUTING.md)：GitHub 协作、分支、提交、推送、Pull Request 和版本发布规则。
 - [docs/README.md](docs/README.md)：需求口径、API 合同、权限矩阵和任务表等项目文档入口。
+- [docs/codebase-guide.md](docs/codebase-guide.md)：面向新加入或接手同事的代码结构、业务链路和逐文件职责导览。
 - 本 README：项目能力、目录结构、运行方式、验证命令和发布包说明。
 
 ## 技术栈
@@ -66,6 +67,7 @@ GitHub 仓库首页只会自动显示根目录的 `README.md`。`docs/` 下的 M
 - [docs/api-contract.md](docs/api-contract.md)：当前 `/api/v1` 接口约定、认证、响应结构、错误码和主要接口清单。
 - [docs/permissions-matrix.md](docs/permissions-matrix.md)：角色、权限点、数据范围和前端路由权限。
 - [docs/task-board.md](docs/task-board.md)：轻量任务表，用于在未配置 GitHub Project 前追踪协作任务。
+- [docs/codebase-guide.md](docs/codebase-guide.md)：代码库结构、模块关系和每个源码/配置/迁移/测试文件的职责。
 
 也可以从 [docs/README.md](docs/README.md) 进入文档目录。
 
