@@ -78,6 +78,7 @@ GitHub 仓库首页只会自动显示根目录的 `README.md`。`docs/` 下的 M
 - JDK 17（项目编译目标；更高版本 JDK 通常也可运行 Maven）
 - Maven 3.9+
 - Node.js 24 LTS
+- Corepack / pnpm（安装 Node.js 后执行 `corepack enable`）
 - Docker Desktop / Docker Compose（用于本地 MySQL）
 
 发布包运行模式只要求安装并启动 Docker Desktop。发布包会携带运行所需的 Java 运行时、后端 JAR、前端静态文件和 Windows 启动器，不要求系统预装 Java、Node.js、Maven 或 .NET。
@@ -101,8 +102,8 @@ mvn spring-boot:run
 
 ```powershell
 cd frontend
-npm install
-npm run dev
+corepack pnpm install --frozen-lockfile
+corepack pnpm run dev
 ```
 
 访问：
@@ -127,7 +128,7 @@ http://localhost:5173
 
 1. 确认 Docker Desktop 已启动，再执行 `docker compose up -d` 启动 MySQL。
 2. 在 `backend/` 目录执行 `mvn spring-boot:run`，等待 Flyway 迁移完成并看到 Spring Boot 启动成功。
-3. 新开终端进入 `frontend/`，首次运行执行 `npm install`，之后执行 `npm run dev`。
+3. 新开终端进入 `frontend/`，首次运行执行 `corepack pnpm install --frozen-lockfile`，之后执行 `corepack pnpm run dev`。
 4. 打开 `http://localhost:5173`，使用上方测试账号登录。
 5. 本地演示或联调前确认未使用生产密码、真实用户数据、OSS 密钥或生产 `JWT_SECRET`。
 
@@ -139,14 +140,20 @@ http://localhost:5173
 
 1. 安装并启动 Docker Desktop。
 2. 双击 `人才培养平台启动器.exe`。
-3. 点击“启动平台”。
+3. 点击“启动发布版”。
 
-启动器提供两种启动方式：
+启动器将客户运行、源码开发和发布构建分为三个独立流程：
 
-- `启动平台`：直接运行当前发布版本。
-- `更新并启动`：检测到同一项目中的 `frontend`、`backend` 源码时，通过 Docker 自动构建前后端、替换发布 JAR，然后启动最新版本。
+- `启动发布版`：运行发布包中的 JAR，访问 `http://localhost:8080`。纯发布包环境只显示这条有效运行路径。
+- `启动开发模式`：仅在检测到 `frontend/` 和 `backend/` 源码时可用。启动器直接运行 `mvn spring-boot:run` 和 Vite 开发服务器，访问 `http://localhost:5173`，不生成 JAR；前端源码支持热更新。
+- `重启开发模式`：开发模式运行后，同一按钮用于快速重启 Maven 与 Vite。Java 源码修改后使用该按钮即可重新编译并运行，不需要执行发布打包。
+- `构建发布版`：依次同步 pnpm 依赖、构建前端并执行 `mvn clean package -DskipTests`。该操作只生成或更新发布 JAR，不会自动启动应用。
 
-关闭启动器会停止应用进程；数据库默认继续运行，可通过“停止数据库”按钮关闭。
+开发模式要求本机安装 JDK、Maven、Node.js 与 Corepack/pnpm。可通过环境变量 `TALENT_PLATFORM_SOURCE_ROOT` 显式指定源码根目录，通过 `TALENT_PLATFORM_HOME` 指定发布包根目录。
+
+关闭启动器会终止由启动器创建的后端和前端进程；数据库默认继续运行，可通过“停止数据库”按钮关闭。若启动器发现端口 `8080` 上已有健康实例，只会打开该实例，不会接管或终止外部进程。
+
+数据库启动前会等待 MySQL 健康检查完成。如果发布包中存在 `images/mysql-8.4.tar` 且本机没有 `mysql:8.4` 镜像，启动器会优先执行离线导入；否则 Docker 会通过已配置的镜像源下载。
 
 开发者重新生成发布包时，依次构建前端、打包后端，再发布 `launcher/TalentPlatformLauncher.csproj`，并按当前发布目录结构放置 JAR、启动器和 Java 运行时。发布包不要提交到 Git，应压缩后上传到 GitHub Releases。
 

@@ -12,7 +12,12 @@ const routes=[
     {path:'training-plans',component:()=>import('@/views/TrainingPlansView.vue'),meta:{permission:'task:manage'}},
     {path:'tasks',component:()=>import('@/views/TasksView.vue')},
     {path:'evaluation',component:()=>import('@/views/EvaluationView.vue'),meta:{permission:'evaluation:view'}},
-    {path:'exams',component:()=>import('@/views/ExamsView.vue')},
+    {path:'exams',redirect:'/exams/my'},
+    {path:'exams/my',component:()=>import('@/views/exams/MyExamsView.vue')},
+    {path:'exams/questions',component:()=>import('@/views/exams/ExamQuestionBankView.vue'),meta:{permission:'exam:manage'}},
+    {path:'exams/papers',component:()=>import('@/views/exams/ExamPapersView.vue'),meta:{permission:'exam:manage'}},
+    {path:'exams/plans',component:()=>import('@/views/exams/ExamPlansView.vue'),meta:{permission:'exam:manage'}},
+    {path:'exams/results',component:()=>import('@/views/exams/ExamResultsView.vue')},
     {path:'users',component:()=>import('@/views/UsersView.vue'),meta:{permission:'user:employee:manage'}},
     {path:'profile',component:()=>import('@/views/ProfileView.vue')}
   ]}
@@ -25,6 +30,7 @@ router.beforeEach(to=>{
   if(to.path==='/login'&&a.user)return '/dashboard';
   if(a.user?.mustChangePassword&&to.path!='/profile')return '/profile';
   if(a.user?.role==='EMPLOYEE'&&to.path==='/employees')return '/profile';
+  if(a.user?.role!=='EMPLOYEE'&&to.path==='/exams/my')return a.can('exam:manage')?'/exams/plans':'/exams/results';
   const permission=to.meta.permission as string|undefined;
   if(permission&&!a.can(permission))return '/dashboard';
 });

@@ -4,7 +4,18 @@ import {useRoute,useRouter} from 'vue-router'
 import {useAuthStore} from '@/stores/auth'
 
 const auth=useAuthStore(),route=useRoute(),router=useRouter()
-const menus=computed(()=>[
+type MenuItem={to?:string;label:string;permission?:string;hideFor?:string[];children?:MenuItem[]}
+const examChildren=computed<MenuItem[]>(()=>{
+  if(auth.can('exam:manage'))return [
+    {to:'/exams/plans',label:'考试计划'},
+    {to:'/exams/results',label:'成绩管理'},
+    {to:'/exams/papers',label:'试卷管理'},
+    {to:'/exams/questions',label:'题库管理'}
+  ]
+  if(auth.user?.role==='EMPLOYEE')return [{to:'/exams/my',label:'我的考试'},{to:'/exams/results',label:'我的成绩'}]
+  return [{to:'/exams/results',label:'考试成绩'}]
+})
+const menus=computed<MenuItem[]>(()=>[
   {to:'/dashboard',label:'进度概览'},
   {to:'/employees',label:'人员台账',permission:'employee:read',hideFor:['EMPLOYEE']},
   {to:'/employee-directory',label:'人员信息',permission:'employee:export'},
@@ -12,10 +23,11 @@ const menus=computed(()=>[
   {to:'/training-plans',label:'培养计划',permission:'task:manage'},
   {to:'/tasks',label:'闯关任务'},
   {to:'/evaluation',label:'综合评价',permission:'evaluation:view'},
-  {to:'/exams',label:'考试中心'},
+  {label:'考试中心',children:examChildren.value},
   {to:'/users',label:'账号管理',permission:'user:employee:manage'},
   {to:'/profile',label:auth.user?.role==='EMPLOYEE'?'个人信息':'个人设置'}
 ].filter(x=>(!x.permission||auth.can(x.permission))&&!x.hideFor?.includes(auth.user?.role||'')))
+const mobileMenus=computed(()=>menus.value.filter(x=>x.to).slice(0,4))
 function logout(){auth.logout();router.push('/login')}
 </script>
 
@@ -24,7 +36,13 @@ function logout(){auth.logout();router.push('/login')}
     <el-aside width="220px" class="sidebar desktop-only">
       <div class="brand">人才培养平台</div>
       <el-menu :default-active="route.path" router>
-        <el-menu-item v-for="m in menus" :key="m.to" :index="m.to">{{m.label}}</el-menu-item>
+        <template v-for="m in menus" :key="m.to||m.label">
+          <el-sub-menu v-if="m.children?.length" :index="m.label">
+            <template #title>{{m.label}}</template>
+            <el-menu-item v-for="child in m.children" :key="child.to" :index="child.to">{{child.label}}</el-menu-item>
+          </el-sub-menu>
+          <el-menu-item v-else :index="m.to">{{m.label}}</el-menu-item>
+        </template>
       </el-menu>
     </el-aside>
     <el-container>
@@ -33,7 +51,7 @@ function logout(){auth.logout();router.push('/login')}
         <div class="user">{{auth.user?.displayName}} · {{auth.user?.role}} <el-button link type="primary" @click="logout">退出</el-button></div>
       </el-header>
       <el-main><router-view/></el-main>
-      <el-footer class="mobile-nav"><router-link v-for="m in menus.slice(0,4)" :key="m.to" :to="m.to">{{m.label}}</router-link></el-footer>
+      <el-footer class="mobile-nav"><router-link v-for="m in mobileMenus" :key="m.to" :to="m.to!">{{m.label}}</router-link></el-footer>
     </el-container>
   </el-container>
 </template>
