@@ -3,6 +3,7 @@ package com.talent.platform.security;
 public final class Permissions {
   private Permissions(){}
   public static final String EMPLOYEE_READ="employee:read";
+  public static final String EMPLOYEE_UPDATE="employee:update";
   public static final String EMPLOYEE_WRITE="employee:write";
   public static final String EMPLOYEE_EXPORT="employee:export";
   public static final String COURSE_MANAGE="course:manage";

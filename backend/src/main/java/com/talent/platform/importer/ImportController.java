@@ -2,6 +2,7 @@ package com.talent.platform.importer;
 
 import com.alibaba.excel.EasyExcel;
 import com.talent.platform.common.*;
+import com.talent.platform.employee.EmployeeExcelSheetHandler;
 import com.talent.platform.security.*;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -42,20 +43,36 @@ public class ImportController {
         response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" +
                 URLEncoder.encode("新员工导入模板.xlsx", StandardCharsets.UTF_8));
         var sample = new EmployeeImportRow();
+        sample.setSerialNo(1);
         sample.setEmployeeNo("20260001");
-        sample.setName("示例员工");
-        sample.setBatch("2026届");
-        sample.setBusinessUnit("示例板块");
-        sample.setStation("示例服务站");
-        sample.setTechnicalMentor("mentor");
-        sample.setSkillMentor("mentor");
+        sample.setName("示例员工（请删除）");
+        sample.setBatch(firstEnabledName("talent_batch"));
+        sample.setBusinessUnit(firstEnabledName("business_unit"));
+        sample.setStation(firstEnabledName("service_station"));
+        sample.setTechnicalMentor(firstEnabledMentor());
         sample.setSchool("示例大学");
         sample.setMajor("示例专业");
         sample.setEducation("本科");
         sample.setBirthDate("2002-01-01");
+        sample.setNativePlace("示例省市");
+        sample.setPoliticalStatus("群众");
+        sample.setResidence("示例公司住址");
+        sample.setEmail("example@example.com");
+        sample.setPhone("13800000000");
         sample.setOnboardDate("2026-07-01");
-        EasyExcel.write(response.getOutputStream(), EmployeeImportRow.class)
-                .sheet("新员工").doWrite(List.of(sample));
+        sample.setStatus("在职");
+        try (var writer = EasyExcel.write(response.getOutputStream()).build()) {
+            var employeeSheet = EasyExcel.writerSheet(0, "新员工导入")
+                    .head(EmployeeImportRow.class)
+                    .registerWriteHandler(new EmployeeExcelSheetHandler(21))
+                    .build();
+            writer.write(List.of(sample), employeeSheet);
+            var instructionSheet = EasyExcel.writerSheet(1, "填写说明")
+                    .head(EmployeeImportInstructionRow.class)
+                    .registerWriteHandler(new EmployeeExcelSheetHandler(3))
+                    .build();
+            writer.write(employeeImportInstructions(), instructionSheet);
+        }
     }
 
     @PostMapping("/employees")
@@ -95,6 +112,8 @@ public class ImportController {
             validateMentor(r.getSkillMentor(), line, "指导老师（技能）", errors);
             tryDate(r.getBirthDate(), line, "出生日期", errors);
             tryDate(r.getOnboardDate(), line, "入职日期", errors);
+            if (normalizeStatus(r.getStatus()) == null)
+                errors.add(new RowError(line, "状态", "仅支持“在职”或“停用”"));
         }
 
         if (!errors.isEmpty())
@@ -116,7 +135,8 @@ public class ImportController {
                     birth_date, native_place, political_status, residence,
                     hobbies, speciality,
                     email, id_card, phone, onboard_date
-                ) values(?,?,?, ?,?,?, ?,?, ?,?,?, ?,?,?,?, ?,?, ?,?,?,?)
+                    ,status
+                ) values(?,?,?, ?,?,?, ?,?, ?,?,?, ?,?,?,?, ?,?, ?,?,?,?, ?)
                 """,
                     uid,
                     r.getEmployeeNo(), r.getName(),
@@ -128,7 +148,8 @@ public class ImportController {
                     r.getSchool(), r.getMajor(), r.getEducation(),
                     date(r.getBirthDate()), r.getNativePlace(), r.getPoliticalStatus(), r.getResidence(),
                     r.getHobbies(), r.getSpeciality(),
-                    r.getEmail(), r.getIdCard(), r.getPhone(), date(r.getOnboardDate()));
+                    r.getEmail(), r.getIdCard(), r.getPhone(), date(r.getOnboardDate()),
+                    normalizeStatus(r.getStatus()));
         }
 
         audit.log("IMPORT_EMPLOYEES", "EMPLOYEE", null, null, Map.of("count", rows.size()));
@@ -193,8 +214,67 @@ public class ImportController {
 
     private Long id(String table, String name) {
         if (name == null || name.isBlank()) return null;
-        var x = db.queryForList("select id from " + table + " where name=?", Long.class, name);
+        var x = db.queryForList(
+                "select id from " + table + " where name=? and enabled=true",
+                Long.class,
+                name.trim());
         return x.isEmpty() ? null : x.get(0);
+    }
+
+    private String firstEnabledName(String table) {
+        var names = db.queryForList(
+                "select name from " + table + " where enabled=true order by id limit 1",
+                String.class);
+        return names.isEmpty() ? null : names.get(0);
+    }
+
+    private String firstEnabledMentor() {
+        var usernames = db.queryForList("""
+                select username from sys_user
+                where role='MENTOR' and enabled=true
+                order by id limit 1
+                """, String.class);
+        return usernames.isEmpty() ? null : usernames.get(0);
+    }
+
+    private List<EmployeeImportInstructionRow> employeeImportInstructions() {
+        return List.of(
+                instruction("序号", "否", "仅用于阅读排序，不参与系统校验。", "1"),
+                instruction("工号", "是", "必须唯一；将同时作为员工登录用户名。建议按文本填写，避免前导零丢失。", "20260001"),
+                instruction("姓名", "是", "填写员工真实姓名。", "张三"),
+                instruction("批次", "是", "必须与系统中已启用的培养批次名称完全一致。", "2026届"),
+                instruction("所属板块", "否", "必须与系统中已启用的所属板块名称完全一致。", "机动车"),
+                instruction("服务站点", "否", "必须与系统中已启用的服务站点名称完全一致。", "示例服务站"),
+                instruction("指导老师（技术）", "否", "填写已启用导师的用户名；也可填写不重名的导师姓名。", "mentor"),
+                instruction("指导老师（技能）", "否", "填写已启用导师的用户名；也可填写不重名的导师姓名。", "mentor2"),
+                instruction("身份证号码", "否", "建议将单元格设为文本，防止长号码被科学计数法处理。", "110101200201010000"),
+                instruction("毕业学校", "否", "填写毕业院校全称。", "示例大学"),
+                instruction("所学专业", "否", "填写专业名称。", "车辆工程"),
+                instruction("学历", "否", "建议使用高中、大专、本科、硕士、博士等统一名称。", "本科"),
+                instruction("出生日期", "否", "格式必须为 yyyy-MM-dd。", "2002-01-01"),
+                instruction("籍贯", "否", "按实际管理口径填写。", "北京市"),
+                instruction("政治面貌", "否", "建议使用群众、共青团员、中共党员等统一名称。", "群众"),
+                instruction("住址（公司）", "否", "填写公司住宿或常住联系地址。", "示例公司住址"),
+                instruction("兴趣爱好", "否", "多个项目可使用顿号分隔。", "阅读、跑步"),
+                instruction("特长", "否", "多个项目可使用顿号分隔。", "沟通、写作"),
+                instruction("私人邮箱", "否", "填写员工常用私人邮箱。", "example@example.com"),
+                instruction("联系方式", "否", "建议按文本填写，避免号码格式变化。", "13800000000"),
+                instruction("入职日期", "否", "格式必须为 yyyy-MM-dd。", "2026-07-01"),
+                instruction("状态", "否", "仅填写“在职”或“停用”；留空时默认为“在职”。", "在职"));
+    }
+
+    private EmployeeImportInstructionRow instruction(
+            String field, String required, String rule, String example) {
+        return new EmployeeImportInstructionRow(field, required, rule, example);
+    }
+
+    private String normalizeStatus(String value) {
+        if (value == null || value.isBlank()) return "ACTIVE";
+        return switch (value.trim().toUpperCase(Locale.ROOT)) {
+            case "在职", "ACTIVE" -> "ACTIVE";
+            case "停用", "INACTIVE" -> "INACTIVE";
+            default -> null;
+        };
     }
 
     private void validateMentor(

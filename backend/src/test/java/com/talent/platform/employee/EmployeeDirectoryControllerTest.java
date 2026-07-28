@@ -25,4 +25,27 @@ class EmployeeDirectoryControllerTest {
         "station_change_count",
         "last_station_change_at");
   }
+
+  @Test void summaryUsesScopeAndReturnsManagementCoverage(){
+    var db=mock(JdbcTemplate.class);var permissions=mock(PermissionService.class);
+    when(permissions.employeeFilter("e"))
+      .thenReturn(new PermissionService.ScopeFilter(" and e.business_unit_id=?",List.of(3L)));
+    when(db.queryForMap(anyString(),any(Object[].class))).thenReturn(Map.of(
+      "totalEmployees",5L,
+      "activeEmployees",4L,
+      "inactiveEmployees",1L,
+      "stationAssigned",3L,
+      "mentorReady",2L));
+    var controller=new EmployeeDirectoryController(db,permissions,mock(AuditService.class));
+
+    var result=controller.summary(null,null,null,null,null,null,null);
+
+    var sql=ArgumentCaptor.forClass(String.class);
+    verify(db).queryForMap(sql.capture(),any(Object[].class));
+    assertThat(sql.getValue()).contains(
+      "e.business_unit_id=?",
+      "stationAssigned",
+      "mentorReady");
+    assertThat(result.data()).containsEntry("totalEmployees",5L);
+  }
 }

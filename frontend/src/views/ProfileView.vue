@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import {computed,onMounted,reactive,ref} from 'vue'
-import {ElMessage} from 'element-plus'
+import {ElMessage,ElMessageBox} from 'element-plus'
+import {Delete,Upload} from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
+import {avatarUrl,nameInitial} from '@/utils/avatar'
+import {roleLabel} from '@/utils/role'
 
 const auth=useAuthStore()
 const isEmployee=computed(()=>auth.user?.role==='EMPLOYEE')
@@ -12,7 +15,7 @@ const selectedStationId=ref<number|null>(null)
 const submitting=ref(false)
 const myRequests=ref<any[]>([])
 const form=reactive({oldPassword:'',newPassword:'',confirm:''})
-const loading=ref(false),profileLoading=ref(false)
+const loading=ref(false),profileLoading=ref(false),avatarUploading=ref(false)
 const profile=reactive<any>({
   employeeNo:'',name:'',batchName:'',businessUnitName:'',stationId:null,stationName:'',
   technicalMentorName:'',skillMentorName:'',
@@ -21,6 +24,7 @@ const profile=reactive<any>({
 })
 const availableStations=computed(()=>stations.value.filter(x=>x.enabled&&x.id!==profile.stationId))
 const hasPendingRequest=computed(()=>myRequests.value.some(x=>x.status==='PENDING'))
+const currentAvatar=computed(()=>avatarUrl(auth.user?.avatarToken))
 
 async function loadProfile(){
   if(!isEmployee.value)return
@@ -52,6 +56,44 @@ async function saveProfile(){
     await api.put('/profile/employee',profile)
     ElMessage.success('个人资料已保存')
   }finally{profileLoading.value=false}
+}
+function beforeAvatarUpload(file:File){
+  if(!['image/jpeg','image/png'].includes(file.type)){
+    ElMessage.warning('仅支持 JPG 或 PNG 格式的图片')
+    return false
+  }
+  if(file.size>5*1024*1024){
+    ElMessage.warning('图片大小不能超过 5MB')
+    return false
+  }
+  return true
+}
+async function uploadAvatar(options:any){
+  avatarUploading.value=true
+  try{
+    const data=new FormData()
+    data.append('file',options.file)
+    await api.post('/profile/avatar',data)
+    await auth.refresh()
+    profile.avatarToken=auth.user?.avatarToken||null
+    ElMessage.success(isEmployee.value?'证件照已更新':'头像已更新')
+    options.onSuccess?.({})
+  }catch(error){
+    options.onError?.(error)
+  }finally{
+    avatarUploading.value=false
+  }
+}
+async function removeAvatar(){
+  await ElMessageBox.confirm(
+    isEmployee.value?'删除后，人员档案将恢复显示姓名首字头像。':'删除后将恢复显示姓名首字头像。',
+    `确认删除${isEmployee.value?'证件照':'头像'}？`,
+    {confirmButtonText:'确认删除',cancelButtonText:'取消',type:'warning'}
+  )
+  await api.delete('/profile/avatar')
+  await auth.refresh()
+  profile.avatarToken=null
+  ElMessage.success('照片已删除')
 }
 async function loadStations(){
   const r=await api.get<any,Envelope<any[]>>('/stations')
@@ -90,18 +132,63 @@ onMounted(async()=>{
 
 <template>
   <div class="page">
-    <div class="page-head"><h2>{{isEmployee?'个人信息':'个人设置'}}</h2></div>
+    <div class="page-head profile-head">
+      <div>
+        <h2>{{isEmployee?'个人资料':'账号设置'}}</h2>
+        <p>{{isEmployee?'维护个人证件照、联系方式与登录密码':'管理当前账号的头像与登录密码'}}</p>
+      </div>
+    </div>
     <el-alert v-if="auth.user?.mustChangePassword" title="当前使用临时密码，修改后才能使用其他功能" type="warning" show-icon :closable="false"/>
     <el-row :gutter="16" style="margin-top:16px">
       <el-col :md="isEmployee?12:24">
         <el-card>
-          <template #header>账号信息</template>
+          <template #header>当前账号</template>
+          <div class="avatar-settings">
+            <el-avatar :size="88" :src="currentAvatar" class="profile-avatar">
+              {{nameInitial(auth.user?.displayName)}}
+            </el-avatar>
+            <div class="avatar-copy">
+              <strong>{{isEmployee?'个人证件照':'账号头像'}}</strong>
+              <p>
+                {{isEmployee
+                  ?'证件照由本人维护，并会同步作为右上角账号头像及人员档案照片。'
+                  :'上传后将用于右上角账号头像及账号管理列表。'}}
+              </p>
+              <div class="avatar-actions">
+                <el-upload
+                  accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                  :show-file-list="false"
+                  :before-upload="beforeAvatarUpload"
+                  :http-request="uploadAvatar"
+                >
+                  <el-button :icon="Upload" :loading="avatarUploading">
+                    {{isEmployee
+                      ?(currentAvatar?'更换证件照':'上传证件照')
+                      :(currentAvatar?'更换头像':'上传头像')}}
+                  </el-button>
+                </el-upload>
+                <el-button
+                  v-if="currentAvatar"
+                  :icon="Delete"
+                  :disabled="avatarUploading"
+                  text
+                  type="danger"
+                  @click="removeAvatar"
+                >删除</el-button>
+              </div>
+              <span class="avatar-help">
+                {{isEmployee
+                  ?'JPG 或 PNG，最大 5MB；建议上传近期、正面、免冠且背景简洁的竖版照片。'
+                  :'JPG 或 PNG，最大 5MB；建议使用主体清晰的正方形图片。'}}
+              </span>
+            </div>
+          </div>
           <el-descriptions :column="1" border>
             <el-descriptions-item label="用户名">{{auth.user?.username}}</el-descriptions-item>
             <el-descriptions-item label="姓名">{{auth.user?.displayName}}</el-descriptions-item>
-            <el-descriptions-item label="角色">{{auth.user?.role}}</el-descriptions-item>
+            <el-descriptions-item label="角色">{{roleLabel(auth.user?.role)}}</el-descriptions-item>
           </el-descriptions>
-          <el-divider>修改密码</el-divider>
+          <el-divider>密码与安全</el-divider>
           <el-form label-position="top">
             <el-form-item label="原密码"><el-input v-model="form.oldPassword" type="password" show-password/></el-form-item>
             <el-form-item label="新密码"><el-input v-model="form.newPassword" type="password" show-password/></el-form-item>
@@ -172,6 +259,19 @@ onMounted(async()=>{
 </template>
 
 <style scoped>
+.profile-head p{margin:6px 0 0;color:#8492a6;font-size:13px}
+.avatar-settings{display:flex;align-items:center;gap:18px;padding:4px 2px 20px}
+.profile-avatar{flex:0 0 auto;color:#2868c7;background:#e8f2fb;font-size:26px;font-weight:700}
+.profile-avatar :deep(img){object-fit:cover}
+.avatar-copy{min-width:0}
+.avatar-copy>strong{display:block;color:#273348;font-size:14px}
+.avatar-copy>p{margin:5px 0 10px;color:#7b8798;font-size:12px;line-height:1.6}
+.avatar-actions{display:flex;align-items:center;gap:8px}
+.avatar-help{display:block;margin-top:8px;color:#9aa4b3;font-size:11px}
 .request-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
 .request-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:13px}
+@media(max-width:600px){
+  .avatar-settings{align-items:flex-start}
+  .profile-avatar{width:72px;height:72px}
+}
 </style>

@@ -171,7 +171,7 @@ public class EmployeeController {
   public ApiResponse<Void> update(
       @PathVariable Long id,
       @Valid @RequestBody EmployeeRequest request) {
-    permissions.require(Permissions.EMPLOYEE_WRITE);
+    permissions.require(Permissions.EMPLOYEE_UPDATE);
     validateReferences(request);
     var before = db.queryForMap("select * from employee where id=? for update", id);
     Long userId = ((Number) before.get("user_id")).longValue();

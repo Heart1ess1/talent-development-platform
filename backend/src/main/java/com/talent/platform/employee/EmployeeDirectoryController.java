@@ -19,6 +19,7 @@ import java.sql.Date;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @RestController
 @RequestMapping("/api/v1/employee-directory")
@@ -28,6 +29,7 @@ public class EmployeeDirectoryController {
              e.mentor_user_id,e.skill_mentor_user_id,e.school,e.major,e.education,
              e.birth_date,e.native_place,e.residence,e.phone,e.email,e.onboard_date,
              e.status,e.political_status,e.hobbies,e.speciality,e.id_card,
+             u.avatar_token,
              b.name batch_name,bu.name business_unit_name,s.name station_name,
              tm.display_name technical_mentor_name,tm.display_name mentor_name,
              sm.display_name skill_mentor_name,
@@ -38,6 +40,7 @@ public class EmployeeDirectoryController {
       """;
   private static final String FROM = """
        from employee e
+       left join sys_user u on u.id=e.user_id
        left join talent_batch b on b.id=e.batch_id
        left join business_unit bu on bu.id=e.business_unit_id
        left join service_station s on s.id=e.station_id
@@ -87,6 +90,29 @@ public class EmployeeDirectoryController {
     return ApiResponse.ok(new PageResult<>(rows, total, page, pageSize));
   }
 
+  @GetMapping("/summary")
+  public ApiResponse<Map<String, Object>> summary(
+      @RequestParam(required = false) String keyword,
+      @RequestParam(required = false) Long batchId,
+      @RequestParam(required = false) Long businessUnitId,
+      @RequestParam(required = false) Long stationId,
+      @RequestParam(required = false) Long mentorId,
+      @RequestParam(required = false) Long skillMentorId,
+      @RequestParam(required = false) String education) {
+    permissions.require(Permissions.EMPLOYEE_READ);
+    var query = filters(
+        keyword, batchId, businessUnitId, stationId, mentorId, skillMentorId, education, null);
+    return ApiResponse.ok(db.queryForMap("""
+        select
+          count(*) totalEmployees,
+          coalesce(sum(case when e.status='ACTIVE' then 1 else 0 end),0) activeEmployees,
+          coalesce(sum(case when e.status='INACTIVE' then 1 else 0 end),0) inactiveEmployees,
+          coalesce(sum(case when e.station_id is not null then 1 else 0 end),0) stationAssigned,
+          coalesce(sum(case when e.mentor_user_id is not null
+                              and e.skill_mentor_user_id is not null then 1 else 0 end),0) mentorReady
+        """ + FROM + query.sql(), query.args().toArray()));
+  }
+
   @GetMapping("/export")
   public void export(
       @RequestParam(required = false) String keyword,
@@ -104,15 +130,19 @@ public class EmployeeDirectoryController {
     var rows = db.queryForList(
         SELECT + FROM + query.sql() + " order by e.id desc",
         query.args().toArray());
-    var output = rows.stream().map(this::toExportRow).toList();
+    var sequence = new AtomicInteger(1);
+    var output = rows.stream()
+        .map(row -> toExportRow(row, sequence.getAndIncrement()))
+        .toList();
     response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     response.setHeader(
         "Content-Disposition",
         "attachment; filename*=UTF-8''"
-            + URLEncoder.encode("人员信息.xlsx", StandardCharsets.UTF_8));
+            + URLEncoder.encode("人员台账.xlsx", StandardCharsets.UTF_8));
     audit.log("EXPORT_EMPLOYEES", "EMPLOYEE", null, null, Map.of("count", output.size()));
     EasyExcel.write(response.getOutputStream(), EmployeeDirectoryExportRow.class)
-        .sheet("人员信息")
+        .registerWriteHandler(new EmployeeExcelSheetHandler(21))
+        .sheet("人员台账")
         .doWrite(output);
   }
 
@@ -171,8 +201,9 @@ public class EmployeeDirectoryController {
     return new FilterQuery(where.toString(), args);
   }
 
-  private EmployeeDirectoryExportRow toExportRow(Map<String, Object> row) {
+  private EmployeeDirectoryExportRow toExportRow(Map<String, Object> row, int serialNo) {
     var output = new EmployeeDirectoryExportRow();
+    output.setSerialNo(serialNo);
     output.setName(string(row, "name"));
     output.setEmployeeNo(string(row, "employee_no"));
     output.setBatchName(string(row, "batch_name"));

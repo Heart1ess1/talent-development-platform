@@ -3,6 +3,7 @@ package com.talent.platform.employee;
 import com.talent.platform.security.AuditService;
 import com.talent.platform.security.CurrentUser;
 import com.talent.platform.security.PermissionService;
+import com.talent.platform.security.Permissions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -73,6 +74,7 @@ class EmployeeControllerTest {
 
     controller.update(1L, request);
 
+    verify(permissions).require(Permissions.EMPLOYEE_UPDATE);
     var sql = ArgumentCaptor.forClass(String.class);
     verify(db, atLeastOnce()).update(sql.capture(), any(Object[].class));
     assertThat(sql.getAllValues()).anySatisfy(value ->

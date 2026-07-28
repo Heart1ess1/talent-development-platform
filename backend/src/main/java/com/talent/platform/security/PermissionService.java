@@ -11,16 +11,17 @@ public class PermissionService {
   public PermissionService(JdbcTemplate db){this.db=db;}
 
   public CurrentUser load(Long id){
-    var rows=db.queryForList("select id,username,display_name,role,enabled,must_change_password,security_version from sys_user where id=?",id);
+    var rows=db.queryForList("select id,username,display_name,role,enabled,must_change_password,security_version,avatar_token from sys_user where id=?",id);
     if(rows.isEmpty()||!Boolean.TRUE.equals(rows.get(0).get("enabled")))throw new AccessDeniedException("账号已停用");
     var r=rows.get(0);String role=String.valueOf(r.get("role"));
     return new CurrentUser(((Number)r.get("id")).longValue(),String.valueOf(r.get("username")),String.valueOf(r.get("display_name")),role,
-      Boolean.TRUE.equals(r.get("must_change_password")),((Number)r.get("security_version")).intValue(),permissions(role),scope(role));
+      Boolean.TRUE.equals(r.get("must_change_password")),((Number)r.get("security_version")).intValue(),permissions(role),scope(role),
+      r.get("avatar_token")==null?null:String.valueOf(r.get("avatar_token")));
   }
   public Set<String> permissions(String role){
     var p=new LinkedHashSet<String>();p.add(Permissions.EMPLOYEE_READ);p.add(Permissions.EVALUATION_VIEW);
     if(List.of("MENTOR","STATION_MANAGER","TRAINING_ADMIN").contains(role))p.add(Permissions.EVALUATION_SUBMIT);
-    if(List.of("TRAINING_ADMIN","ADMIN","SUPER_ADMIN").contains(role))p.addAll(List.of(Permissions.EMPLOYEE_EXPORT,Permissions.COURSE_MANAGE,Permissions.ATTENDANCE_MANAGE,Permissions.TASK_MANAGE,Permissions.TASK_REVIEW,Permissions.EVALUATION_MANAGE,Permissions.EXAM_MANAGE));
+    if(List.of("TRAINING_ADMIN","ADMIN","SUPER_ADMIN").contains(role))p.addAll(List.of(Permissions.EMPLOYEE_UPDATE,Permissions.EMPLOYEE_EXPORT,Permissions.COURSE_MANAGE,Permissions.ATTENDANCE_MANAGE,Permissions.TASK_MANAGE,Permissions.TASK_REVIEW,Permissions.EVALUATION_MANAGE,Permissions.EXAM_MANAGE));
     if(List.of("ADMIN","SUPER_ADMIN").contains(role))p.addAll(List.of(Permissions.EMPLOYEE_WRITE,Permissions.USER_EMPLOYEE_MANAGE,Permissions.USER_OPS_ROLE_MANAGE,Permissions.MASTER_MANAGE,Permissions.AUDIT_READ));
     if("SUPER_ADMIN".equals(role))p.add(Permissions.USER_ADMIN_MANAGE);
     return Collections.unmodifiableSet(p);
