@@ -8,8 +8,16 @@ const routes=[
     {path:'dashboard',component:()=>import('@/views/DashboardView.vue')},
     {path:'employees',redirect:'/employee-directory'},
     {path:'employee-directory',component:()=>import('@/views/EmployeeDirectoryView.vue'),meta:{permission:'employee:read'}},
-    {path:'courses',component:()=>import('@/views/CoursesView.vue')},
-    {path:'training-plans',component:()=>import('@/views/TrainingPlansView.vue'),meta:{permission:'task:manage'}},
+    {path:'location-reports',component:()=>import('@/views/LocationReportsView.vue'),meta:{permission:'employee:read'}},
+    {path:'courses',redirect:()=>useAuthStore().user?.role==='EMPLOYEE'?'/courses/my':'/courses/manage'},
+    {path:'courses/manage',component:()=>import('@/views/CourseCatalogView.vue'),meta:{permission:'course:manage'}},
+    {path:'courses/sessions',component:()=>import('@/views/CourseSessionsView.vue'),meta:{permission:'course:manage'}},
+    {path:'courses/attendance',component:()=>import('@/views/CourseAttendanceView.vue')},
+    {path:'courses/my',component:()=>import('@/views/MyCoursesView.vue')},
+    {path:'training-plans',redirect:'/training-plans/manage'},
+    {path:'training-plans/manage',component:()=>import('@/views/TrainingPlanManagementView.vue'),meta:{permission:'task:manage'}},
+    {path:'training-plans/tasks',component:()=>import('@/views/TrainingPlanTasksView.vue'),meta:{permission:'task:manage'}},
+    {path:'training-plans/tracking',component:()=>import('@/views/TasksView.vue')},
     {path:'tasks',component:()=>import('@/views/TasksView.vue')},
     {path:'evaluation',component:()=>import('@/views/EvaluationView.vue'),meta:{permission:'evaluation:view'}},
     {path:'exams',redirect:'/exams/my'},
@@ -31,6 +39,8 @@ router.beforeEach(to=>{
   if(to.path==='/login'&&a.user)return '/dashboard';
   if(a.user?.mustChangePassword&&to.path!='/profile')return '/profile';
   if(a.user?.role==='EMPLOYEE'&&to.path==='/employee-directory')return '/profile';
+  if(a.user?.role==='EMPLOYEE'&&['/courses/manage','/courses/sessions'].includes(to.path))return '/courses/my';
+  if(a.user?.role!=='EMPLOYEE'&&to.path==='/courses/my')return a.can('course:manage')?'/courses/manage':'/courses/attendance';
   if(a.user?.role!=='EMPLOYEE'&&to.path==='/exams/my')return a.can('exam:manage')?'/exams/plans':'/exams/results';
   const permission=to.meta.permission as string|undefined;
   if(permission&&!a.can(permission))return '/dashboard';

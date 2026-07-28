@@ -171,7 +171,7 @@ internal sealed class LauncherForm : Form
                 root,
                 new Dictionary<string, string?>
                 {
-                    ["LOCAL_STORAGE_ROOT"] = Path.Combine(root, "data", "uploads")
+                    ["LOCAL_STORAGE_ROOT"] = ResolveStorageRoot()
                 });
             backendProcess = process;
 
@@ -270,7 +270,7 @@ internal sealed class LauncherForm : Form
                 Path.Combine(sourceRoot, "backend"),
                 new Dictionary<string, string?>
                 {
-                    ["LOCAL_STORAGE_ROOT"] = Path.Combine(sourceRoot, "data", "uploads")
+                    ["LOCAL_STORAGE_ROOT"] = ResolveStorageRoot()
                 });
             backendProcess = backend;
 
@@ -957,6 +957,19 @@ internal sealed class LauncherForm : Form
         }
 
         return GetBuiltJarPath();
+    }
+
+    private string ResolveStorageRoot()
+    {
+        var configured = Environment.GetEnvironmentVariable("LOCAL_STORAGE_ROOT");
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return Path.GetFullPath(configured);
+        }
+
+        // When source and release modes share one database, they must also share
+        // one attachment root; otherwise identical storage keys resolve differently.
+        return Path.Combine(sourceRoot ?? root, "data", "uploads");
     }
 
     private string FindComposeFile(bool PreferSourceCompose)
