@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import {computed,nextTick,onMounted,reactive,ref} from 'vue'
 import {ElMessage,ElMessageBox} from 'element-plus'
-import {Plus,Search,UserFilled} from '@element-plus/icons-vue'
+import {Calendar,Clock,Document,Plus,Search,UserFilled} from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
 import {dateTimeParts,planPhaseLabels,scoreMonth} from './examUi'
+import '@/styles/exam-center.css'
 
 const plans=ref<any[]>([]),papers=ref<any[]>([]),batches=ref<any[]>([]),stations=ref<any[]>([])
 const candidates=ref<any[]>([]),selectedCandidates=ref<any[]>([]),candidateTable=ref<any>()
@@ -90,6 +91,10 @@ async function publishPlan(row:any){
   await ElMessageBox.confirm(`发布后，${row.assigned_count||0} 名员工将可以看到“${row.name}”，确认发布吗？`,'发布考试计划',{type:'warning',confirmButtonText:'确认发布'})
   await api.post(`/exams/plans/${row.id}/publish`);ElMessage.success('考试计划已发布');await load()
 }
+async function deletePlan(row:any){
+  await ElMessageBox.confirm(`确认删除草稿“${row.name}”吗？已配置的参考人员范围也会一并移除。`,'删除考试计划',{type:'warning',confirmButtonText:'确认删除'})
+  await api.delete(`/exams/plans/${row.id}`);ElMessage.success('考试计划草稿已删除');await load()
+}
 function planPhase(row:any){return planPhaseLabels[row.plan_phase]??{label:row.status,type:'info'}}
 function planBatchNames(row:any){if(row.target_batch_names)return row.target_batch_names;return batches.value.find(x=>x.id===row.batch_id)?.name||'全部'}
 function disabledPast(date:Date){return date.getTime()<new Date().setHours(0,0,0,0)}
@@ -97,22 +102,21 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
-    <div class="page-head">
-      <div><h2>考试计划</h2><p class="muted">统一管理考试时间、试卷与参考范围</p></div>
-      <el-button type="primary" :icon="Plus" @click="openCreate">新建考试计划</el-button>
-    </div>
+  <div class="exam-module-page">
+    <header class="exam-page-head">
+      <div><span class="eyebrow">考试中心 · 考试计划</span><h1>考试计划</h1><p>统一设置考试试卷、开放时段、作答规则与参考人员范围。</p></div>
+      <div class="exam-head-actions"><el-button type="primary" :icon="Plus" @click="openCreate">新建考试计划</el-button></div>
+    </header>
 
-    <div class="overview-grid">
-      <div class="overview-item"><span>计划总数</span><strong>{{overview.total}}</strong></div>
-      <div class="overview-item warning"><span>待发布草稿</span><strong>{{overview.draft}}</strong></div>
-      <div class="overview-item"><span>待开始</span><strong>{{overview.upcoming}}</strong></div>
-      <div class="overview-item success"><span>进行中</span><strong>{{overview.open}}</strong></div>
-    </div>
+    <section class="exam-summary-grid">
+      <article class="exam-summary-card blue"><span class="exam-summary-icon"><el-icon><Calendar/></el-icon></span><div><small>计划总数</small><strong>{{overview.total}}</strong><span>全部考试安排</span></div></article>
+      <article class="exam-summary-card amber"><span class="exam-summary-icon"><el-icon><Document/></el-icon></span><div><small>待发布草稿</small><strong>{{overview.draft}}</strong><span>需要确认发布</span></div></article>
+      <article class="exam-summary-card violet"><span class="exam-summary-icon"><el-icon><Clock/></el-icon></span><div><small>待开始</small><strong>{{overview.upcoming}}</strong><span>已发布未开放</span></div></article>
+      <article class="exam-summary-card green"><span class="exam-summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>进行中</small><strong>{{overview.open}}</strong><span>员工可参加</span></div></article>
+    </section>
 
-    <el-card>
-      <template #header>
-        <div class="card-head">
+    <section class="exam-workspace">
+        <div class="exam-workspace-head">
           <div><span class="card-title">计划列表</span><span class="header-tip">计分月份根据考试开始时间自动归属</span></div>
           <div class="filters">
             <el-input v-model="keyword" clearable placeholder="搜索考试或试卷" :prefix-icon="Search"/>
@@ -121,7 +125,6 @@ onMounted(load)
             </el-select>
           </div>
         </div>
-      </template>
       <el-table :data="filteredPlans" empty-text="暂无考试计划" class="plan-table">
         <el-table-column label="考试信息" min-width="150">
           <template #default="s"><div class="exam-name">{{s.row.name}}</div><div class="sub-text">试卷：{{s.row.paper_name}}</div></template>
@@ -137,9 +140,9 @@ onMounted(load)
         <el-table-column label="板块" width="100" show-overflow-tooltip><template #default="s">{{s.row.target_station_names||'全部'}}</template></el-table-column>
         <el-table-column label="参考人数" width="100" align="center" header-align="center"><template #default="s"><strong>{{s.row.assigned_count??0}}</strong></template></el-table-column>
         <el-table-column label="计划状态" width="92"><template #default="s"><el-tag :type="planPhase(s.row).type" effect="plain">{{planPhase(s.row).label}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="88" fixed="right"><template #default="s"><el-button v-if="s.row.status==='DRAFT'" link type="primary" @click="publishPlan(s.row)">发布计划</el-button><span v-else class="muted">--</span></template></el-table-column>
+        <el-table-column label="操作" width="126" fixed="right"><template #default="s"><div v-if="s.row.status==='DRAFT'" class="exam-table-actions"><el-button link type="primary" @click="publishPlan(s.row)">发布</el-button><el-button link type="danger" @click="deletePlan(s.row)">删除</el-button></div><span v-else class="muted">已发布</span></template></el-table-column>
       </el-table>
-    </el-card>
+    </section>
 
     <el-drawer v-model="drawerVisible" size="760px" class="plan-drawer" :close-on-click-modal="false">
       <template #header><div class="drawer-title"><h3>新建考试计划</h3><p>设置考试内容、开放时间与参考人员范围</p></div></template>

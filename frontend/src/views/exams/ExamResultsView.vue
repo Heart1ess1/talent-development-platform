@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import {computed,onMounted,ref} from 'vue'
 import {ElMessage} from 'element-plus'
-import {ArrowRight,Download,Search} from '@element-plus/icons-vue'
+import {ArrowRight,Calendar,CircleCheck,Download,Histogram,Search,Timer} from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import {dateTimeParts,resultStatusLabels,scoreMonth} from './examUi'
+import '@/styles/exam-center.css'
 
 const auth=useAuthStore(),canManage=computed(()=>auth.can('exam:manage'))
 const plans=ref<any[]>([]),results=ref<any[]>([]),planResults=ref<any[]>([])
@@ -47,6 +48,12 @@ async function publishResult(row:any){
   ElMessage.success('成绩已发布')
   await load()
 }
+async function publishAllResults(){
+  if(!selectedPlan.value)return
+  const result=(await api.post<any,Envelope<number>>(`/exams/results/manage/plans/${selectedPlan.value.id}/publish`)).data
+  ElMessage.success(result?`已批量发布 ${result} 份成绩`:'当前没有待发布的已完成成绩')
+  await openPlan(selectedPlan.value);await load()
+}
 async function exportResults(planId?:number){
   exporting.value=true
   try{
@@ -70,25 +77,25 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
-    <div class="page-head">
+  <div class="exam-module-page">
+    <header class="exam-page-head">
       <div>
-        <h2>{{canManage?'成绩管理':'我的成绩'}}</h2>
-        <p class="muted">{{canManage?'按考试查看完成情况，点击考试可进入员工成绩单':'查看已发布的考试成绩和缺考记录'}}</p>
+        <span class="eyebrow">考试中心 · {{canManage?'成绩管理':'我的成绩'}}</span>
+        <h1>{{canManage?'成绩管理':'我的成绩'}}</h1>
+        <p>{{canManage?'集中查看参考、完成、异常与发布情况，按考试进入员工成绩单。':'查看已发布的考试成绩和缺考记录。'}}</p>
       </div>
-      <el-button v-if="canManage" :icon="Download" :loading="exporting" @click="exportResults()">导出已发布成绩</el-button>
-    </div>
+      <div class="exam-head-actions"><el-button v-if="canManage" :icon="Download" :loading="exporting" @click="exportResults()">导出已发布成绩</el-button></div>
+    </header>
 
     <template v-if="canManage">
-      <div class="overview-grid">
-        <div class="overview-item"><span>考试总数</span><strong>{{overview.total}}</strong></div>
-        <div class="overview-item"><span>待开始</span><strong>{{overview.upcoming}}</strong></div>
-        <div class="overview-item success"><span>进行中</span><strong>{{overview.open}}</strong></div>
-        <div class="overview-item"><span>已结束</span><strong>{{overview.ended}}</strong></div>
-      </div>
-      <el-card>
-        <template #header>
-          <div class="card-head">
+      <section class="exam-summary-grid">
+        <article class="exam-summary-card blue"><span class="exam-summary-icon"><el-icon><Histogram/></el-icon></span><div><small>考试总数</small><strong>{{overview.total}}</strong><span>已发布考试</span></div></article>
+        <article class="exam-summary-card violet"><span class="exam-summary-icon"><el-icon><Calendar/></el-icon></span><div><small>待开始</small><strong>{{overview.upcoming}}</strong><span>等待开放</span></div></article>
+        <article class="exam-summary-card green"><span class="exam-summary-icon"><el-icon><Timer/></el-icon></span><div><small>进行中</small><strong>{{overview.open}}</strong><span>实时参考</span></div></article>
+        <article class="exam-summary-card amber"><span class="exam-summary-icon"><el-icon><CircleCheck/></el-icon></span><div><small>已结束</small><strong>{{overview.ended}}</strong><span>可归档导出</span></div></article>
+      </section>
+      <section class="exam-workspace">
+          <div class="exam-workspace-head">
             <div><span class="card-title">考试完成情况</span><span class="header-tip">点击任意一行查看该考试的员工成绩单</span></div>
             <div class="filters">
               <el-input v-model="keyword" clearable placeholder="搜索考试或试卷" :prefix-icon="Search"/>
@@ -97,7 +104,6 @@ onMounted(load)
               </el-select>
             </div>
           </div>
-        </template>
         <el-table :data="filteredPlans" v-loading="false" empty-text="暂无考试计划" class="summary-table" @row-click="openPlan">
           <el-table-column prop="name" label="考试名称" min-width="145" show-overflow-tooltip>
             <template #default="s"><div class="exam-name">{{s.row.name}}</div><div class="sub-text">{{s.row.paper_name}}</div></template>
@@ -115,7 +121,7 @@ onMounted(load)
           <el-table-column prop="absent_count" label="缺考" width="64" align="center"/>
           <el-table-column label="" width="42"><template #default><el-icon class="row-arrow"><ArrowRight/></el-icon></template></el-table-column>
         </el-table>
-      </el-card>
+      </section>
     </template>
 
     <el-card v-else>
@@ -131,7 +137,7 @@ onMounted(load)
       <template #header>
         <div class="drawer-title">
           <div><h3>{{selectedPlan?.name}}</h3><p>{{selectedPlan?.paper_name}} · {{dateTimeParts(selectedPlan?.starts_at).date}} {{dateTimeParts(selectedPlan?.starts_at).time}} 至 {{dateTimeParts(selectedPlan?.ends_at).date}} {{dateTimeParts(selectedPlan?.ends_at).time}}</p></div>
-          <el-button :icon="Download" :loading="exporting" @click="exportResults(selectedPlan?.id)">导出本场成绩</el-button>
+          <div class="exam-head-actions"><el-button type="primary" :disabled="!detailOverview.completed" @click="publishAllResults">批量发布成绩</el-button><el-button :icon="Download" :loading="exporting" @click="exportResults(selectedPlan?.id)">导出本场成绩</el-button></div>
         </div>
       </template>
       <div class="detail-overview">
