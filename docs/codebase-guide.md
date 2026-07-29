@@ -86,24 +86,27 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 
 | 文件 | 职责 |
 | --- | --- |
-| `master/MasterDataController.java` | 培养批次、服务站和导师列表的查询及基础数据创建。 |
-| `employee/EmployeeController.java` | 员工台账分页、详情、新建、修改与批量绑定导师；创建时同步创建员工账号。 |
+| `master/MasterDataController.java` | 培养批次、所属板块、服务站点和导师列表的查询及基础数据创建。 |
+| `employee/EmployeeController.java` | 人员详情、新建、修改与批量设置技术/技能导师；创建时同步创建员工账号，直接调站时同步写入历史。 |
 | `employee/EmployeeProfileController.java` | 员工本人查看与维护个人资料；限制修改工作分配类字段。 |
 | `employee/EmployeeDirectoryController.java` | 面向目录场景的多条件人员查询和 Excel 导出，并应用数据范围过滤。 |
 | `employee/EmployeeDirectoryExportRow.java` | 人员目录 Excel 导出的列定义与表头映射。 |
 | `importer/ImportController.java` | 员工与签到 Excel 模板下载、整批校验和导入；任一行错误时不写入。 |
 | `importer/EmployeeImportRow.java` | 员工导入 Excel 行模型和列映射。 |
 | `importer/AttendanceImportRow.java` | 签到导入 Excel 行模型和列映射。 |
-| `course/CourseController.java` | 课程、场次、员工安排、签到码自助签到、人工补录和签到记录查询。 |
+| `station/StationChangeRequestController.java` | 员工服务站变更申请、本人记录、审批统计与多条件查询、管理员安全审批，以及按人员数据范围查询已生效历史。 |
+| `movement/LocationReportController.java` | 员工自主位置报备、本人轨迹，以及导师和管理角色按人员数据范围查询人员流动、当前位置和统计。 |
+| `course/CourseController.java` | 课程生命周期、课件权限与文件流、场次和人员安排、签到码自助签到、人工补录、统计与多条件查询。 |
 
 ### 3.4 任务、文件与培养计划
 
 | 文件 | 职责 |
 | --- | --- |
-| `task/TaskController.java` | 任务 CRUD、手动/培养计划下达、分配进度、员工带附件提交、审核与提交历史；负责目标人员和文件类型/数量校验。 |
+| `task/TaskController.java` | 任务 CRUD、手动/培养计划下发、下发预览、任务附件、分配进度、员工带附件提交、审核与提交历史；负责访问范围与目标人员校验。 |
+| `task/TaskAttachmentService.java` | 任务资料上传、列表、删除、共享存储引用，以及计划任务附件在下发时生成独立快照。 |
 | `task/TaskStatusService.java` | 在启动、任务变动后计算最近截止时间并安排定时任务；把逾期未提交分配固化为 `OVERDUE` 和 0 分。 |
 | `task/TaskSchedulingConfiguration.java` | 提供任务状态服务使用的 Spring `TaskScheduler`。 |
-| `training/TrainingPlanController.java` | 培养计划及其任务模板的创建、编辑、启停、排序、删除与查询。 |
+| `training/TrainingPlanController.java` | 培养计划统计、草稿创建、编辑、复制、安全启停/删除，以及计划任务编排、使用情况与完整排序校验。 |
 | `storage/FileStorageService.java` | 文件对象存储抽象：保存、读取、删除及返回存储键/大小/内容类型。 |
 | `storage/LocalFileStorageService.java` | `STORAGE_TYPE=local` 时按日期和 UUID 写入本地目录，并防止路径穿越。 |
 | `storage/OssFileStorageService.java` | `STORAGE_TYPE=oss` 时通过阿里云 OSS 保存、读取和删除文件。 |
@@ -118,10 +121,11 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `evaluation/EvaluationService.java` | 评价核心计算：匹配适用方案、聚合考试/任务/人工评分、处理覆盖与加扣分、写入月度和季度汇总、锁定规则。 |
 | `evaluation/EvaluationRules.java` | 纯规则函数：校验月度评分项权重、季度权重，并计算限定在 0–100 的最终分数。 |
 | `evaluation/EvaluationScheduler.java` | 每月 1 日 02:00 自动生成上月月评；每季度首月 03:00 自动生成上季度汇总。 |
-| `exam/ExamController.java` | 题库导入与维护、手动/随机组卷、考试计划与分配、考生作答、防作弊事件、阅卷、结果发布与查询。 |
-| `exam/ExamScoringService.java` | 自动阅卷服务；客观题比对答案，多选题按集合比较；主观题进入待阅卷；同时处理超时交卷。 |
+| `exam/ExamController.java` | 多题库与题目维护、题库导入、手动/随机/一人一卷组卷、试卷历史保护、考试计划与分配、考生作答、防作弊事件、阅卷、单份/整场结果发布与 Excel 导出。 |
+| `exam/ExamScoringService.java` | 自动阅卷服务；统一读取静态试卷题目或动态答卷题目，客观题比对答案，主观题进入待阅卷，并处理超时交卷。 |
 | `exam/ExamScheduler.java` | 每分钟扫描超时进行中的答卷，调用评分服务自动提交。 |
 | `exam/QuestionImportRow.java` | 题库 Excel 导入行模型和字段映射。 |
+| `exam/ResultExportRow.java` | 已发布考试成绩 Excel 导出的列定义。 |
 
 ## 4. 后端资源、构建与数据库
 
@@ -129,7 +133,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | --- | --- |
 | `backend/pom.xml` | Maven 构建、Java 17、Spring Boot、MyBatis-Plus、Flyway、JWT、EasyExcel、OSS 等依赖；构建时并入前端静态资源。 |
 | `backend/src/main/resources/application.yml` | 数据库、上传大小、时区、JWT、初始管理员、演示账号、存储策略和 CORS 的环境变量默认值。 |
-| `backend/src/main/resources/templates/question-bank-template.xlsx` | 题库导入模板，考试接口直接以文件流下载。 |
+| `backend/src/main/resources/templates/question-bank-template.xlsx` | 旧版题库模板样例；当前下载接口根据 `QuestionImportRow` 动态生成包含专业标签列的新模板。 |
 
 ### Flyway 迁移（按版本只增不改）
 
@@ -143,6 +147,19 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `db/migration/V6__training_plan_templates.sql` | 新增培养计划、任务模板及计划任务关联，并让任务可关联模板来源。 |
 | `db/migration/V7__direct_training_plan_tasks.sql` | 调整为计划任务直接作为下达来源，迁移关联、索引和唯一约束。 |
 | `db/migration/V8__use_plan_task_title_for_dispatched_tasks.sql` | 迁移既有下达任务标题，使其使用计划任务标题。 |
+| `db/migration/V9__deduplicate_exam_proctor_events.sql` | 为防作弊事件增加客户端事件键和唯一约束，避免重复上报累计。 |
+| `db/migration/V10__exam_plan_target_scopes.sql` | 增加考试计划批次、板块多选目标范围。 |
+| `db/migration/V11__add_employee_extra_fields.sql` | 增加政治面貌、兴趣爱好、特长和身份证号码字段。 |
+| `db/migration/V12__create_station_change_request.sql` | 增加服务站变更申请、审批状态、审核人与查询索引。 |
+| `db/migration/V13__dynamic_exam_labels.sql` | 增加题目标签、动态试卷规则和每次答卷实际抽题表。 |
+| `db/migration/V21__exam_question_banks.sql` | 增加独立题库实体，将历史题目归入默认题库，并为随机组卷规则增加题库范围。 |
+| `db/migration/V14__station_change_reviewed_at.sql` | 增加服务站变更审批生效时间并为人员历史查询建立索引。 |
+| `db/migration/V15__employee_organization_and_dual_mentors.sql` | 增加所属板块主数据、员工板块和技能导师关联，并允许管理员直接取消站点分配时留存历史。 |
+| `db/migration/V16__move_vehicle_categories_to_business_units.sql` | 将车型分类口径迁移为所属板块主数据。 |
+| `db/migration/V17__add_user_avatar.sql` | 增加账号头像存储键和公开随机令牌字段。 |
+| `db/migration/V18__create_employee_location_report.sql` | 增加员工位置报备、时间轨迹及常用查询索引。 |
+| `db/migration/V19__course_materials.sql` | 增加课程课件元数据及课程、上传人关联。 |
+| `db/migration/V20__task_attachments.sql` | 增加计划任务和已下发任务的附件元数据、快照来源及访问索引。 |
 
 ## 5. 前端结构
 
@@ -154,7 +171,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | --- | --- |
 | `main.ts` | 创建 Vue 应用，注册 Pinia、Vue Router、Element Plus、全局样式并挂载。 |
 | `App.vue` | 应用根组件，仅渲染路由出口。 |
-| `router.ts` | 声明登录页、应用布局和所有业务路由；路由守卫处理登录、强制改密、员工台账跳转和权限拦截。 |
+| `router.ts` | 声明登录页、应用布局和所有业务路由；路由守卫处理登录、强制改密、员工访问人员信息页时的跳转和权限拦截。旧 `/employees` 地址重定向到统一人员信息页。 |
 | `api.ts` | Axios 实例、JWT 与请求 ID 注入、统一错误提示、401 清理本地登录态。 |
 | `env.d.ts` | Vite/Vue 的 TypeScript 环境类型声明。 |
 | `styles.css` | 全局色彩、页面间距、卡片、表单、响应式等基础样式。 |
@@ -167,24 +184,43 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 
 | 文件 | 职责 |
 | --- | --- |
-| `views/LoginView.vue` | 登录表单、前端校验、错误提示和登录后路由跳转。 |
+| `views/LoginView.vue` | 与业务后台统一设计语言的响应式登录门户，包含品牌能力说明、账号记忆、大写锁定提示、前端校验、错误反馈和登录后路由跳转。 |
 | `views/DashboardView.vue` | 请求概览统计并用 ECharts 展示培养进度和成绩分布。 |
-| `views/EmployeesView.vue` | 员工台账的筛选、分页、新建/编辑、导师绑定与基础资料维护。 |
-| `views/EmployeeDirectoryView.vue` | 人员目录筛选、分页和 Excel 导出入口。 |
-| `views/ProfileView.vue` | 当前用户改密；员工还可查看和编辑本人允许维护的资料。 |
-| `views/CoursesView.vue` | 课程、场次、报名、签到码、自助签到、人工签到和签到记录的操作界面。 |
-| `views/TrainingPlansView.vue` | 培养计划与计划任务的创建、编辑、启停、排序和删除界面。 |
-| `views/TasksView.vue` | 任务下达、个人任务、提交/重提、附件下载与安全预览、审核、进度明细和筛选。 |
+| `views/EmployeeDirectoryView.vue` | “人员管理”模块下的人员台账工作台：管理概览、状态页签、响应式筛选、单行人员列表、证件照与完整档案、新增编辑、双导师批量设置、基础数据、导入导出和服务站变更轨迹。 |
+| `views/LocationReportsView.vue` | 按角色呈现员工本人位置报备或管理侧人员流动看板，支持当前位置、筛选、统计和单人历史抽屉。 |
+| `views/ProfileView.vue` | 当前用户上传头像、修改密码；员工按“证件照”语义维护照片，并可维护本人资料、提交调站申请及查看审批记录。 |
+| `views/StationChangeReviewView.vue` | 管理端调站审批工作台：待办统计、平均等待、组合筛选、人员与调站背景、详情历史，以及带业务提示的通过/拒绝决策。 |
+| `views/CourseCatalogView.vue` | 管理端课程库：课程统计、搜索、创建编辑、启停、安全删除及课件资料入口。 |
+| `views/CourseSessionsView.vue` | 管理端场次安排：培训时间、地点、学时、签到窗口、签到码与参训人员维护。 |
+| `views/CourseAttendanceView.vue` | 按角色展示管理端签到工作台或员工签到记录，支持统计、筛选、补录和导入。 |
+| `views/MyCoursesView.vue` | 员工课程日程、签到入口和本人已安排课程的课件访问。 |
+| `components/CourseMaterialsPanel.vue` | 课程课件上传、列表、权限下载，以及 PDF、图片、视频、文本和 DOCX 安全预览。 |
+| `utils/course.ts` | 课程和场次类型、场次状态、签到来源、日期与文件大小显示规则。 |
+| `styles/courses.css` | 课程模块共享的桌面与移动端页面规范。 |
+| `views/TrainingPlanManagementView.vue` | 培养计划库工作台：统计、搜索、状态筛选、草稿创建、编辑、复制、启停和安全删除。 |
+| `views/TrainingPlanTasksView.vue` | 计划任务编排工作台：计划切换、任务新增编辑、附件维护、拖动/按钮排序、下发使用状态和启用校验。 |
+| `styles/training-plans.css` | 计划管理和任务编排共享的响应式页面布局与视觉规范。 |
+| `utils/trainingPlan.ts` | 培养计划类型、启用判断、业务状态和日期显示规则。 |
+| `components/TaskAttachmentsPanel.vue` | 任务附件文件名展示、上传、删除、下载，以及 PDF、图片、文本和 DOCX 安全预览。 |
+| `views/TasksView.vue` | 管理侧任务下发和任务跟踪、员工侧我的任务、任务附件、提交/重提、审核、进度明细和筛选。 |
 | `views/EvaluationView.vue` | 评分方案、评分项录入、分数覆盖、加扣分以及月度/季度汇总生成、发布、重开。 |
-| `views/ExamsView.vue` | 题库 Excel 导入、试卷与考试计划、员工答题、全屏/失焦事件记录、人工阅卷和结果发布。 |
+| `views/exams/ExamQuestionBankView.vue` | 多题库目录、题目新增编辑、标签、启停、安全删除和指定题库 Excel 导入。 |
+| `views/exams/ExamPapersView.vue` | 分步抽屉式手动/随机/一人一卷组卷、题库范围、试卷详情和安全删除。 |
+| `views/exams/ExamPlansView.vue` | 考试时间、试卷、批次/板块范围、参考员工选择、草稿删除及发布。 |
+| `views/exams/MyExamsView.vue` | 员工考试列表、作答自动保存、计时和防作弊事件上报。 |
+| `views/exams/ExamResultsView.vue` | 考试完成情况、员工成绩明细、单份/整场成绩发布和 Excel 导出。 |
+| `styles/exam-center.css` | 题库、试卷、考试计划和成绩管理共享的页面头、概览卡、工作区与响应式视觉规范。 |
+| `views/exams/examUi.ts` | 考试状态、题型和日期显示的共享前端工具。 |
 | `views/UsersView.vue` | 账号列表、创建、启停、重置密码、改角色/账号名/显示名及站点负责人范围配置。 |
+| `utils/avatar.ts` | 头像公开地址与姓名末字默认头像的统一前端规则。 |
+| `utils/role.ts` | 英文角色代码到中文界面文案的统一映射；权限判断仍使用原始代码。 |
 
 ### 前端构建配置
 
 | 文件 | 职责 |
 | --- | --- |
 | `frontend/package.json` | 前端依赖和 `dev`、`build`、`test` 脚本。 |
-| `frontend/pnpm-lock.yaml` | pnpm 精确依赖锁定文件。 |
+| `frontend/package-lock.json` | npm 精确依赖锁定文件；新协作者使用 `npm ci` 安装一致版本。 |
 | `frontend/pnpm-workspace.yaml` | pnpm 工作区配置。 |
 | `frontend/index.html` | Vite HTML 入口及应用挂载节点。 |
 | `frontend/tsconfig.json` | TypeScript 根项目引用配置。 |
@@ -200,14 +236,17 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | --- | --- |
 | `employee/EmployeeDirectoryControllerTest.java` | 人员目录筛选、数据范围或导出相关行为。 |
 | `employee/EmployeeProfileControllerTest.java` | 员工个人资料读取、编辑边界与权限限制。 |
+| `movement/LocationReportControllerTest.java` | 首次位置起点、轨迹时间顺序、员工管理入口隔离和导师数据范围。 |
 | `evaluation/EvaluationRulesTest.java` | 评价权重校验和最终得分计算。 |
 | `exam/ExamScoringServiceTest.java` | 客观题/多选题答案比对和阅卷逻辑。 |
 | `security/JwtServiceTest.java` | JWT 创建、解析和失效相关行为。 |
 | `security/PermissionServiceTest.java` | 角色权限集和数据范围过滤规则。 |
 | `security/SecurityUtilsTest.java` | 当前登录用户读取工具。 |
+| `station/StationChangeRequestControllerTest.java` | 调站历史、拒绝原因、过期申请并发保护和审批统计。 |
 | `task/TaskControllerTest.java` | 任务接口的主要权限与业务分支。 |
 | `task/TaskStatusServiceTest.java` | 逾期任务刷新与截止时间调度计算。 |
 | `training/TrainingPlanControllerTest.java` | 培养计划和计划任务的管理接口。 |
+| `user/AvatarControllerTest.java` | 头像图片真实性校验、替换和旧文件清理。 |
 | `user/UserControllerTest.java` | 账号管理、角色和站点范围的规则。 |
 
 ## 7. Windows 启动器与部署辅助文件
@@ -228,4 +267,36 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 - 已合并的 Flyway 迁移不能修改；数据库变更新增 `Vx__description.sql`。
 - 已发布的月度评价会锁定；修改评价计算或评分项时先检查 `EvaluationService` 与相关迁移。
 - 文件下载必须继续经任务所属员工范围校验；本地文件实现已专门防范路径穿越。
+- 头像和员工证件照是同一份账号媒体资产；公开读取只使用随机 `avatar_token`，不得改为可枚举用户 ID。
+- 位置报备记录临时实际地点，不更新 `employee.station_id`；正式归属站点变化继续走 `station_change_request`。位置历史按发生时间连续追加，不提供管理侧改写。
 - 发布时，前端必须先构建，后端 Maven 才会将 `frontend/dist` 一并打入 JAR。
+
+## 9. 近期结构调整与维护决策
+
+### 9.1 人员功能为何统一
+
+原 `EmployeesView.vue` 负责新增、编辑和导入，`EmployeeDirectoryView.vue` 负责查询与档案，两者围绕同一员工实体形成重复入口。当前只保留 `EmployeeDirectoryView.vue` 作为统一人员台账工作台，并承担查询、完整档案、新增编辑、基础数据、批量导师设置、导入导出和服务站历史；导航上与“人员流动”“调站审批”共同归属“人员管理”一级模块。
+
+后端没有删除 `EmployeeController`。`/api/v1/employees` 除了承载人员写操作，还被课程、任务和评价页面用于人员选择；`/api/v1/employee-directory` 则是为统一工作台和 Excel 导出准备的扩展只读模型。维护时应保持两类接口的数据范围规则一致，但不要为了“页面去重”强行合并成一个超大接口。
+
+服务站历史以 `station_change_request` 为唯一轨迹来源。员工申请走待审、通过或拒绝流程；管理员在人员编辑中直接调整站点时写入一条已生效记录。新增任何站点修改入口时，也必须同步维护这条历史链。
+
+### 9.2 考试页面为何拆分
+
+原 `ExamsView.vue` 同时包含题库、组卷、计划、作答、阅卷和成绩，权限边界与页面状态互相耦合。当前按业务职责拆为 `views/exams/` 下的五个页面，共用 `examUi.ts` 的显示规则，后端仍由 `ExamController` 统一维护事务和考试状态。
+
+动态“一人一卷”不能只在开始考试时临时返回题目。实际抽取结果必须写入 `exam_attempt_question`，后续保存答案、恢复答卷、自动评分和人工阅卷都读取同一份题目集合，否则刷新页面或重新评分时可能出现题目漂移。
+
+### 9.3 协作者分支如何整合
+
+- `dev-wanben` 提供员工扩展资料、导入和服务站变更能力。整合时重新编排为 V11-V12，并补齐现有人员字段、数据范围和审批并发校验。
+- `dzw_exam_TuoZhan` 提供题目标签、动态组卷和成绩导出。整合时适配拆分后的考试页面，将迁移编排为 V13，并补齐动态答卷持久化和评分测试。
+- 这两个原始分支已经进入当前集成结果。它们的原提交不一定出现在最终分支祖先链中，因为采用了择取、冲突处理和后续修正；不要再次直接 merge 原分支。
+
+### 9.4 修改后的同步清单
+
+- Controller 路径、权限、入参或返回字段变化：同步 `docs/api-contract.md`。
+- 新增、删除或拆分模块、页面、迁移和测试文件：同步本文件。
+- 用户可见功能、启动方式、测试结果、发布要求或协作基线变化：同步根目录 `README.md`。
+- 权限点或角色范围变化：同步 `docs/permissions-matrix.md`。
+- 需求边界或任务状态变化：同步 `docs/requirements.md` 和 `docs/task-board.md`。

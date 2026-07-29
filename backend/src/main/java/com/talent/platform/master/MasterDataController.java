@@ -12,5 +12,7 @@ public class MasterDataController {
   @PostMapping("/batches") public ApiResponse<Long> addBatch(@Valid @RequestBody NameRequest q){permissions.require(Permissions.MASTER_MANAGE);db.update("insert into talent_batch(name) values(?)",q.name());return ApiResponse.ok(db.queryForObject("select last_insert_id()",Long.class));}
   @GetMapping("/stations") public ApiResponse<List<Map<String,Object>>> stations(){return ApiResponse.ok(db.queryForList("select id,name,enabled from service_station order by name"));}
   @PostMapping("/stations") public ApiResponse<Long> addStation(@Valid @RequestBody NameRequest q){permissions.require(Permissions.MASTER_MANAGE);db.update("insert into service_station(name) values(?)",q.name());return ApiResponse.ok(db.queryForObject("select last_insert_id()",Long.class));}
+  @GetMapping("/business-units") public ApiResponse<List<Map<String,Object>>> businessUnits(){return ApiResponse.ok(db.queryForList("select id,name,enabled from business_unit order by name"));}
+  @PostMapping("/business-units") public ApiResponse<Long> addBusinessUnit(@Valid @RequestBody NameRequest q){permissions.require(Permissions.MASTER_MANAGE);db.update("insert into business_unit(name) values(?)",q.name());return ApiResponse.ok(db.queryForObject("select last_insert_id()",Long.class));}
   @GetMapping("/mentors") public ApiResponse<List<Map<String,Object>>> mentors(){permissions.require(Permissions.EMPLOYEE_READ);return ApiResponse.ok(db.queryForList("select id,display_name from sys_user where role='MENTOR' and enabled=true order by display_name"));}
 }

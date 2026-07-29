@@ -1,6 +1,6 @@
 # 新员工“一人一画像”培养管理平台
 
-面向新员工、导师、站点负责人、培训管理员、管理员和超级管理员的培养管理平台。当前版本是可本地运行和继续迭代的 MVP，核心能力包括人员台账、课程签到、闯关任务、综合评价、考试题库、权限隔离、审计日志和个人培养进度展示。
+面向新员工、导师、站点负责人、培训管理员、管理员和超级管理员的培养管理平台。当前版本是可本地运行和继续迭代的 MVP，核心能力包括人员信息管理、位置报备与人员流动、课程签到、培养计划、任务下发与任务跟踪、综合评价、考试题库、权限隔离、审计日志和个人培养进度展示。
 
 仓库地址：<https://github.com/Heart1ess1/talent-development-platform>
 
@@ -51,11 +51,20 @@
 
 - 用户和角色：支持 `EMPLOYEE`、`MENTOR`、`STATION_MANAGER`、`TRAINING_ADMIN`、`ADMIN`、`SUPER_ADMIN`。
 - 登录与安全：JWT 登录态、首次登录强制改密、账号停用/角色调整/密码重置后旧令牌失效。
-- 人员台账：员工资料维护、Excel 导入、人员目录查询。
-- 课程与任务：课程签到、闯关任务、培养进度展示。
+- 人员管理：作为一级业务模块，下设“人员台账”“人员流动”和“调站审批”；台账统一完成人员查询、新增编辑、板块与双导师维护和 Excel 导入导出，调站审批按原有权限独立控制。
+- 人员流动：员工自主报备临时位置、变动时间和原因；导师、站点负责人及管理角色按人员范围查看当前位置、统计与连续轨迹。
+- 课程与任务：课程与课件、场次签到、培养计划、带附件任务下发、任务跟踪和培养进度展示。
 - 综合评价：批次评分方案、三方月评、加扣分、月度和季度锁定快照。
-- 考试管理：题库、试卷、考试计划、自动保存、客观题自动阅卷、主观阅卷、补考次数和防作弊事件。
+- 考试管理：多题库分类、题目专业标签、手动/随机/一人一卷组卷、考试计划、自动保存、自动阅卷、单份与整场成绩发布、成绩导出、补考次数和防作弊事件。
 - 审计和权限：按角色和数据范围控制可访问内容，关键操作写入审计记录。
+
+### 近期结构调整与维护原因
+
+- “人员管理”作为一级导航分组，依次下设“人员台账”“人员流动”和“调站审批”。人员台账承接新增、编辑、筛选、导入导出、双导师设置和完整档案；旧 `/employees` 浏览器地址仅用于兼容跳转。
+- `/api/v1/employees` 后端接口仍然保留。课程、任务、评价等模块需要复用人员选择数据，因此“移除重复页面”不等于删除共享业务 API。
+- 考试中心按“题库管理—试卷管理—考试计划—成绩管理”的业务顺序组织；题目按独立题库归档，试卷使用抽屉式组卷工作流，考试计划与成绩管理负责发布、执行和结果闭环。
+- 服务站变更统一写入 `station_change_request`。员工申请经审批生效，管理员直接编辑人员站点时也写入已生效历史，避免人员当前站点与历史轨迹不一致。
+- `dev-wanben` 的人员资料与调站功能、`dzw_exam_TuoZhan` 的动态考试功能已经过迁移编号调整和现有架构适配。后续不要再次直接合并这两个原始分支，应以当前整合分支或其合并后的 `main` 为新开发基线。
 
 ## 项目文档
 
@@ -78,6 +87,7 @@ GitHub 仓库首页只会自动显示根目录的 `README.md`。`docs/` 下的 M
 - JDK 17（项目编译目标；更高版本 JDK 通常也可运行 Maven）
 - Maven 3.9+
 - Node.js 24 LTS
+- Corepack / pnpm（安装 Node.js 后执行 `corepack enable`）
 - Docker Desktop / Docker Compose（用于本地 MySQL）
 
 发布包运行模式只要求安装并启动 Docker Desktop。发布包会携带运行所需的 Java 运行时、后端 JAR、前端静态文件和 Windows 启动器，不要求系统预装 Java、Node.js、Maven 或 .NET。
@@ -101,8 +111,8 @@ mvn spring-boot:run
 
 ```powershell
 cd frontend
-npm install
-npm run dev
+corepack pnpm install --frozen-lockfile
+corepack pnpm run dev
 ```
 
 访问：
@@ -127,7 +137,7 @@ http://localhost:5173
 
 1. 确认 Docker Desktop 已启动，再执行 `docker compose up -d` 启动 MySQL。
 2. 在 `backend/` 目录执行 `mvn spring-boot:run`，等待 Flyway 迁移完成并看到 Spring Boot 启动成功。
-3. 新开终端进入 `frontend/`，首次运行执行 `npm install`，之后执行 `npm run dev`。
+3. 新开终端进入 `frontend/`，首次运行执行 `corepack pnpm install --frozen-lockfile`，之后执行 `corepack pnpm run dev`。
 4. 打开 `http://localhost:5173`，使用上方测试账号登录。
 5. 本地演示或联调前确认未使用生产密码、真实用户数据、OSS 密钥或生产 `JWT_SECRET`。
 
@@ -139,14 +149,20 @@ http://localhost:5173
 
 1. 安装并启动 Docker Desktop。
 2. 双击 `人才培养平台启动器.exe`。
-3. 点击“启动平台”。
+3. 点击“启动发布版”。
 
-启动器提供两种启动方式：
+启动器将客户运行、源码开发和发布构建分为三个独立流程：
 
-- `启动平台`：直接运行当前发布版本。
-- `更新并启动`：检测到同一项目中的 `frontend`、`backend` 源码时，通过 Docker 自动构建前后端、替换发布 JAR，然后启动最新版本。
+- `启动发布版`：运行发布包中的 JAR，访问 `http://localhost:8080`。纯发布包环境只显示这条有效运行路径。
+- `启动开发模式`：仅在检测到 `frontend/` 和 `backend/` 源码时可用。启动器直接运行 `mvn spring-boot:run` 和 Vite 开发服务器，访问 `http://localhost:5173`，不生成 JAR；前端源码支持热更新。
+- `重启开发模式`：开发模式运行后，同一按钮用于快速重启 Maven 与 Vite。Java 源码修改后使用该按钮即可重新编译并运行，不需要执行发布打包。
+- `构建发布版`：依次同步 pnpm 依赖、构建前端并执行 `mvn clean package -DskipTests`。该操作只生成或更新发布 JAR，不会自动启动应用。
 
-关闭启动器会停止应用进程；数据库默认继续运行，可通过“停止数据库”按钮关闭。
+开发模式要求本机安装 JDK、Maven、Node.js 与 Corepack/pnpm。可通过环境变量 `TALENT_PLATFORM_SOURCE_ROOT` 显式指定源码根目录，通过 `TALENT_PLATFORM_HOME` 指定发布包根目录。
+
+关闭启动器会终止由启动器创建的后端和前端进程；数据库默认继续运行，可通过“停止数据库”按钮关闭。若启动器发现端口 `8080` 上已有健康实例，只会打开该实例，不会接管或终止外部进程。
+
+数据库启动前会等待 MySQL 健康检查完成。如果发布包中存在 `images/mysql-8.4.tar` 且本机没有 `mysql:8.4` 镜像，启动器会优先执行离线导入；否则 Docker 会通过已配置的镜像源下载。
 
 开发者重新生成发布包时，依次构建前端、打包后端，再发布 `launcher/TalentPlatformLauncher.csproj`，并按当前发布目录结构放置 JAR、启动器和 Java 运行时。发布包不要提交到 Git，应压缩后上传到 GitHub Releases。
 
@@ -161,7 +177,7 @@ http://localhost:5173
 | `SUPER_ADMIN_USERNAME` / `SUPER_ADMIN_PASSWORD` | 开发账号 | 首次启动创建超级管理员 |
 | `DEMO_USERS_ENABLED` | `true` | 是否启用测试账号引导；真实部署应设为 `false` |
 | `STORAGE_TYPE` | `local` | 设置为 `oss` 切换阿里云 OSS |
-| `LOCAL_STORAGE_ROOT` | `../data/uploads` | 本地私有文件目录 |
+| `LOCAL_STORAGE_ROOT` | `../data/uploads` | 本地私有文件目录；启动器会让源码模式与发布模式共用同一绝对目录，避免切换启动方式后附件不可访问 |
 | `OSS_ENDPOINT` / `OSS_BUCKET` | 空 | OSS 基础配置 |
 | `OSS_ACCESS_KEY` / `OSS_SECRET_KEY` | 空 | OSS 凭证，禁止提交到 Git |
 
@@ -192,11 +208,14 @@ npm run build
 
 | 检查项 | 命令 | 结果 |
 | --- | --- | --- |
-| 后端测试 | `cd backend && mvn test` | 通过，36 个测试全部成功。 |
+| 后端测试 | `cd backend && mvn test` | 通过，44 个测试全部成功。 |
 | 前端测试 | `cd frontend && npm run test` | 通过，3 个测试全部成功。 |
 | 前端生产构建 | `cd frontend && npm run build` | 通过，产物生成到 `frontend/dist/`。 |
+| 前端依赖审计 | `cd frontend && npm audit` | 通过，0 个已知漏洞。 |
+| Windows 启动器 | `dotnet build launcher/TalentPlatformLauncher.csproj -c Release` | 通过，0 个警告、0 个错误。 |
+| 数据库迁移 | 启动后检查 `flyway_schema_history` | V1-V15 全部执行成功。 |
 
-本次收口已同步 README、API 合同、权限矩阵和任务表；P0 目标任务均为 `Done`。P2/P3 后续项保留在 `docs/task-board.md` 中，作为下一阶段明确剩余工作。
+本次收口已同步 README、API 合同、代码库导览、权限矩阵和任务表；P0 目标任务均为 `Done`。P2/P3 后续项保留在 `docs/task-board.md` 中，作为下一阶段明确剩余工作。
 
 ## 数据库和迁移
 
@@ -222,6 +241,13 @@ backend/src/main/resources/db/migration/
 4. 推送分支到 GitHub。
 5. 创建 Pull Request。
 6. 代码检查通过后再合并回 `main`。
+
+整合多个协作者分支时，不要仅依据“文件能否自动合并”判断完成：
+
+- 先确认各分支的共同基线、迁移版本和修改模块。
+- 对与本地架构冲突的提交使用择取并适配，提交说明中记录来源分支和原提交。
+- 整合后比较最终 Git tree，运行完整测试，再推送新的集成分支。
+- 已经适配进入集成分支的原始分支不要重复 merge。
 
 完整操作说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 

@@ -1,0 +1,33 @@
+.exam-module-page{width:100%;min-height:100%;padding:22px 22px 42px;background:#f5f7fb;color:#172033;box-sizing:border-box}
+.exam-page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:16px}
+.exam-page-head .eyebrow{display:block;margin-bottom:5px;color:#356bd8;font-size:11px;font-weight:700;letter-spacing:.1em}
+.exam-page-head h1{margin:0;font-size:24px;line-height:1.3;letter-spacing:-.02em}.exam-page-head p{max-width:760px;margin:6px 0 0;color:#728095;font-size:13px;line-height:1.6}
+.exam-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.exam-head-actions .el-button{margin:0}
+.exam-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.exam-summary-card{display:flex;align-items:center;gap:12px;min-height:88px;padding:15px 16px;border:1px solid #e5e9f0;border-radius:8px;background:#fff;box-sizing:border-box}
+.exam-summary-icon{display:grid;flex:0 0 40px;height:40px;place-items:center;border-radius:9px;font-size:20px}
+.exam-summary-card>div{display:grid;min-width:0;grid-template-columns:auto 1fr;align-items:baseline;column-gap:7px}.exam-summary-card small{grid-column:1/-1;color:#7e899b;font-size:12px}
+.exam-summary-card strong{font-size:23px;line-height:1.25}.exam-summary-card div>span{overflow:hidden;color:#99a2b1;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.exam-summary-card.blue .exam-summary-icon{color:#2678c9;background:#eaf4ff}.exam-summary-card.green .exam-summary-icon{color:#15966b;background:#eafaf4}
+.exam-summary-card.violet .exam-summary-icon{color:#626ad1;background:#f0f1ff}.exam-summary-card.amber .exam-summary-icon{color:#b76e00;background:#fff7e8}
+.exam-workspace,.exam-split-workspace{overflow:hidden;border:1px solid #e5e9f0;border-radius:8px;background:#fff}
+.exam-split-workspace{display:grid;min-height:560px;grid-template-columns:270px minmax(0,1fr)}
+.exam-selector{border-right:1px solid #e8ecf2;background:#fbfcfe}.exam-selector-head{display:flex;align-items:center;justify-content:space-between;padding:17px 15px 13px;border-bottom:1px solid #edf0f5}
+.exam-selector-head>div{display:flex;align-items:baseline;gap:8px}.exam-selector-head h2{margin:0;font-size:16px}.exam-selector-head span{color:#919bab;font-size:11px}
+.exam-selector-list{max-height:680px;padding:8px;overflow-y:auto}.exam-selector-list button{display:flex;width:100%;align-items:center;gap:9px;padding:11px 9px;border:1px solid transparent;border-radius:9px;background:transparent;text-align:left;cursor:pointer}
+.exam-selector-list button:hover{background:#f1f6fb}.exam-selector-list button.active{border-color:#d7e8fa;background:#eaf4ff}.selector-icon{display:grid;flex:0 0 36px;height:36px;place-items:center;border-radius:9px;color:#6d7c91;background:#edf1f6}
+.exam-selector-list button.active .selector-icon{color:#2479c9;background:#d8eafc}.selector-copy{display:flex;min-width:0;flex:1;flex-direction:column;gap:4px}.selector-copy strong,.selector-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.selector-copy strong{color:#344054;font-size:13px}.selector-copy small{color:#8b96a7;font-size:11px}.exam-canvas{min-width:0}
+.exam-workspace-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px 11px}.exam-workspace-head h2{margin:0;font-size:16px}.exam-workspace-head p{margin:5px 0 0;color:#8b95a5;font-size:11px}
+.exam-filter-bar{display:grid;align-items:center;gap:9px;padding:13px 18px;border-top:1px solid #edf0f4;border-bottom:1px solid #edf0f4}.exam-result-count{justify-self:end;color:#8792a3;font-size:12px;white-space:nowrap}
+.exam-table .el-table__cell{padding:11px 0}.exam-table-actions{display:flex;align-items:center;gap:2px;white-space:nowrap}.exam-table-actions .el-button{margin:0}
+.exam-dialog-intro{display:flex;align-items:center;gap:12px;margin-bottom:18px;padding:13px;border-radius:8px;background:#f4f8fd}.exam-dialog-intro>span{display:grid;flex:0 0 38px;height:38px;place-items:center;border-radius:8px;color:#2678c9;background:#dfedfc;font-size:19px}
+.exam-dialog-intro>div{display:flex;flex-direction:column;gap:3px}.exam-dialog-intro strong{font-size:13px}.exam-dialog-intro p{margin:0;color:#7f8a9b;font-size:11px;line-height:1.5}
+.exam-drawer-title h3{margin:0;color:#253044;font-size:20px}.exam-drawer-title p{margin:7px 0 0;color:#7b8799;font-size:13px}.exam-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+.exam-form-grid .el-select,.exam-form-grid .el-input-number,.exam-form-grid .el-date-editor{width:100%}
+.exam-empty{display:flex;min-height:250px;align-items:center;justify-content:center;flex-direction:column;color:#9ca6b4}.exam-empty strong{color:#566174}.exam-empty span{margin:8px 0 14px;font-size:12px}
+.exam-tabs{display:flex;gap:5px;padding:0 18px;border-bottom:1px solid #edf0f4}.exam-tabs button{position:relative;padding:10px 12px;border:0;background:transparent;color:#667085;cursor:pointer}
+.exam-tabs button.active{color:#2077c9;font-weight:700}.exam-tabs button.active:after{position:absolute;right:8px;bottom:-1px;left:8px;height:2px;background:#409eff;content:""}
+.muted{color:#98a2b3}
+@media(max-width:1100px){.exam-summary-grid{grid-template-columns:repeat(2,1fr)}.exam-split-workspace{grid-template-columns:230px minmax(0,1fr)}}
+@media(max-width:760px){.exam-module-page{padding:18px 12px 80px}.exam-page-head{align-items:flex-start;flex-direction:column}.exam-page-head h1{font-size:22px}.exam-head-actions{display:grid;width:100%;grid-template-columns:repeat(2,1fr)}.exam-head-actions .el-button{width:100%}.exam-summary-grid{gap:9px}.exam-summary-card{min-height:84px;padding:13px}.exam-summary-card div>span{display:none}.exam-split-workspace{display:block}.exam-selector{border-right:0;border-bottom:1px solid #e8ecf2}.exam-selector-list{display:flex;max-height:none;gap:7px;overflow-x:auto}.exam-selector-list button{flex:0 0 220px}.exam-workspace-head{align-items:flex-start;flex-direction:column}.exam-filter-bar{display:flex;flex-direction:column}.exam-filter-bar>*{width:100%}.exam-result-count{justify-self:auto}.exam-form-grid{grid-template-columns:1fr}}

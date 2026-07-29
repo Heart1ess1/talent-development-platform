@@ -7,4 +7,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 public class SpaController {
   @GetMapping("/{path:[a-zA-Z0-9_-]+}")
   public String spa(){return "forward:/index.html";}
+  @GetMapping("/exams/{path:[a-zA-Z0-9_-]+}")
+  public String examSpa(){return "forward:/index.html";}
 }
