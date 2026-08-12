@@ -4,7 +4,7 @@
 
 ## 1. 当前状态与上线门槛
 
-截至 2026-08-12 的实机检查结果：
+截至 2026-08-13 的实机检查结果：
 
 | 项目 | 当前证据 |
 | --- | --- |
@@ -18,7 +18,16 @@
 | 备案 | 备案控制台显示“待提交管局”和“暂无备案号”；域名注册/转入未满两天，等待系统自动提交，在备案号下发前不添加中国内地 CDN 域名、不切换正式业务 DNS |
 | CDN/ESA | CDN 已按流量计费方式开通，当前 0 个加速域名、0 流量；`static.yryhx.cn` 仍需等 ICP 备案号下发后添加 |
 
-当前线上运行 IP 版 `main@491380fe05be7564a35bed33dd50ac031177a6e6`，JAR SHA-256 为 `115834bd12901f98c281783a270a7aa46d0293e64c3d1786219847f24cf3e0a0`，Flyway 为 V24。历史 CDN 候选包 `/data/talent-platform/releases/staging/cdn-20260812-2032/` 早于本次上线，已视为过期，不能直接激活；备案、CDN 域名与 HTTPS 就绪后，必须从当时最新 `main` 重新构建并同步静态资源，再执行 `activate-cdn-release.sh`。
+当前线上运行 IP 版 `main@90d09a4a9276a30d21afe1a4de61fda741963bcf`，JAR SHA-256 为 `7ead9945d8a0335741c2df2db4c04a7bdf7cff1b9e4eb1b69576eee02d21af4a`，Flyway 为 V25。历史 CDN 候选包 `/data/talent-platform/releases/staging/cdn-20260812-2032/` 早于本次上线，已视为过期，不能直接激活；备案、CDN 域名与 HTTPS 就绪后，必须从当时最新 `main` 重新构建并同步静态资源，再执行 `activate-cdn-release.sh`。
+
+### 2026-08-13 综合评价优化部署记录
+
+- GitHub：PR #9 已审查、通过测试并合并，部署提交为 `90d09a4a9276a30d21afe1a4de61fda741963bcf`。
+- 构建校验：前端 12 项测试、生产构建、后端 88 项测试及前端生产依赖审计通过；生产 JAR SHA-256 为 `7ead9945d8a0335741c2df2db4c04a7bdf7cff1b9e4eb1b69576eee02d21af4a`。
+- 数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20260813-010559.sql.gz`，SHA-256 `b4835239b4e81ed261a94a71a1efdc7ab663a3614a1d4981b96e7301a19c8099`。
+- 回滚材料：`/data/talent-platform/releases/history/pre-90d09a4-20260813-010559/`，包含上一版 JAR、`.env` 和哈希文件。
+- 生产校验：应用健康状态为 `UP`，Flyway V25 生效；OSS 切换、公开文件、私有课件和私有附件四组冒烟脚本通过。
+- 综合评价接口：`/evaluation/monthly/candidates`、`/evaluation/source-options` 和 `/evaluation/templates` 均返回正确数据结构；当前生产库尚无员工、任务、考试和评价模板测试数据。
 
 ### 2026-08-12 部署记录
 

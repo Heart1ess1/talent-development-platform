@@ -4,10 +4,10 @@
 
 ## 当前基线
 
-- 最后核对日期：2026-08-12
-- GitHub：PR #3 及生产验收修复 PR #5～#7 均已合并；已部署的应用代码基线为 `491380fe05be7564a35bed33dd50ac031177a6e6`，其后的部署记录文档提交不要求重建 JAR。
-- 云服务器：已部署与该 `main` 对应的 IP 版生产 JAR，SHA-256 为 `115834bd12901f98c281783a270a7aa46d0293e64c3d1786219847f24cf3e0a0`。
-- 线上验收：应用健康状态为 `UP`，Flyway 为 V24；公开 OSS、私有课件直传/水印预览/禁止原件下载、私有附件签名下载及删除清理均已通过真实生产冒烟测试。
+- 最后核对日期：2026-08-13
+- GitHub：PR #3、生产验收修复 PR #5～#7 及综合评价优化 PR #9 均已合并；已部署的应用代码基线为 `90d09a4a9276a30d21afe1a4de61fda741963bcf`，其后的部署记录文档提交不要求重建 JAR。
+- 云服务器：已部署与该 `main` 对应的 IP 版生产 JAR，SHA-256 为 `7ead9945d8a0335741c2df2db4c04a7bdf7cff1b9e4eb1b69576eee02d21af4a`。
+- 线上验收：应用健康状态为 `UP`，Flyway 为 V25；公开 OSS、私有课件直传/水印预览/禁止原件下载、私有附件签名下载及删除清理均已通过真实生产冒烟测试；月度评价员工队列、评价来源和模板接口均通过线上校验。
 - 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、HTTPS 和本地备份已经投入使用；ICP备案、正式 DNS 和 CDN 尚未完成。
 
 “代码已合并”不等于“云端已上线”。只有部署任务取得服务器端版本、健康检查、迁移记录和业务冒烟证据后，才能将状态改为 `Done`。
@@ -61,7 +61,7 @@ flyway_schema_history 当前版本
 
 | 完成 | ID | 状态 | 任务 | 验收标准 |
 | --- | --- | --- | --- | --- |
-| [ ] | DEPLOY-008 | In Progress | 发布月度评价工作台与多来源加权 | GitHub PR 合并；ECS 运行对应 `main` 构建；Flyway V25 成功；健康、员工队列及评价模板接口通过 |
+| [x] | DEPLOY-008 | Done | 发布月度评价工作台与多来源加权 | PR #9 已合并；ECS 运行 `main@90d09a4`；JAR SHA-256 `7ead9945d8a0335741c2df2db4c04a7bdf7cff1b9e4eb1b69576eee02d21af4a`；Flyway V25、健康、员工队列、评价来源及模板接口均通过 |
 
 ## 外部条件阻塞任务
 
@@ -71,7 +71,7 @@ flyway_schema_history 当前版本
 | [ ] | ICP-002 | Blocked | 完成管局审核和短信核验 | 必须等待管局流程发起 | 获得备案号，短信核验完成且备案状态正常 |
 | [ ] | CDN-001 | Blocked | 创建并配置 `static.yryhx.cn` CDN 域名 | 中国内地 CDN 域名需要备案号 | OSS 私有回源鉴权、HTTPS 证书、TLS 1.2/1.3、缓存规则配置完成 |
 | [ ] | DNS-001 | Blocked | 添加根域名、`www` 和 `static` 正式 DNS 记录 | 依赖备案号和 CDN 分配的真实 CNAME | `@` 指向 ECS，`www` 正确跳转，`static` 指向 CDN CNAME，TTL 初始为 600 秒 |
-| [ ] | CDN-002 | Blocked | 从最新 `main` 重建并激活 CDN 专用候选 | 现有候选早于 `main@491380f`，且必须先确认 CDN 域名、证书和 CNAME 可用 | 重新执行 CDN 构建及静态资源同步；`activate-cdn-release.sh` 通过，静态资源 200、MIME 正确并命中缓存 |
+| [ ] | CDN-002 | Blocked | 从最新 `main` 重建并激活 CDN 专用候选 | 现有候选早于 `main@90d09a4`，且必须先确认 CDN 域名、证书和 CNAME 可用 | 重新执行 CDN 构建及静态资源同步；`activate-cdn-release.sh` 通过，静态资源 200、MIME 正确并命中缓存 |
 | [ ] | GO-LIVE-001 | Blocked | 完成正式域名全链路验收并观察 24 小时 | 依赖 DNS/CDN 正式切换 | HTTPS、API、登录、考试、课件、附件、OSS 权限和 CDN 缓存持续正常，之后再提高 TTL |
 
 ## 运行安全与可靠性
