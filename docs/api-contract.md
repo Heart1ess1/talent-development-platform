@@ -242,11 +242,12 @@ Authorization: Bearer <token>
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/evaluation/overview` | `evaluation:view`，按数据范围过滤 | 查询指定月份评价工作台指标与跨模块待办 | `month` | 方案覆盖、汇总状态、人工评分/任务审核/遗留考试阅卷和待自动下发数量 |
 | `GET` | `/api/v1/evaluation/templates` | `evaluation:manage` | 查询可复用评价模板 | 无 | 模板规则、维护人和应用次数 |
-| `POST` | `/api/v1/evaluation/templates` | `evaluation:manage` | 新建评价模板 | 名称、说明、五类评分项启停/本项满分/权重、季度权重、加扣分上限 | 模板 ID |
+| `POST` | `/api/v1/evaluation/templates` | `evaluation:manage` | 新建评价模板 | 名称、说明、五类评分项启停/本项满分/综合权重、任务/考试来源权重、站点汇总方式、季度权重、加扣分上限 | 模板 ID |
 | `PUT` | `/api/v1/evaluation/templates/{id}` | `evaluation:manage` | 编辑评价模板，不回写已应用方案 | 同创建模板 | 空 |
 | `POST` | `/api/v1/evaluation/templates/{id}/copy` | `evaluation:manage` | 复制为独立模板 | 路径 `id` | 新模板 ID |
 | `DELETE` | `/api/v1/evaluation/templates/{id}` | `evaluation:manage` | 停止模板后续使用，保留已应用历史 | 路径 `id` | 空 |
 | `POST` | `/api/v1/evaluation/templates/apply` | `evaluation:manage` | 将模板应用到批次月份并生成方案草稿 | `templateId`、`batchId`、`effectiveMonth` | 方案 ID |
+| `GET` | `/api/v1/evaluation/source-options` | `evaluation:manage` | 查询可配置内部权重的任务和考试 | 无 | `tasks`、`exams` |
 | `GET` | `/api/v1/evaluation/schemes` | `evaluation:manage` | 查询评分方案 | 可选 `batchId` | 方案列表 |
 | `POST` | `/api/v1/evaluation/schemes` | `evaluation:manage` | 兼容创建评分方案草稿 | `batchId`、`effectiveMonth`、五类评分项启停/本项满分/权重、季度权重、加扣分上限 | 方案 ID |
 | `PUT` | `/api/v1/evaluation/schemes/{id}` | `evaluation:manage` | 更新草稿方案 | 同创建方案 | 空 |
@@ -254,7 +255,10 @@ Authorization: Bearer <token>
 | `DELETE` | `/api/v1/evaluation/schemes/{id}` | `evaluation:manage` | 删除方案 | 路径 `id` | 空 |
 | `POST` | `/api/v1/evaluation/schemes/{id}/publish` | `evaluation:manage` | 发布草稿方案 | 路径 `id` | 空 |
 | `GET` | `/api/v1/evaluation/monthly/detail` | `evaluation:view`，非 `EMPLOYEE`，按数据范围校验 | 查询月度评分明细 | `employeeId`、`month` | 月度明细 |
-| `PUT` | `/api/v1/evaluation/monthly/components/{component}` | `evaluation:submit`，按角色限制评分项 | 提交指定评分项 | `employeeId`、`month`、`score`、`comment` | 空 |
+| `GET` | `/api/v1/evaluation/monthly/candidates` | `evaluation:view`，按数据范围及当月历史站点过滤 | 查询月度评价员工队列 | `month`；可选 `keyword`、`status` | 员工、完成进度、待办状态和预览分 |
+| `PUT` | `/api/v1/evaluation/monthly/components/{component}` | `evaluation:submit`，按角色限制评分项 | 提交指定评分项；站点评价必须指定当月实际站点 | `employeeId`、`month`、可选 `scopeId`、`score`、`comment` | 空 |
+| `PUT` | `/api/v1/evaluation/monthly/station-weights` | `ADMIN` 或 `SUPER_ADMIN` | 手动设置员工当月各站点权重 | `employeeId`、`month`、`stations[{stationId,weight}]`，合计 100% | 空 |
+| `DELETE` | `/api/v1/evaluation/monthly/station-weights` | `ADMIN` 或 `SUPER_ADMIN` | 恢复模板定义的自动站点权重 | `employeeId`、`month` | 空 |
 | `POST` | `/api/v1/evaluation/monthly` | `evaluation:submit`，按角色推导评分项 | 兼容旧客户端的月度评价提交 | `employeeId`、`month`、`score`、`comment` | 空 |
 | `PUT` | `/api/v1/evaluation/monthly/overrides/{component}` | `ADMIN` 或 `SUPER_ADMIN` | 覆盖评分项 | `employeeId`、`month`、`score`、`reason` | 空 |
 | `DELETE` | `/api/v1/evaluation/monthly/overrides/{component}` | `ADMIN` 或 `SUPER_ADMIN` | 删除评分项覆盖 | `employeeId`、`month` | 空 |

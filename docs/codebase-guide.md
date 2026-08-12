@@ -170,6 +170,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `db/migration/V19__course_materials.sql` | 增加课程课件元数据及课程、上传人关联。 |
 | `db/migration/V20__task_attachments.sql` | 增加计划任务和已下发任务的附件元数据、快照来源及访问索引。 |
 | `db/migration/V22__evaluation_template_library.sql` | 增加独立评价模板库、评分项满分和方案模板来源，保留既有方案的百分制默认口径。 |
+| `db/migration/V25__evaluation_source_weights.sql` | 增加任务/考试内部权重、站点汇总模式、多导师/多站点评分作用域及员工月度站点权重。 |
 | `db/migration/V23__course_material_learning.sql` | 增加课件预览会话、员工学习次数和累计学习时长记录。 |
 | `db/migration/V24__object_upload_ticket.sql` | 增加 OSS 客户端直传票据、用途/归属绑定、有效期和单次消费状态。 |
 
