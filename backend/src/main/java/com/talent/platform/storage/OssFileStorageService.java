@@ -13,6 +13,7 @@ import com.aliyun.oss.model.ObjectMetadata;
 import com.aliyun.oss.model.PolicyConditions;
 import com.aliyun.oss.model.ResponseHeaderOverrides;
 import com.talent.platform.common.BusinessException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.InputStreamResource;
@@ -44,6 +45,7 @@ public class OssFileStorageService implements FileStorageService {
   private final CredentialsProvider credentialsProvider;
   private final String publicEndpoint;
 
+  @Autowired
   public OssFileStorageService(
       @Value("${app.storage.oss-endpoint}") String endpoint,
       @Value("${app.storage.oss-public-endpoint}") String publicEndpoint,
