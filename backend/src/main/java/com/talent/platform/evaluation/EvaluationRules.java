@@ -80,6 +80,17 @@ final class EvaluationRules {
     return total.setScale(6,RoundingMode.HALF_UP);
   }
 
+  static BigDecimal average(List<BigDecimal> scores) {
+    if (scores.isEmpty()) return null;
+    return scores.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
+      .divide(BigDecimal.valueOf(scores.size()), 2, RoundingMode.HALF_UP);
+  }
+
+  static BigDecimal completedAverage(List<BigDecimal> submittedScores, int reviewerCount) {
+    if (reviewerCount <= 0 || submittedScores.size() != reviewerCount) return null;
+    return average(submittedScores);
+  }
+
   static BigDecimal finalScore(List<WeightedScore> items, BigDecimal bonus, BigDecimal deduction) {
     BigDecimal total=BigDecimal.ZERO;
     for(WeightedScore item:items){

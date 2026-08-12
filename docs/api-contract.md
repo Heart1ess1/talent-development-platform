@@ -241,6 +241,12 @@ Authorization: Bearer <token>
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/evaluation/overview` | `evaluation:view`，按数据范围过滤 | 查询指定月份评价工作台指标与跨模块待办 | `month` | 方案覆盖、汇总状态、人工评分/任务审核/遗留考试阅卷和待自动下发数量 |
+| `GET` | `/api/v1/evaluation/assignments` | `evaluation:manage` | 查询月份人工评分任务与提交进度 | `month`；可选 `component`、`status`、`reviewerId`、`keyword` | 任务、当前评分人、过程平均分、正式平均分和状态 |
+| `GET` | `/api/v1/evaluation/assignments/{id}` | `evaluation:manage` | 查询评分任务详情 | 路径 `id` | 员工、作用域、评分人个人提交及任务设置 |
+| `GET` | `/api/v1/evaluation/assignments/reviewers` | `evaluation:manage` | 查询评分项可选评分人 | `component=MENTOR|STATION|TRAINING` | 对应角色的启用账号 |
+| `GET` | `/api/v1/evaluation/assignments/mine` | `evaluation:submit` | 查询明确分配给当前账号的评分任务 | `month`；可选 `component`、`status` | 本人任务及团队进度 |
+| `POST` | `/api/v1/evaluation/assignments/generate` | `evaluation:manage` | 根据已发布方案生成月份人工评分任务 | `month`、可选 `dueAt` | 新增任务数；重复调用幂等 |
+| `PUT` | `/api/v1/evaluation/assignments/reviewers` | `evaluation:manage` | 批量替换或追加评分人并更新任务设置 | `taskIds`、`reviewerIds`、`mode=REPLACE|ADD`、可选 `dueAt`、`note`；可选字段留空时保留原设置 | 空 |
 | `GET` | `/api/v1/evaluation/templates` | `evaluation:manage` | 查询可复用评价模板 | 无 | 模板规则、维护人和应用次数 |
 | `POST` | `/api/v1/evaluation/templates` | `evaluation:manage` | 新建评价模板 | 名称、说明、五类评分项启停/本项满分/综合权重、任务/考试来源权重、站点汇总方式、季度权重、加扣分上限 | 模板 ID |
 | `PUT` | `/api/v1/evaluation/templates/{id}` | `evaluation:manage` | 编辑评价模板，不回写已应用方案 | 同创建模板 | 空 |
@@ -270,7 +276,7 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/evaluation/summaries/{id}/publish` | `evaluation:manage` | 发布汇总 | `waiverReason`、`overrideScore` | 空 |
 | `POST` | `/api/v1/evaluation/summaries/{id}/reopen` | `ADMIN` 或 `SUPER_ADMIN` | 重开已发布月度汇总 | `reason` | 新汇总 ID |
 
-评分项包括 `EXAM`、`TASK`、`MENTOR`、`STATION`、`TRAINING`。每项原始得分允许使用自己的满分口径（最高 `999.99`），计算时换算为百分比后再乘综合权重，因此启用项权重之和必须为 `100%`。已发布月度汇总会锁定对应月份，除管理员重开外不可继续修改。
+评分项包括 `EXAM`、`TASK`、`MENTOR`、`STATION`、`TRAINING`。每项原始得分允许使用自己的满分口径（最高 `999.99`），计算时换算为百分比后再乘综合权重，因此启用项权重之和必须为 `100%`。人工评分任务未全部提交时返回 `averageScore` 供过程查看，但 `finalAverageScore` 为空；全部当前评分人提交后才返回正式平均分。已发布月度汇总会锁定对应月份，除管理员重开外不可继续修改。
 
 ## 考试中心
 

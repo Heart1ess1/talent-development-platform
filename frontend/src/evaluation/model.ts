@@ -19,6 +19,7 @@ export interface ScoreComponent{
   submittedCount?:number
   requiredCount?:number
   partialScore?:number|null
+  canEvaluate?:boolean
   aggregationMode?:'AUTO_BY_DAYS'|'PRIMARY_STATION'|'MANUAL'
 }
 
