@@ -1,0 +1,25 @@
+{
+  "CORSRule": [
+    {
+      "AllowedOrigin": [
+        "https://yryhx.cn",
+        "https://www.yryhx.cn",
+        "http://139.224.51.21"
+      ],
+      "AllowedMethod": [
+        "PUT",
+        "GET",
+        "HEAD"
+      ],
+      "AllowedHeader": [
+        "*"
+      ],
+      "ExposeHeader": [
+        "ETag",
+        "x-oss-request-id"
+      ],
+      "MaxAgeSeconds": 600
+    }
+  ],
+  "ResponseVary": true
+}

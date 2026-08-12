@@ -63,7 +63,15 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/auth/change-password` | 登录 | 修改当前用户密码 | `oldPassword`、`newPassword` | 新 `token`、新 `user` |
 | `POST` | `/api/v1/profile/avatar` | 登录 | 上传或更换本人头像；员工上传内容同时作为证件照 | `multipart/form-data` 字段 `file`，仅 JPG/PNG，最大 5MB，尺寸 120×120–8000×8000 | `avatarToken`、`avatarUrl` |
 | `DELETE` | `/api/v1/profile/avatar` | 登录 | 删除本人头像/证件照并恢复文字头像 | 无 | 空 |
-| `GET` | `/api/v1/avatars/{token}` | 公开、不可枚举随机令牌 | 读取头像图片 | 路径 `token` | 带长期缓存的图片流 |
+| `GET` | `/api/v1/avatars/{token}` | 公开、不可枚举随机令牌 | 读取头像图片 | 路径 `token` | 本地模式返回图片流；OSS 模式 302 到公共 CDN URL |
+
+### 存储传输能力
+
+| 方法 | 路径 | 权限 | 说明 | 响应 |
+| --- | --- | --- | --- | --- |
+| `GET` | `/api/v1/storage/capabilities` | 登录 | 查询当前环境是否启用 OSS 直传和签名下载 | `directUpload`、`signedDownload` |
+
+上传票据有效期 15 分钟，绑定创建人、用途和业务对象，只能消费一次。浏览器必须按票据返回的 `method`、`uploadUrl` 和 `headers` 直接上传；业务完成接口会从 OSS HEAD 元数据核对大小和类型。完整签名 URL 不应写入日志或持久化。
 | `GET` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 查询本人工作信息和可维护个人资料 | 无 | 员工个人资料，包含只读批次、所属板块、服务站点、技术/技能导师、入职日期和状态 |
 | `PUT` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 维护本人非工作安排类个人资料 | `phone`、`email`、`birthDate`、`nativePlace`、`residence`、`school`、`major`、`education` | 空 |
 
@@ -77,7 +85,9 @@ Authorization: Bearer <token>
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/dashboard` | 登录，按数据范围过滤 | 进度概览 | 无 | `employeeCount`、`taskTotal`、`taskCompleted`、`averageScore`、`attendanceCount`、`scoreDistribution` |
+| `GET` | `/api/v1/dashboard` | 登录，按数据范围过滤 | 角色化进度概览 | 无 | 公共：`audience`、`role`、`scope_label`、`period_key`、`generated_at`；员工：`profile`、`metrics`、`action_items`、`learning_schedule`、`quarter_scores`、`mentor_feedback`、`completed_tasks`；管理：`metrics`、`operations`、`work_queue`、`schedule`、`attention_employees` |
+
+`audience=EMPLOYEE` 时只查询当前账号关联的员工档案；季度评分和导师评价只返回已经发布的评价结果。`audience=MANAGER` 时所有员工、任务、课程、考试、评价和异常人员统计均沿用当前角色的数据范围；`work_queue` 还会根据权限移除当前角色不能处理的业务入口。
 
 ## 人员信息维护接口
 
@@ -164,8 +174,17 @@ Authorization: Bearer <token>
 | `DELETE` | `/api/v1/courses/{id}` | `course:manage` | 删除从未开设场次且无课件的课程 | 路径 `id` | 空 |
 | `GET` | `/api/v1/courses/{id}/materials` | 课程管理员或已安排课程数据范围 | 查询课程课件 | 路径 `id` | 课件列表 |
 | `POST` | `/api/v1/courses/{id}/materials` | `course:manage` | 上传课程课件 | `multipart/form-data` 字段 `file` | 课件 ID |
-| `GET` | `/api/v1/course-materials/{id}` | 课程管理员或已安排课程数据范围 | 预览或下载课件 | 可选 `inline` | 文件流 |
+| `POST` | `/api/v1/courses/{id}/materials/upload-ticket` | `course:manage` | 为课件原件申请 OSS 直传票据 | `originalName`、`contentType`、`size` | 上传票据 |
+| `POST` | `/api/v1/courses/{id}/materials/upload-complete/{ticketId}` | `course:manage` | 校验 OSS 对象并创建课件记录 | 路径参数 | 课件 ID |
+| `GET` | `/api/v1/course-materials/{id}` | 登录 | 已停用的原文件接口 | 任意 | `403`，不提供原文件预览或下载 |
 | `DELETE` | `/api/v1/course-materials/{id}` | `course:manage` | 删除课程课件 | 路径 `id` | 空 |
+| `GET` | `/api/v1/course-materials/learning` | 角色 `EMPLOYEE` | 查询本人可学习课件 | 无 | 课件及 `learned`，不含次数和时长 |
+| `GET` | `/api/v1/course-materials/manage` | `course:manage` | 查询管理端课件学习概览 | 无 | 每个课件应学习、已学习、未学习人数 |
+| `GET` | `/api/v1/course-materials/manage/{id}/learners` | `course:manage` | 查询课件员工学习明细 | 路径 `id` | 是否学习、学习次数、累计秒数 |
+| `POST` | `/api/v1/course-materials/{id}/preview-sessions` | 课程管理员或已安排员工 | 开始安全预览 | 路径 `id` | `sessionId`、`pageCount` |
+| `GET` | `/api/v1/course-materials/{id}/preview-sessions/{sessionId}/pages/{page}` | 会话所属账号 | 读取带账号水印的课件页 | 路径参数 | `image/png`，`no-store` |
+| `POST` | `/api/v1/course-materials/{id}/preview-sessions/{sessionId}/heartbeat` | 会话所属账号 | 上报持续学习 | 路径参数 | 空 |
+| `POST` | `/api/v1/course-materials/{id}/preview-sessions/{sessionId}/close` | 会话所属账号 | 结束学习会话 | 路径参数 | 空 |
 | `GET` | `/api/v1/sessions` | 登录，按数据范围过滤 | 查询课程场次 | 可选 `courseId`、`keyword` | 场次及人员/签到数量 |
 | `GET` | `/api/v1/sessions/summary` | `course:manage` | 查询场次统计 | 无 | 场次、安排和签到统计 |
 | `POST` | `/api/v1/sessions` | `course:manage` | 创建课程场次 | `courseId`、`title`、`location`、`hours`、`startsAt`、`endsAt`、`checkinStartsAt`、`checkinEndsAt` | `id`、`checkinCode` |
@@ -183,7 +202,7 @@ Authorization: Bearer <token>
 
 场次结束时间必须晚于开始时间，签到结束时间必须晚于签到开始时间。员工签到要求当前时间在签到窗口内、本人已被安排到该场次，且同一场次不可重复签到。人工补录会自动补齐场次人员安排并保留补录来源。已产生签到历史的场次和人员安排不可删除。
 
-课程课件归属于课程而非单个场次，因此同一课程的后续场次可直接复用。单个课件不超过 50MB，支持 PDF、Office 文档、图片、文本、ZIP 和 MP4；员工只有在被安排参加该课程的场次后才能访问课件。
+课程课件归属于课程而非单个场次，因此同一课程的后续场次可直接复用。单个课件不超过 50MB，支持 DOC/DOCX、PDF、PPT/PPTX、OFD、PNG、JPG/JPEG；上传完成后会校验 PDF、OOXML/OFD ZIP 包、OLE 或图片的真实文件结构，不能只靠修改扩展名绕过。预览会话按当前账号鉴权，员工页面水印使用员工姓名和工号；服务端通过 LibreOffice、OFDRW、PDFBox 或 ImageIO 统一输出带水印 PNG，不向前端返回原文件。单个课件最多 500 页，Office 加密文件和损坏文件无法预览。学习时长由 30 秒心跳累计，单次累计增量上限 60 秒。
 
 ## 任务下发与任务跟踪
 
@@ -200,14 +219,18 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/tasks/{id}/submissions/archive` | 登录，按数据范围过滤 | 打包导出任务全部员工提交文件 | 路径 `id` | ZIP，按“员工姓名（工号）/提交版本”分目录保存说明与附件 |
 | `GET` | `/api/v1/tasks/{id}/attachments` | 登录，按数据范围过滤 | 查询已下发任务附件 | 路径 `id` | 附件列表 |
 | `POST` | `/api/v1/tasks/{id}/attachments` | `task:manage` | 上传已下发或临时任务附件 | `multipart/form-data` 字段 `file` | 附件 ID |
+| `POST` | `/api/v1/tasks/{id}/attachments/upload-ticket` | `task:manage` | 为任务附件申请 OSS 直传票据 | `originalName`、`contentType`、`size` | 上传票据 |
+| `POST` | `/api/v1/tasks/{id}/attachments/upload-complete/{ticketId}` | `task:manage` | 校验 OSS 对象并创建任务附件 | 路径参数 | 附件 ID |
 | `DELETE` | `/api/v1/tasks/{id}/attachments/{attachmentId}` | `task:manage` | 删除任务附件 | 路径参数 | 空 |
-| `GET` | `/api/v1/task-attachments/{id}` | 登录，按任务数据范围过滤 | 预览或下载任务附件 | 可选 `inline` | 文件流 |
+| `GET` | `/api/v1/task-attachments/{id}` | 登录，按任务数据范围过滤 | 预览或下载任务附件 | 可选 `inline` | 本地模式返回文件流；OSS 模式鉴权后 302 到 5 分钟签名 URL |
 | `DELETE` | `/api/v1/tasks/{id}` | `task:manage` | 删除无提交记录的任务 | 路径 `id` | 空 |
 | `GET` | `/api/v1/assignments` | 登录，按数据范围过滤 | 查询任务分配 | 可选 `status` | 分配列表 |
 | `GET` | `/api/v1/assignments/pending-review` | `task:review`，按数据范围过滤 | 查询待审核任务 | 无 | 待审核的任务分配与最新提交信息 |
 | `GET` | `/api/v1/assignments/{id}/submissions` | 登录，按任务员工范围校验 | 查询提交历史 | 路径 `id` | 提交版本和附件列表 |
+| `POST` | `/api/v1/assignments/{id}/submission-files/upload-ticket` | 员工本人且任务可提交 | 为成果文件申请 OSS 直传票据 | `originalName`、`contentType`、`size` | 上传票据 |
+| `POST` | `/api/v1/assignments/{id}/submissions/direct` | 员工本人且任务可提交 | 使用已上传票据提交或重提任务 | `content`、最多 5 个 `uploadTicketIds` | 提交 ID |
 | `POST` | `/api/v1/assignments/{id}/submissions` | 角色 `EMPLOYEE`，本人任务 | 提交任务成果 | `multipart/form-data` 字段 `content`、`files` | 提交 ID |
-| `GET` | `/api/v1/files/{id}` | 登录，按任务员工范围校验 | 预览或直接下载单个提交附件 | 路径 `id` | 原始文件流 |
+| `GET` | `/api/v1/files/{id}` | 登录，按任务员工范围校验 | 下载单个提交附件 | 路径 `id` | 本地模式返回文件流；OSS 模式鉴权后 302 到 5 分钟签名 URL |
 | `GET` | `/api/v1/submissions/{id}/files/archive` | 登录，按任务员工范围校验 | 下载单名员工单次提交资料 | 路径 `id` | ZIP，包含提交说明与全部附件 |
 | `POST` | `/api/v1/submissions/{id}/review` | `task:review` | 审核任务提交 | `decision=APPROVE|RETURN`、`comment`、`score` | 空 |
 
@@ -217,8 +240,15 @@ Authorization: Bearer <token>
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/v1/evaluation/overview` | `evaluation:view`，按数据范围过滤 | 查询指定月份评价工作台指标与跨模块待办 | `month` | 方案覆盖、汇总状态、人工评分/任务审核/遗留考试阅卷和待自动下发数量 |
+| `GET` | `/api/v1/evaluation/templates` | `evaluation:manage` | 查询可复用评价模板 | 无 | 模板规则、维护人和应用次数 |
+| `POST` | `/api/v1/evaluation/templates` | `evaluation:manage` | 新建评价模板 | 名称、说明、五类评分项启停/本项满分/权重、季度权重、加扣分上限 | 模板 ID |
+| `PUT` | `/api/v1/evaluation/templates/{id}` | `evaluation:manage` | 编辑评价模板，不回写已应用方案 | 同创建模板 | 空 |
+| `POST` | `/api/v1/evaluation/templates/{id}/copy` | `evaluation:manage` | 复制为独立模板 | 路径 `id` | 新模板 ID |
+| `DELETE` | `/api/v1/evaluation/templates/{id}` | `evaluation:manage` | 停止模板后续使用，保留已应用历史 | 路径 `id` | 空 |
+| `POST` | `/api/v1/evaluation/templates/apply` | `evaluation:manage` | 将模板应用到批次月份并生成方案草稿 | `templateId`、`batchId`、`effectiveMonth` | 方案 ID |
 | `GET` | `/api/v1/evaluation/schemes` | `evaluation:manage` | 查询评分方案 | 可选 `batchId` | 方案列表 |
-| `POST` | `/api/v1/evaluation/schemes` | `evaluation:manage` | 创建评分方案草稿 | `batchId`、`effectiveMonth`、五类评分项启停和权重、季度权重、加扣分上限 | 方案 ID |
+| `POST` | `/api/v1/evaluation/schemes` | `evaluation:manage` | 兼容创建评分方案草稿 | `batchId`、`effectiveMonth`、五类评分项启停/本项满分/权重、季度权重、加扣分上限 | 方案 ID |
 | `PUT` | `/api/v1/evaluation/schemes/{id}` | `evaluation:manage` | 更新草稿方案 | 同创建方案 | 空 |
 | `POST` | `/api/v1/evaluation/schemes/{id}/draft` | `evaluation:manage` | 从已发布或已退役方案复制新草稿 | 路径 `id` | 新方案 ID |
 | `DELETE` | `/api/v1/evaluation/schemes/{id}` | `evaluation:manage` | 删除方案 | 路径 `id` | 空 |
@@ -236,7 +266,7 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/evaluation/summaries/{id}/publish` | `evaluation:manage` | 发布汇总 | `waiverReason`、`overrideScore` | 空 |
 | `POST` | `/api/v1/evaluation/summaries/{id}/reopen` | `ADMIN` 或 `SUPER_ADMIN` | 重开已发布月度汇总 | `reason` | 新汇总 ID |
 
-评分项包括 `EXAM`、`TASK`、`MENTOR`、`STATION`、`TRAINING`。已发布月度汇总会锁定对应月份，除管理员重开外不可继续修改。
+评分项包括 `EXAM`、`TASK`、`MENTOR`、`STATION`、`TRAINING`。每项原始得分允许使用自己的满分口径（最高 `999.99`），计算时换算为百分比后再乘综合权重，因此启用项权重之和必须为 `100%`。已发布月度汇总会锁定对应月份，除管理员重开外不可继续修改。
 
 ## 考试中心
 
@@ -266,18 +296,18 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/exams/attempts/{id}` | `exam:manage` 或考生本人 | 查看答卷 | 路径 `id` | 答卷和题目 |
 | `PUT` | `/api/v1/exams/attempts/{id}/answers` | 考生本人，进行中 | 保存答案 | `questionId`、`answer` | 空 |
 | `POST` | `/api/v1/exams/attempts/{id}/events` | 考生本人，进行中 | 记录防作弊事件 | `type=BLUR|HIDDEN|EXIT_FULLSCREEN|RECONNECT`、唯一 `eventId`、`detail` | 违规次数、允许次数和自动交卷状态 |
-| `POST` | `/api/v1/exams/attempts/{id}/submit` | 考生本人，进行中 | 提交答卷并触发评分 | 路径 `id` | 评分结果 |
-| `GET` | `/api/v1/exams/review` | `exam:manage` | 查询阅卷队列 | 无 | 待阅卷/已评分答卷 |
+| `POST` | `/api/v1/exams/attempts/{id}/submit` | 考生本人，进行中 | 提交答卷并触发评分 | 路径 `id` | 状态和 `scoreAvailableAt`，不返回分数 |
+| `GET` | `/api/v1/exams/review` | `exam:manage`，按数据范围过滤 | 查询阅卷与待发布队列 | 无 | 待阅卷/已评分答卷、总分和发布状态 |
 | `PUT` | `/api/v1/exams/attempts/{attemptId}/questions/{questionId}/grade` | `exam:manage` | 主观题评分 | `score`、`comment` | 空 |
-| `POST` | `/api/v1/exams/attempts/{id}/publish` | `exam:manage` | 发布考试结果 | 路径 `id` | 空 |
-| `POST` | `/api/v1/exams/results/manage/plans/{planId}/publish` | `exam:manage` | 批量发布指定考试全部已评分成绩 | 路径 `planId` | 新发布数量 |
+| `POST` | `/api/v1/exams/attempts/{id}/publish` | `exam:manage` | 已停用的人工发布接口 | 路径 `id` | `400`，提示等待考试结束自动发布 |
+| `POST` | `/api/v1/exams/results/manage/plans/{planId}/publish` | `exam:manage` | 已停用的批量发布接口 | 路径 `planId` | `400`，提示等待考试结束自动发布 |
 | `GET` | `/api/v1/exams/results/manage` | `exam:manage` | 查询管理端已评分答卷 | 无 | 答卷、考生、考试、分数、发布状态和违规次数 |
 | `GET` | `/api/v1/exams/results/manage/plans` | `exam:manage` | 查询各考试计划成绩汇总 | 无 | 应考、完成、缺考、未完成、已发布数量和发布状态 |
 | `GET` | `/api/v1/exams/results/manage/plans/{planId}` | `exam:manage` | 查询指定计划的人员成绩明细 | 路径 `planId` | 每名应考人员的参与状态、答卷、成绩和发布状态 |
 | `GET` | `/api/v1/exams/results` | 登录，按数据范围过滤 | 查询已发布考试结果与已结束考试的缺考记录 | 可选 `employeeId` | 结果列表，包含 `result_status=COMPLETED|ABSENT`；缺考记录的 `total_score=0` |
 | `GET` | `/api/v1/exams/results/export` | `exam:manage`，按数据范围过滤 | 导出已发布成绩 | 可选 `planId`、`month=yyyy-MM`、`major` | Excel 文件 |
 
-当前题型校验只允许 `SINGLE`、`MULTIPLE`、`TRUE_FALSE`。试卷总分必须等于 100 分。`dynamicAssembly=true` 时必须同时使用随机组卷；员工开始考试时，系统按员工档案 `major` 匹配题目 `tags`，无标签题作为公共题，每次答卷保存实际抽取题目。考试计划的 `plan_phase` 为 `DRAFT`、`UPCOMING`、`OPEN`、`ENDED`；员工的 `participation_status` 为 `NOT_STARTED`、`READY`、`IN_PROGRESS`、`PENDING_REVIEW`、`COMPLETED`、`ABSENT`。其中 `ABSENT` 为实时派生状态：计划已结束且员工从未产生答卷时显示为缺考，不额外创建考试记录。
+题库兼容 `SINGLE`、`MULTIPLE`、`TRUE_FALSE`、`SHORT`，但新建试卷仅允许前三种客观题；试卷总分必须等于 100 分。员工交卷后立即评分，管理员端可即时查看，员工端结果查询只返回 `published=true` 的成绩。`ExamScheduler` 每分钟先处理到期答卷，再将 `ends_at<=now()` 的已评分成绩统一标记为已发布。`dynamicAssembly=true` 时必须同时使用随机组卷；员工开始考试时，系统按员工档案 `major` 匹配题目 `tags`，无标签题作为公共题，每次答卷保存实际抽取题目。
 
 动态试卷的题目集合以 `exam_attempt_question` 为准。开始考试后，查看答卷、保存答案、提交、自动评分和人工阅卷必须使用同一集合，不能重新按标签抽题。前端旧 `/exams` 地址只重定向到按角色可访问的拆分页面，不代表存在第二套考试 API。
 
@@ -300,7 +330,7 @@ Authorization: Bearer <token>
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/files/{id}` | 登录，按任务所属员工范围校验 | 下载任务附件 | 路径 `id` | 文件流 |
+| `GET` | `/api/v1/files/{id}` | 登录，按任务所属员工范围校验 | 下载成果附件 | 路径 `id` | 本地文件流或 OSS 5 分钟签名跳转 |
 | `GET` | `/api/v1/audit-logs` | `audit:read` | 查询审计日志 | `limit`，范围 1 到 500，默认 100 | 审计日志列表 |
 
 审计日志记录操作人、动作、目标类型、目标 ID、请求 ID、变更前后值和创建时间。
@@ -323,6 +353,8 @@ Authorization: Bearer <token>
 | `PUT` | `/api/v1/training-plans/{id}/tasks/order` | `task:manage` | 调整计划任务顺序 | `items: [{id, sortOrder}]` | 空 |
 | `GET` | `/api/v1/training-plans/{planId}/tasks/{taskId}/attachments` | `task:manage` | 查询计划任务附件 | 路径参数 | 附件列表 |
 | `POST` | `/api/v1/training-plans/{planId}/tasks/{taskId}/attachments` | `task:manage` | 上传计划任务附件 | `multipart/form-data` 字段 `file` | 附件 ID |
+| `POST` | `/api/v1/training-plans/{planId}/tasks/{taskId}/attachments/upload-ticket` | `task:manage` | 为计划任务附件申请 OSS 直传票据 | `originalName`、`contentType`、`size` | 上传票据 |
+| `POST` | `/api/v1/training-plans/{planId}/tasks/{taskId}/attachments/upload-complete/{ticketId}` | `task:manage` | 校验 OSS 对象并创建计划附件 | 路径参数 | 附件 ID |
 | `DELETE` | `/api/v1/training-plans/{planId}/tasks/{taskId}/attachments/{attachmentId}` | `task:manage` | 删除计划任务附件 | 路径参数 | 空 |
 | `POST` | `/api/v1/tasks/dispatch-plan/preview` | `task:manage` | 预览计划任务下发 | 与正式下发相同 | 覆盖人数、任务数、复用数、截止时间和任务名称 |
 | `POST` | `/api/v1/tasks/dispatch-plan` | `task:manage` | 从计划下发选定任务并生成附件快照 | `planId`、`planTaskIds`、可选 `taskTitle`、`deadlineMode`，以及可组合的 `batchId`、`businessUnitId`、`stationId` | `targetEmployees`、`createdTasks`、`createdAssignments` |

@@ -1,0 +1,8 @@
+[Unit]
+Description=Talent Platform MySQL logical backup
+RequiresMountsFor=/data/talent-platform/backups
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /opt/talent-platform/backup-mysql.sh

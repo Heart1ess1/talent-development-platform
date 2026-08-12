@@ -13,6 +13,7 @@
 - [CONTRIBUTING.md](CONTRIBUTING.md)：GitHub 协作、分支、提交、推送、Pull Request 和版本发布规则。
 - [docs/README.md](docs/README.md)：需求口径、API 合同、权限矩阵和任务表等项目文档入口。
 - [docs/codebase-guide.md](docs/codebase-guide.md)：面向新加入或接手同事的代码结构、业务链路和逐文件职责导览。
+- [docs/aliyun-deployment.md](docs/aliyun-deployment.md)：ECS、私有 OSS 签名传输、公共 OSS＋CDN、`yryhx.cn`、迁移和上线验收基线。
 - 本 README：项目能力、目录结构、运行方式、验证命令和发布包说明。
 
 ## 技术栈
@@ -35,6 +36,7 @@
 │   └── package.json          # 前端脚本与依赖
 ├── launcher/                 # Windows 图形启动器源码
 ├── docs/                     # 需求、API、权限和任务文档
+├── deploy/aliyun/            # 阿里云生产部署配置、安装、更新和验收脚本
 ├── docker-compose.yml        # 本地 MySQL
 ├── .gitignore                # Git 忽略规则
 └── CONTRIBUTING.md           # 协作开发指南
@@ -50,19 +52,22 @@
 ## 核心功能
 
 - 用户和角色：支持 `EMPLOYEE`、`MENTOR`、`STATION_MANAGER`、`TRAINING_ADMIN`、`ADMIN`、`SUPER_ADMIN`。
+- 角色化进度概览：员工首页集中呈现个人任务、课程/考试日程、完成进度、季度评分和导师反馈；管理首页聚合职责待办、任务/课程/考试/评价进度、近期安排和风险员工。
 - 登录与安全：JWT 登录态、首次登录强制改密、账号停用/角色调整/密码重置后旧令牌失效。
 - 人员管理：作为一级业务模块，下设“人员台账”“人员流动”和“调站审批”；台账统一完成人员查询、新增编辑、板块与双导师维护和 Excel 导入导出，调站审批按原有权限独立控制。
 - 人员流动：员工自主报备临时位置、变动时间和原因；导师、站点负责人及管理角色按人员范围查看当前位置、统计与连续轨迹。
-- 课程与任务：课程与课件、场次签到、培养计划、带附件任务下发、任务跟踪和培养进度展示。
-- 综合评价：批次评分方案、三方月评、加扣分、月度和季度锁定快照。
-- 考试管理：多题库分类、题目专业标签、手动/随机/一人一卷组卷、考试计划、自动保存、自动阅卷、单份与整场成绩发布、成绩导出、补考次数和防作弊事件。
+- 课程与任务：Word、PDF、PPT、OFD、图片课件统一转换为带姓名/工号水印的只读页面，配合课件学习跟踪、场次签到、培养计划、带附件任务下发、任务跟踪和培养进度展示。
+- 综合评价：工作台、月度评分、可复用评价模板和结果中心；支持自定义评分项满分/权重、考试与任务自动取分、三方月评、加扣分及月度/季度锁定快照。
+- 考试管理：多题库分类、题目专业标签、客观题手动/随机/一人一卷组卷、考试计划、自动保存与评分、整场考试结束后自动下发成绩、成绩导出、补考次数和防作弊事件。
 - 审计和权限：按角色和数据范围控制可访问内容，关键操作写入审计记录。
 
 ### 近期结构调整与维护原因
 
 - “人员管理”作为一级导航分组，依次下设“人员台账”“人员流动”和“调站审批”。人员台账承接新增、编辑、筛选、导入导出、双导师设置和完整档案；旧 `/employees` 浏览器地址仅用于兼容跳转。
 - `/api/v1/employees` 后端接口仍然保留。课程、任务、评价等模块需要复用人员选择数据，因此“移除重复页面”不等于删除共享业务 API。
-- 考试中心按“题库管理—试卷管理—考试计划—成绩管理”的业务顺序组织；题目按独立题库归档，试卷使用抽屉式组卷工作流，考试计划与成绩管理负责发布、执行和结果闭环。
+- 考试中心按“题库管理—试卷管理—考试计划—成绩管理”的业务顺序组织；交卷后管理员可立即查看客观题得分，员工必须等整场考试结束后才能看到系统自动下发的成绩。
+- 综合评价按“模板定义—月份应用—来源评分—汇总发布”组织；评分规则与具体月份解耦，来源业务仍在任务和考试模块处理，评价工作台集中呈现待办和进度。
+- 进度概览不再复用同一套粗粒度统计：`EMPLOYEE` 返回个人成长主页，其他角色按 `SELF`、`MENTORED`、`STATION`、`ALL` 数据范围返回培养运营工作台，并只显示当前角色有权处理的待办入口。
 - 服务站变更统一写入 `station_change_request`。员工申请经审批生效，管理员直接编辑人员站点时也写入已生效历史，避免人员当前站点与历史轨迹不一致。
 - `dev-wanben` 的人员资料与调站功能、`dzw_exam_TuoZhan` 的动态考试功能已经过迁移编号调整和现有架构适配。后续不要再次直接合并这两个原始分支，应以当前整合分支或其合并后的 `main` 为新开发基线。
 
@@ -77,6 +82,7 @@ GitHub 仓库首页只会自动显示根目录的 `README.md`。`docs/` 下的 M
 - [docs/permissions-matrix.md](docs/permissions-matrix.md)：角色、权限点、数据范围和前端路由权限。
 - [docs/task-board.md](docs/task-board.md)：轻量任务表，用于在未配置 GitHub Project 前追踪协作任务。
 - [docs/codebase-guide.md](docs/codebase-guide.md)：代码库结构、模块关系和每个源码/配置/迁移/测试文件的职责。
+- [docs/aliyun-deployment.md](docs/aliyun-deployment.md)：当前云端证据、OSS/CDN 安全分层、域名备案、迁移、回退和上线验收。
 
 也可以从 [docs/README.md](docs/README.md) 进入文档目录。
 
@@ -178,8 +184,14 @@ http://localhost:5173
 | `DEMO_USERS_ENABLED` | `true` | 是否启用测试账号引导；真实部署应设为 `false` |
 | `STORAGE_TYPE` | `local` | 设置为 `oss` 切换阿里云 OSS |
 | `LOCAL_STORAGE_ROOT` | `../data/uploads` | 本地私有文件目录；启动器会让源码模式与发布模式共用同一绝对目录，避免切换启动方式后附件不可访问 |
-| `OSS_ENDPOINT` / `OSS_BUCKET` | 空 | OSS 基础配置 |
+| `OSS_ENDPOINT` | 空 | ECS 访问上海 OSS 的内网 Endpoint |
+| `OSS_PUBLIC_ENDPOINT` | 空 | 为浏览器签发直传/下载 URL 的公网 Endpoint，不能填写 `-internal` 地址 |
+| `OSS_PRIVATE_BUCKET` | 空 | 课件原件、任务附件和成果文件的私有 Bucket |
+| `OSS_PUBLIC_BUCKET` | 空 | 前端静态资源与头像的公共资源 Bucket；Bucket ACL 仍应为私有 |
+| `CDN_BASE_URL` | 空 | 公共资源 CDN 地址，例如 `https://static.yryhx.cn` |
+| `OSS_BUCKET` | 空 | 旧版单 Bucket 兼容配置；生产环境应改用私有/公共两个 Bucket |
 | `OSS_ACCESS_KEY` / `OSS_SECRET_KEY` | 空 | OSS 凭证，禁止提交到 Git |
+| `OSS_RAM_ROLE` | 空 | ECS 上推荐填写实例 RAM 角色名，以临时凭证访问 OSS；设置后无需长期 AccessKey |
 
 数据库结构由 Flyway 自动创建和升级。人员 Excel 导入采用整批校验：任一行错误时整批不写入。
 

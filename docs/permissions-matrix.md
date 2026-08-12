@@ -30,7 +30,7 @@
 | `evaluation:view` | 查看评价、汇总和评价页面 | 是 | 是 | 是 | 是 | 是 | 是 |
 | `evaluation:submit` | 提交角色对应的月度评价项 | 否 | 是 | 是 | 是 | 否 | 否 |
 | `evaluation:manage` | 评分方案、加扣分、汇总生成和发布 | 否 | 否 | 否 | 是 | 是 | 是 |
-| `exam:manage` | 题库、试卷、考试计划、阅卷和发布成绩 | 否 | 否 | 否 | 是 | 是 | 是 |
+| `exam:manage` | 题库、客观题试卷、考试计划、即时成绩核对和历史主观题阅卷 | 否 | 否 | 否 | 是 | 是 | 是 |
 | `user:employee:manage` | 员工账号列表、启停、重置密码 | 否 | 否 | 否 | 否 | 是 | 是 |
 | `user:ops-role:manage` | 导师、服务站负责人、培训管理员账号创建、启停、重置密码和服务站范围管理 | 否 | 否 | 否 | 否 | 是 | 是 |
 | `user:admin:manage` | 管理员和超级管理员账号创建、角色调整 | 否 | 否 | 否 | 否 | 否 | 是 |
@@ -63,7 +63,7 @@
 | 页面 | 路由 | 前端进入条件 |
 | --- | --- | --- |
 | 登录 | `/login` | 未登录可访问。 |
-| 进度概览 | `/dashboard` | 已登录。 |
+| 进度概览 | `/dashboard` | 已登录；员工显示个人学习主页，其他角色按数据范围显示培养运营工作台，职责待办再按具体业务权限过滤。 |
 | 位置报备 / 人员流动 | `/location-reports` | `employee:read`；员工进入本人报备界面，其他角色进入按数据范围过滤的人员流动看板。 |
 | 人员管理 / 人员台账 | `/employee-directory` | `employee:read` 且非 `EMPLOYEE`；页面内新增编辑、导入导出和基础数据操作继续按具体权限控制。 |
 | 人员管理 / 人员流动 | `/location-reports` | `employee:read` 且非 `EMPLOYEE`；按数据范围展示人员位置变化。员工访问同一路由时仍显示独立的“位置报备”入口。 |
@@ -75,7 +75,10 @@
 | 培养计划 / 任务编排 | `/training-plans/tasks` | 需要 `task:manage`；维护任务内容、附件与执行顺序。旧地址 `/training-plans` 自动跳转到计划管理。 |
 | 培养计划 / 任务下发 | `/tasks` | 管理侧需要 `task:manage`；员工侧显示“我的任务”，只访问本人任务。 |
 | 培养计划 / 任务跟踪 | `/training-plans/tracking` | 已登录，按员工数据范围查询任务执行情况；审核操作额外需要 `task:review`。 |
-| 综合评价 | `/evaluation` | `evaluation:view`。 |
+| 综合评价 / 评价工作台 | `/evaluation/workbench` | `evaluation:view`；员工自动转到“我的评价”。 |
+| 综合评价 / 月度评分 | `/evaluation/monthly` | `evaluation:view`；人工录分还需 `evaluation:submit`，员工不可进入。 |
+| 综合评价 / 评价模板 | `/evaluation/templates` | `evaluation:manage`。 |
+| 综合评价 / 结果中心 | `/evaluation/results` | `evaluation:view`；非管理角色只返回已发布结果，员工仅查看本人。旧地址 `/evaluation` 按角色自动跳转。 |
 | 考试中心 | `/exams` | 已登录，页面内功能按权限和角色区分。 |
 | 账号管理 | `/users` | `user:employee:manage`；用于管理全体人员的账号、角色与数据范围。 |
 | 人员管理 / 调站审批 | `/station-change-review` | `master:manage`；查看审批统计和完整申请背景，通过申请会立即更新人员归属，拒绝必须填写原因。 |
