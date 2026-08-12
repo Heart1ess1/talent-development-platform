@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 APP_DIR="${APP_DIR:-/opt/talent-platform}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 OSSUTIL="${OSSUTIL:-/usr/local/bin/ossutil}"
 API_BASE="${API_BASE:-http://127.0.0.1/api/v1}"
 cd "$APP_DIR"
