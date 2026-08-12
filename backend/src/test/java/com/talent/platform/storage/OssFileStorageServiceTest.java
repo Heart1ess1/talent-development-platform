@@ -47,8 +47,8 @@ class OssFileStorageServiceTest {
     when(credentials.getAccessKeyId()).thenReturn("temporary-ak");
     when(credentials.getSecurityToken()).thenReturn("sts-token");
     when(signing.generatePostPolicy(any(Date.class), any(PolicyConditions.class)))
-        .thenReturn("encoded-policy");
-    when(signing.calculatePostSignature("encoded-policy")).thenReturn("signature");
+        .thenReturn("raw-policy");
+    when(signing.calculatePostSignature("raw-policy")).thenReturn("signature");
     var storage = new OssFileStorageService(mock(OSS.class), signing, "private-bucket",
         provider, "https://oss-cn-shanghai.aliyuncs.com");
 
@@ -58,6 +58,7 @@ class OssFileStorageServiceTest {
     assertThat(upload.method()).isEqualTo("POST");
     assertThat(upload.url()).hasToString("https://private-bucket.oss-cn-shanghai.aliyuncs.com/");
     assertThat(upload.formFields()).containsEntry("key", upload.key())
+        .containsEntry("policy", "cmF3LXBvbGljeQ==")
         .containsEntry("x-oss-forbid-overwrite", "true")
         .containsEntry("x-oss-security-token", "sts-token");
     var policy = ArgumentCaptor.forClass(PolicyConditions.class);

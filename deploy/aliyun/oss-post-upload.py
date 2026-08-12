@@ -5,8 +5,10 @@ import json
 import mimetypes
 import pathlib
 import sys
+import urllib.error
 import urllib.request
 import uuid
+import xml.etree.ElementTree as ET
 
 
 def main() -> None:
@@ -35,9 +37,25 @@ def main() -> None:
     ])
     request = urllib.request.Request(ticket["uploadUrl"], data=b"".join(chunks), method="POST")
     request.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
-    with urllib.request.urlopen(request, timeout=120) as response:
-        if response.status not in (200, 201, 204):
-            raise SystemExit(f"OSS upload failed: HTTP {response.status}")
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            if response.status not in (200, 201, 204):
+                raise SystemExit(f"OSS upload failed: HTTP {response.status}")
+    except urllib.error.HTTPError as error:
+        code = "unknown"
+        message = "unknown"
+        request_id = error.headers.get("x-oss-request-id", "unknown")
+        try:
+            document = ET.fromstring(error.read())
+            code = document.findtext("Code") or code
+            message = document.findtext("Message") or message
+            request_id = document.findtext("RequestId") or request_id
+        except ET.ParseError:
+            pass
+        raise SystemExit(
+            f"OSS upload failed: HTTP {error.code} code={code} "
+            f"message={message} requestId={request_id}"
+        ) from None
     print(fields["key"])
 
 
