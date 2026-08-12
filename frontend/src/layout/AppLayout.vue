@@ -56,9 +56,11 @@ const personnelChildren=computed<MenuItem[]>(()=>{
 const evaluationChildren=computed<MenuItem[]>(()=>{
   if(isEmployee.value)return [{to:'/evaluation/results',label:'我的评价'}]
   const children:MenuItem[]=[
-    {to:'/evaluation/workbench',label:'评价工作台'},
-    {to:'/evaluation/monthly',label:'月度评分'}
+    {to:'/evaluation/workbench',label:'评价工作台'}
   ]
+  if(auth.can('evaluation:manage'))children.push({to:'/evaluation/assignments',label:'评分任务'})
+  if(auth.can('evaluation:submit'))children.push({to:'/evaluation/my-tasks',label:'我的评分任务'})
+  children.push({to:'/evaluation/monthly',label:'月度评分'})
   if(auth.can('evaluation:manage'))children.push({to:'/evaluation/templates',label:'评价模板'})
   children.push({to:'/evaluation/results',label:'结果中心'})
   return children

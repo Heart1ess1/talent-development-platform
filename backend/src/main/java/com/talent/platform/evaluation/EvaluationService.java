@@ -151,9 +151,9 @@ public class EvaluationService {
     SourceAggregate exam = examAggregate(employeeId,start,scheme);
     SourceAggregate task = taskAggregate(employeeId,start,end,scheme);
     Map<String,List<Map<String,Object>>> manual = manualScores(employeeId, start);
-    ManualAggregate mentor=mentorAggregate(employeeId,manual.getOrDefault("MENTOR",List.of()));
+    ManualAggregate mentor=mentorAggregate(employeeId,month,manual.getOrDefault("MENTOR",List.of()));
     StationAggregate station=stationAggregate(employeeId,month,scheme,manual.getOrDefault("STATION",List.of()));
-    ManualAggregate training=singleManualAggregate(manual.getOrDefault("TRAINING",List.of()));
+    ManualAggregate training=trainingAggregate(employeeId,month,manual.getOrDefault("TRAINING",List.of()));
     Map<String,Map<String,Object>> overrides = overrideScores(employeeId, start);
     Map<String,BigDecimal> sourceScores = new LinkedHashMap<>();
     sourceScores.put("EXAM", exam.score()); sourceScores.put("TASK", task.score());
@@ -184,7 +184,7 @@ public class EvaluationService {
       if("TASK".equals(code))item.put("breakdown",task.items());
       if("MENTOR".equals(code)){item.put("breakdown",mentor.entries());item.put("submittedCount",mentor.submitted());item.put("requiredCount",mentor.required());item.put("partialScore",mentor.partialScore());}
       if("STATION".equals(code)){item.put("breakdown",station.entries());item.put("aggregationMode",station.mode());item.put("submittedCount",station.submitted());item.put("requiredCount",station.required());}
-      if("TRAINING".equals(code)){item.put("breakdown",training.entries());item.put("submittedCount",training.submitted());item.put("requiredCount",training.required());}
+      if("TRAINING".equals(code)){item.put("breakdown",training.entries());item.put("submittedCount",training.submitted());item.put("requiredCount",training.required());item.put("partialScore",training.partialScore());item.put("canEvaluate",training.entries().stream().anyMatch(x->Boolean.TRUE.equals(x.get("canEvaluate"))));}
       if(List.of("MENTOR","STATION","TRAINING").contains(code)){
         List<Map<String,Object>> entries=switch(code){case "MENTOR"->mentor.entries();case "STATION"->station.entries();default->training.entries();};
         String names=entries.stream().map(x->Objects.toString(x.get("evaluatorName"),"")).filter(x->!x.isBlank()).distinct().collect(java.util.stream.Collectors.joining("、"));
@@ -257,14 +257,16 @@ public class EvaluationService {
     return new SourceAggregate(scalePercent(percent,maxScore(scheme,component)),items);
   }
 
-  private ManualAggregate mentorAggregate(Long employeeId,List<Map<String,Object>> rows){
+  private ManualAggregate mentorAggregate(Long employeeId,YearMonth month,List<Map<String,Object>> rows){
     Map<String,Object> employee=db.queryForMap("""
       select e.mentor_user_id,e.skill_mentor_user_id,m.display_name mentor_name,sm.display_name skill_mentor_name
       from employee e left join sys_user m on m.id=e.mentor_user_id left join sys_user sm on sm.id=e.skill_mentor_user_id where e.id=?
       """,employeeId);
-    Map<Long,String> expected=new LinkedHashMap<>();
-    if(employee.get("mentor_user_id")!=null)expected.put(number(employee.get("mentor_user_id")).longValue(),Objects.toString(employee.get("mentor_name"),"导师"));
-    if(employee.get("skill_mentor_user_id")!=null)expected.put(number(employee.get("skill_mentor_user_id")).longValue(),Objects.toString(employee.get("skill_mentor_name"),"技能导师"));
+    ReviewerPlan plan=reviewerPlan(employeeId,month,"MENTOR",0);Map<Long,String> expected=new LinkedHashMap<>(plan.reviewers());
+    if(!plan.explicit()){
+      if(employee.get("mentor_user_id")!=null)expected.put(number(employee.get("mentor_user_id")).longValue(),Objects.toString(employee.get("mentor_name"),"导师"));
+      if(employee.get("skill_mentor_user_id")!=null)expected.put(number(employee.get("skill_mentor_user_id")).longValue(),Objects.toString(employee.get("skill_mentor_name"),"技能导师"));
+    }
     Map<Long,Map<String,Object>> submittedRows=new LinkedHashMap<>();
     for(var row:rows)submittedRows.put(number(row.get("evaluator_user_id")).longValue(),row);
     var entries=new ArrayList<Map<String,Object>>();var submittedScores=new ArrayList<BigDecimal>();
@@ -273,14 +275,18 @@ public class EvaluationService {
       item.put("evaluatorId",expectedEntry.getKey());item.put("evaluatorName",expectedEntry.getValue());item.put("score",row==null?null:decimal(row,"score"));item.put("comment",row==null?null:row.get("comment"));item.put("submittedAt",row==null?null:row.get("submitted_at"));item.put("status",row==null?"PENDING":"SUBMITTED");
       item.put("canEvaluate","MENTOR".equals(SecurityUtils.current().role())&&SecurityUtils.current().id().equals(expectedEntry.getKey()));entries.add(item);if(row!=null)submittedScores.add(decimal(row,"score"));
     }
-    BigDecimal partial=average(submittedScores);BigDecimal score=!expected.isEmpty()&&submittedScores.size()==expected.size()?partial:null;
+    BigDecimal partial=EvaluationRules.average(submittedScores);BigDecimal score=EvaluationRules.completedAverage(submittedScores,expected.size());
     return new ManualAggregate(score,partial,entries,expected.size(),submittedScores.size());
   }
 
-  private ManualAggregate singleManualAggregate(List<Map<String,Object>> rows){
-    Map<String,Object> row=rows.isEmpty()?null:rows.get(rows.size()-1);var entries=new ArrayList<Map<String,Object>>();
-    if(row!=null){var item=manualEntry(row);item.put("canEvaluate","TRAINING_ADMIN".equals(SecurityUtils.current().role()));entries.add(item);}
-    return new ManualAggregate(row==null?null:decimal(row,"score"),row==null?null:decimal(row,"score"),entries,1,row==null?0:1);
+  private ManualAggregate trainingAggregate(Long employeeId,YearMonth month,List<Map<String,Object>> rows){
+    ReviewerPlan plan=reviewerPlan(employeeId,month,"TRAINING",0);
+    if(!plan.explicit()){
+      Map<String,Object> row=rows.isEmpty()?null:rows.get(rows.size()-1);var entries=new ArrayList<Map<String,Object>>();
+      if(row!=null){var item=manualEntry(row);item.put("canEvaluate","TRAINING_ADMIN".equals(SecurityUtils.current().role()));entries.add(item);}
+      return new ManualAggregate(row==null?null:decimal(row,"score"),row==null?null:decimal(row,"score"),entries,1,row==null?0:1);
+    }
+    return assignedAggregate(plan,rows,"TRAINING_ADMIN");
   }
 
   private StationAggregate stationAggregate(Long employeeId,YearMonth month,Map<String,Object> scheme,List<Map<String,Object>> rows){
@@ -295,9 +301,11 @@ public class EvaluationService {
     }
     Map<Long,List<Map<String,Object>>> byStation=new LinkedHashMap<>();for(var row:rows)byStation.computeIfAbsent(number(row.get("scope_id")).longValue(),ignored->new ArrayList<>()).add(row);
     var entries=new ArrayList<Map<String,Object>>();BigDecimal total=BigDecimal.ZERO;int required=0,submitted=0;boolean complete=true;
-    for(var period:periods){BigDecimal weight=weights.getOrDefault(period.stationId(),BigDecimal.ZERO);List<Map<String,Object>> ratings=byStation.getOrDefault(period.stationId(),List.of());BigDecimal stationScore=average(ratings.stream().map(x->decimal(x,"score")).toList());if(weight.compareTo(BigDecimal.ZERO)>0){required++;if(stationScore==null)complete=false;else{submitted++;total=total.add(stationScore.multiply(weight).divide(new BigDecimal("100"),8,RoundingMode.HALF_UP));}}
-      var item=new LinkedHashMap<String,Object>();item.put("stationId",period.stationId());item.put("stationName",period.name());item.put("days",period.days());item.put("weight",weight.setScale(2,RoundingMode.HALF_UP));item.put("score",stationScore);item.put("status",weight.compareTo(BigDecimal.ZERO)==0?"IGNORED":stationScore==null?"PENDING":"SUBMITTED");item.put("evaluations",ratings.stream().map(this::manualEntry).toList());
-      Integer managed=db.queryForObject("select count(*) from station_manager_scope where station_id=? and user_id=?",Integer.class,period.stationId(),SecurityUtils.current().id());item.put("canEvaluate","STATION_MANAGER".equals(SecurityUtils.current().role())&&managed!=null&&managed>0);entries.add(item);
+    for(var period:periods){BigDecimal weight=weights.getOrDefault(period.stationId(),BigDecimal.ZERO);List<Map<String,Object>> ratings=byStation.getOrDefault(period.stationId(),List.of());ReviewerPlan plan=reviewerPlan(employeeId,month,"STATION",period.stationId());BigDecimal stationScore;List<Map<String,Object>> evaluationEntries;boolean canEvaluate;
+      if(plan.explicit()){ManualAggregate assigned=assignedAggregate(plan,ratings,"STATION_MANAGER");stationScore=assigned.score();evaluationEntries=assigned.entries();canEvaluate=evaluationEntries.stream().anyMatch(x->Boolean.TRUE.equals(x.get("canEvaluate")));}
+      else{stationScore=EvaluationRules.average(ratings.stream().map(x->decimal(x,"score")).toList());evaluationEntries=ratings.stream().map(this::manualEntry).toList();Integer managed=db.queryForObject("select count(*) from station_manager_scope where station_id=? and user_id=?",Integer.class,period.stationId(),SecurityUtils.current().id());canEvaluate="STATION_MANAGER".equals(SecurityUtils.current().role())&&managed!=null&&managed>0;}
+      if(weight.compareTo(BigDecimal.ZERO)>0){required++;if(stationScore==null)complete=false;else{submitted++;total=total.add(stationScore.multiply(weight).divide(new BigDecimal("100"),8,RoundingMode.HALF_UP));}}
+      var item=new LinkedHashMap<String,Object>();item.put("stationId",period.stationId());item.put("stationName",period.name());item.put("days",period.days());item.put("weight",weight.setScale(2,RoundingMode.HALF_UP));item.put("score",stationScore);item.put("status",weight.compareTo(BigDecimal.ZERO)==0?"IGNORED":stationScore==null?"PENDING":"SUBMITTED");item.put("evaluations",evaluationEntries);item.put("reviewerCount",evaluationEntries.size());item.put("submittedCount",evaluationEntries.stream().filter(x->x.get("score")!=null).count());item.put("canEvaluate",canEvaluate);entries.add(item);
     }
     return new StationAggregate(complete&&required>0?total.setScale(2,RoundingMode.HALF_UP):null,entries,mode,required,submitted);
   }
@@ -326,7 +334,17 @@ public class EvaluationService {
   public boolean stationApplies(Long employeeId,YearMonth month,Long stationId){return stationPeriods(employeeId,month).stream().anyMatch(x->x.stationId().equals(stationId));}
 
   private Map<String,Object> manualEntry(Map<String,Object> row){var item=new LinkedHashMap<String,Object>();item.put("evaluatorId",row.get("evaluator_user_id"));item.put("evaluatorName",row.get("evaluator_name"));item.put("score",row.get("score"));item.put("comment",row.get("comment"));item.put("submittedAt",row.get("submitted_at"));return item;}
-  private BigDecimal average(List<BigDecimal> values){if(values.isEmpty())return null;return values.stream().reduce(BigDecimal.ZERO,BigDecimal::add).divide(BigDecimal.valueOf(values.size()),2,RoundingMode.HALF_UP);}
+  private ReviewerPlan reviewerPlan(Long employeeId,YearMonth month,String component,long scopeId){
+    var tasks=db.queryForList("select id from evaluation_rating_task where employee_id=? and period_month=? and component_type=? and scope_id=? and status='ACTIVE'",employeeId,month.atDay(1),component,scopeId);
+    if(tasks.isEmpty())return new ReviewerPlan(false,new LinkedHashMap<>());Long taskId=number(tasks.get(0).get("id")).longValue();Map<Long,String> reviewers=new LinkedHashMap<>();
+    for(var row:db.queryForList("select u.id,u.display_name from evaluation_rating_reviewer r join sys_user u on u.id=r.reviewer_user_id where r.task_id=? and r.status='ACTIVE' order by u.display_name,u.id",taskId))reviewers.put(number(row.get("id")).longValue(),Objects.toString(row.get("display_name"),"评分人"));
+    return new ReviewerPlan(true,reviewers);
+  }
+  private ManualAggregate assignedAggregate(ReviewerPlan plan,List<Map<String,Object>> rows,String role){
+    Map<Long,Map<String,Object>> submittedRows=new LinkedHashMap<>();for(var row:rows)submittedRows.put(number(row.get("evaluator_user_id")).longValue(),row);
+    var entries=new ArrayList<Map<String,Object>>();var scores=new ArrayList<BigDecimal>();for(var reviewer:plan.reviewers().entrySet()){Map<String,Object> row=submittedRows.get(reviewer.getKey());var item=new LinkedHashMap<String,Object>();item.put("evaluatorId",reviewer.getKey());item.put("evaluatorName",reviewer.getValue());item.put("score",row==null?null:decimal(row,"score"));item.put("comment",row==null?null:row.get("comment"));item.put("submittedAt",row==null?null:row.get("submitted_at"));item.put("status",row==null?"PENDING":"SUBMITTED");item.put("canEvaluate",role.equals(SecurityUtils.current().role())&&SecurityUtils.current().id().equals(reviewer.getKey()));entries.add(item);if(row!=null)scores.add(decimal(row,"score"));}
+    BigDecimal partial=EvaluationRules.average(scores),score=EvaluationRules.completedAverage(scores,plan.reviewers().size());return new ManualAggregate(score,partial,entries,plan.reviewers().size(),scores.size());
+  }
   private LocalDate toDate(Object value){if(value instanceof LocalDate d)return d;if(value instanceof LocalDateTime d)return d.toLocalDate();if(value instanceof java.sql.Timestamp t)return t.toLocalDateTime().toLocalDate();if(value instanceof java.sql.Date d)return d.toLocalDate();return LocalDate.parse(String.valueOf(value).substring(0,10));}
 
   private Map<String,Map<String,Object>> overrideScores(Long employeeId, LocalDate month) {
@@ -348,6 +366,7 @@ public class EvaluationService {
   private String toJson(Object value) { try { return json.writeValueAsString(value); } catch (JsonProcessingException e) { throw new IllegalStateException(e); } }
 
   record StationPeriod(Long stationId,String name,long days) {}
+  private record ReviewerPlan(boolean explicit,Map<Long,String> reviewers) {}
   private record SourceAggregate(BigDecimal score,List<Map<String,Object>> items) {}
   private record ManualAggregate(BigDecimal score,BigDecimal partialScore,List<Map<String,Object>> entries,int required,int submitted) {}
   private record StationAggregate(BigDecimal score,List<Map<String,Object>> entries,String mode,int required,int submitted) {}

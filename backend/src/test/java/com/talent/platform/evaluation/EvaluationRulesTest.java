@@ -70,6 +70,14 @@ class EvaluationRulesTest {
     assertEquals(d("80.00"),EvaluationRules.weightedSourceScore(weighted).setScale(2));
   }
 
+  @Test void multipleReviewersProduceOnlyAPartialAverageUntilEveryoneSubmits() {
+    var submitted=List.of(d("80"),d("90"));
+    assertEquals(d("85.00"),EvaluationRules.average(submitted));
+    assertNull(EvaluationRules.completedAverage(submitted,3));
+    assertEquals(d("85.00"),EvaluationRules.completedAverage(submitted,2));
+    assertNull(EvaluationRules.completedAverage(List.of(),0));
+  }
+
   private static EvaluationRules.WeightedItem item(boolean enabled,String weight){return new EvaluationRules.WeightedItem(enabled,d(weight));}
   private static EvaluationRules.WeightedScore score(boolean enabled,String weight,String score){return new EvaluationRules.WeightedScore(enabled,d(weight),score==null?null:d(score));}
   private static BigDecimal d(String value){return new BigDecimal(value);}

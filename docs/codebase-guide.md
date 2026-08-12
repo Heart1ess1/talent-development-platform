@@ -127,8 +127,10 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | --- | --- |
 | `dashboard/DashboardController.java` | 按角色生成两套概览模型：员工个人待办、学习日程、完成记录、季度评分和导师反馈；管理侧职责待办、四条业务进度、近期安排和风险员工，全部沿用人员数据范围。 |
 | `evaluation/EvaluationController.java` | 评价模板库、模板应用、工作台待办、月度方案、评分项提交/覆盖、加扣分、月度/季度汇总生成、发布与重开的 API。 |
+| `evaluation/EvaluationAssignmentController.java` | 评分任务生成、任务查询、候选评分人、本人任务和批量分配 API。 |
+| `evaluation/EvaluationAssignmentService.java` | 按员工、月份、人工评分项和站点作用域生成任务，维护有效评分人，并汇总个人提交进度与正式平均分。 |
 | `evaluation/EvaluationService.java` | 评价核心计算：匹配月份方案，把考试/任务来源折算到配置满分，聚合人工评分、覆盖与加扣分，并写入可追溯的月度和季度快照。 |
-| `evaluation/EvaluationRules.java` | 纯规则函数：校验月度评分项权重、季度权重，并计算限定在 0–100 的最终分数。 |
+| `evaluation/EvaluationRules.java` | 纯规则函数：校验月度评分项权重、季度权重，计算多人过程/完成平均分及限定在 0–100 的最终分数。 |
 | `evaluation/EvaluationScheduler.java` | 每月 1 日 02:00 自动生成上月月评；每季度首月 03:00 自动生成上季度汇总。 |
 | `exam/ExamController.java` | 多题库与题目维护、客观题手动/随机/一人一卷组卷、考试计划与分配、考生作答、防作弊事件、管理端即时成绩和员工端延迟可见结果。 |
 | `exam/ExamScoringService.java` | 自动阅卷服务；统一读取静态或动态答卷题目，处理超时交卷，并在整场考试结束后批量标记成绩可见。 |
@@ -171,6 +173,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `db/migration/V20__task_attachments.sql` | 增加计划任务和已下发任务的附件元数据、快照来源及访问索引。 |
 | `db/migration/V22__evaluation_template_library.sql` | 增加独立评价模板库、评分项满分和方案模板来源，保留既有方案的百分制默认口径。 |
 | `db/migration/V25__evaluation_source_weights.sql` | 增加任务/考试内部权重、站点汇总模式、多导师/多站点评分作用域及员工月度站点权重。 |
+| `db/migration/V26__evaluation_rating_tasks.sql` | 增加人工评分任务与有效评分人表，并把历史月度人工评分回填为可查询任务。 |
 | `db/migration/V23__course_material_learning.sql` | 增加课件预览会话、员工学习次数和累计学习时长记录。 |
 | `db/migration/V24__object_upload_ticket.sql` | 增加 OSS 客户端直传票据、用途/归属绑定、有效期和单次消费状态。 |
 
@@ -221,11 +224,14 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `views/TasksView.vue` | 管理侧任务下发和任务跟踪、员工侧我的任务、任务附件、提交/重提、审核、进度明细和筛选。 |
 | `storageTransfer.ts` | 查询存储能力，在 OSS 模式执行受 Policy 限制的表单直传和完成确认，在本地模式回退 multipart 上传。 |
 | `views/evaluation/EvaluationWorkbenchView.vue` | 按月份展示方案覆盖、发布进度、缺失汇总和跨任务/考试/人工评价的待办入口。 |
+| `views/evaluation/EvaluationAssignmentsView.vue` | 管理员按月份查看人工评分任务、未分配/进行中/已完成统计，并批量分配多名评分人。 |
+| `views/evaluation/EvaluationAssignmentDetailView.vue` | 查询单项任务的评分人、提交时间、个人分数和平均分，并调整当前评分人、截止时间与说明。 |
+| `views/evaluation/MyEvaluationTasksView.vue` | 导师、站点负责人和培训管理员查看只分配给本人的评分任务及团队提交进度。 |
 | `views/evaluation/EvaluationMonthlyView.vue` | 按员工和月份核对自动来源、提交职责内人工评分、管理员核定及加扣分，并预览综合分。 |
 | `views/evaluation/EvaluationTemplatesView.vue` | 管理独立评价模板，将模板应用到批次月份形成方案草稿，并维护发布和历史版本。 |
 | `views/evaluation/EvaluationResultsView.vue` | 查询月度/季度结果与分项快照，生成、发布或重开汇总；员工侧只显示本人已发布结果。 |
 | `evaluation/model.ts` | 综合评价的评分项定义、初始模板、状态和显示格式共享模型。 |
-| `styles/evaluation-center.css` | 综合评价四个二级页面共享的工作台、模板、评分卡、快照及响应式视觉规范。 |
+| `styles/evaluation-center.css` | 综合评价工作台、任务编排、月度评分、模板和结果页面共享的卡片、表格、快照及响应式视觉规范。 |
 | `styles/dashboard.css` | 员工主页与管理操作台共用的指标卡、待办、业务进度、日程、风险人员及响应式视觉规范。 |
 | `views/exams/ExamQuestionBankView.vue` | 多题库目录、题目新增编辑、标签、启停、安全删除和指定题库 Excel 导入。 |
 | `views/exams/ExamPapersView.vue` | 分步抽屉式手动/随机/一人一卷组卷、题库范围、试卷详情和安全删除。 |
@@ -260,7 +266,8 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `employee/EmployeeDirectoryControllerTest.java` | 人员目录筛选、数据范围或导出相关行为。 |
 | `employee/EmployeeProfileControllerTest.java` | 员工个人资料读取、编辑边界与权限限制。 |
 | `movement/LocationReportControllerTest.java` | 首次位置起点、轨迹时间顺序、员工管理入口隔离和导师数据范围。 |
-| `evaluation/EvaluationRulesTest.java` | 评价权重校验和最终得分计算。 |
+| `evaluation/EvaluationAssignmentControllerTest.java` | 本人任务按当前账号过滤、月份任务生成和多人分配请求转发。 |
+| `evaluation/EvaluationRulesTest.java` | 评价权重、多人完成平均分和最终得分计算。 |
 | `exam/ExamScoringServiceTest.java` | 客观题/多选题答案比对和阅卷逻辑。 |
 | `security/JwtServiceTest.java` | JWT 创建、解析和失效相关行为。 |
 | `security/PermissionServiceTest.java` | 角色权限集和数据范围过滤规则。 |

@@ -8,11 +8,12 @@ import '@/styles/evaluation-center.css'
 
 const auth=useAuthStore(),router=useRouter()
 const month=ref(new Date().toISOString().slice(0,7)),loading=ref(false)
-const overview=ref<any>({totalEmployees:0,schemeCoveredEmployees:0,draftSummaries:0,publishedSummaries:0,missingSummaries:0,pendingManualScores:0,pendingTaskReviews:0,pendingExamReviews:0,unpublishedExamResults:0})
+const overview=ref<any>({totalEmployees:0,schemeCoveredEmployees:0,draftSummaries:0,publishedSummaries:0,missingSummaries:0,pendingManualScores:0,pendingTaskReviews:0,pendingExamReviews:0,unpublishedExamResults:0,unassignedRatingTasks:0})
 const canManage=computed(()=>auth.can('evaluation:manage'))
 const coverage=computed(()=>overview.value.totalEmployees?Math.round(overview.value.schemeCoveredEmployees/overview.value.totalEmployees*100):0)
 const completion=computed(()=>overview.value.totalEmployees?Math.round(overview.value.publishedSummaries/overview.value.totalEmployees*100):0)
 const actions=computed(()=>[
+  ...(canManage.value?[{title:'未分配评分人的任务',description:'先明确导师、站点或培训评分人，再开始本月评价',count:overview.value.unassignedRatingTasks,to:'/evaluation/assignments',icon:Setting}]:[]),
   {title:'待提交人工评分',description:'导师、站点或培训方评分尚未完成',count:overview.value.pendingManualScores,to:'/evaluation/monthly',icon:EditPen},
   {title:'待审核任务成果',description:'先审核任务并给分，系统会自动进入月评',count:overview.value.pendingTaskReviews,to:'/training-plans/tracking?focus=pending-review',icon:Document},
   {title:'遗留主观题阅卷',description:'历史主观题完成阅卷后等待考试结束自动下发',count:overview.value.pendingExamReviews,to:'/exams/results?focus=review',icon:List}
@@ -41,9 +42,10 @@ watch(month,load);onMounted(load)
       <div class="evaluation-workspace-head"><div><h2>月度评价流程</h2><p>模板定义规则，评分来源各自完成，最终汇总只负责核对和发布。</p></div></div>
       <div class="evaluation-flow-grid">
         <article class="evaluation-flow-card" @click="go(canManage?'/evaluation/templates':'/evaluation/monthly')"><span class="step">1</span><strong>选择评价模板</strong><p>设置评分项、每项满分、权重和加扣分边界，并应用到批次月份。</p><a>进入模板与方案 →</a></article>
-        <article class="evaluation-flow-card" @click="go('/exams/results')"><span class="step">2</span><strong>完成来源评分</strong><p>客观题自动评分并在考试结束后下发，任务审核仍在任务模块完成。</p><a>核对考试与任务 →</a></article>
-        <article class="evaluation-flow-card" @click="go('/evaluation/monthly')"><span class="step">3</span><strong>补齐人工评价</strong><p>导师、站点负责人和培训方只处理自己职责内的评分项。</p><a>进入月度评分 →</a></article>
-        <article class="evaluation-flow-card" @click="go('/evaluation/results')"><span class="step">4</span><strong>生成并发布结果</strong><p>核对缺失项、加扣分和分项快照，发布后锁定历史结果。</p><a>进入结果中心 →</a></article>
+        <article class="evaluation-flow-card" @click="go(canManage?'/evaluation/assignments':'/evaluation/my-tasks')"><span class="step">2</span><strong>生成并分配评分任务</strong><p>按员工和人工评分项生成任务，指定一名或多名评分人及截止时间。</p><a>{{canManage?'进入评分任务':'查看我的任务'}} →</a></article>
+        <article class="evaluation-flow-card" @click="go('/exams/results')"><span class="step">3</span><strong>完成来源评分</strong><p>客观题自动评分并在考试结束后下发，任务审核仍在任务模块完成。</p><a>核对考试与任务 →</a></article>
+        <article class="evaluation-flow-card" @click="go('/evaluation/monthly')"><span class="step">4</span><strong>补齐人工评价</strong><p>评分人分别提交，全部完成后系统自动取平均分。</p><a>进入月度评分 →</a></article>
+        <article class="evaluation-flow-card" @click="go('/evaluation/results')"><span class="step">5</span><strong>生成并发布结果</strong><p>核对缺失项、加扣分和分项快照，发布后锁定历史结果。</p><a>进入结果中心 →</a></article>
       </div>
     </section>
 
