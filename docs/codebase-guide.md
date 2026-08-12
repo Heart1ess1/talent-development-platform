@@ -113,7 +113,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `training/TrainingPlanController.java` | 培养计划统计、草稿创建、编辑、复制、安全启停/删除，以及计划任务编排、使用情况与完整排序校验。 |
 | `storage/FileStorageService.java` | 私有文件对象存储抽象：保存、读取、删除、OSS 直传票据校验及短时签名下载。 |
 | `storage/LocalFileStorageService.java` | `STORAGE_TYPE=local` 时按日期和 UUID 写入本地目录，并防止路径穿越。 |
-| `storage/OssFileStorageService.java` | `STORAGE_TYPE=oss` 时使用私有 Bucket 和 ECS RAM Role，提供 PUT/GET 预签名 URL、对象校验和内部读取。 |
+| `storage/OssFileStorageService.java` | `STORAGE_TYPE=oss` 时使用私有 Bucket 和 ECS RAM Role，提供限制大小的 POST Policy、临时对象提交、GET 预签名 URL 和内部读取。 |
 | `storage/UploadTicketService.java` | 创建绑定用户、用途和业务对象的 15 分钟上传票据，校验并单次消费，定时清理过期对象。 |
 | `storage/StorageTransferController.java` | 向前端返回本环境是否启用直传和签名下载。 |
 | `storage/PublicAssetStorageService.java` | 头像等公共资源的独立存储抽象。 |
@@ -218,7 +218,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `utils/trainingPlan.ts` | 培养计划类型、启用判断、业务状态和日期显示规则。 |
 | `components/TaskAttachmentsPanel.vue` | 任务附件文件名展示、上传、删除、下载，以及 PDF、图片、文本和 DOCX 安全预览。 |
 | `views/TasksView.vue` | 管理侧任务下发和任务跟踪、员工侧我的任务、任务附件、提交/重提、审核、进度明细和筛选。 |
-| `storageTransfer.ts` | 查询存储能力，在 OSS 模式执行签名 PUT 和完成确认，在本地模式回退 multipart 上传。 |
+| `storageTransfer.ts` | 查询存储能力，在 OSS 模式执行受 Policy 限制的表单直传和完成确认，在本地模式回退 multipart 上传。 |
 | `views/evaluation/EvaluationWorkbenchView.vue` | 按月份展示方案覆盖、发布进度、缺失汇总和跨任务/考试/人工评价的待办入口。 |
 | `views/evaluation/EvaluationMonthlyView.vue` | 按员工和月份核对自动来源、提交职责内人工评分、管理员核定及加扣分，并预览综合分。 |
 | `views/evaluation/EvaluationTemplatesView.vue` | 管理独立评价模板，将模板应用到批次月份形成方案草稿，并维护发布和历史版本。 |

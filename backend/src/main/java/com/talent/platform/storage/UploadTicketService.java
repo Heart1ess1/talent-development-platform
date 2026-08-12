@@ -48,6 +48,16 @@ public class UploadTicketService {
     }
     if (size <= 0) throw new BusinessException(400, "不能上传空文件");
 
+    long creatorId = SecurityUtils.current().id();
+    db.queryForObject("select id from sys_user where id=? for update", Long.class, creatorId);
+    Integer pending = db.queryForObject("""
+        select count(*) from object_upload_ticket
+        where created_by=? and consumed_at is null and expires_at>=now()
+        """, Integer.class, creatorId);
+    if (pending != null && pending >= 10) {
+      throw new BusinessException(429, "Too many pending uploads; complete them or wait for expiry");
+    }
+
     var signed = storage.prepareDirectUpload(
         purpose,
         originalName,
@@ -62,13 +72,14 @@ public class UploadTicketService {
         ) values(?,?,?,?,?,?,?,?,?)
         """,
         ticketId.toString(), purpose, ownerId, signed.key(), originalName,
-        normalizeContentType(contentType), size, SecurityUtils.current().id(),
+        normalizeContentType(contentType), size, creatorId,
         Timestamp.from(signed.expiresAt()));
     return new UploadTicket(
         ticketId,
         signed.url().toString(),
         signed.method(),
         signed.headers(),
+        signed.formFields(),
         signed.expiresAt());
   }
 
@@ -125,7 +136,7 @@ public class UploadTicketService {
   public void cleanupExpiredTickets() {
     var expired = db.queryForList("""
         select id,object_key from object_upload_ticket
-        where consumed_at is null and expires_at<now()
+        where expires_at<now()
         order by expires_at
         limit 100
         """);
@@ -135,10 +146,9 @@ public class UploadTicketService {
       } catch (RuntimeException ignored) {
         continue;
       }
-      db.update("delete from object_upload_ticket where id=? and consumed_at is null",
+      db.update("delete from object_upload_ticket where id=? and expires_at<now()",
           String.valueOf(row.get("id")));
     }
-    db.update("delete from object_upload_ticket where consumed_at<date_sub(now(),interval 7 day)");
   }
 
   private String normalizeContentType(String contentType) {
@@ -158,10 +168,12 @@ public class UploadTicketService {
       String uploadUrl,
       String method,
       Map<String, String> headers,
+      Map<String, String> formFields,
       Instant expiresAt
   ) {
     public UploadTicket {
       headers = Map.copyOf(new LinkedHashMap<>(headers));
+      formFields = Map.copyOf(new LinkedHashMap<>(formFields));
     }
   }
 

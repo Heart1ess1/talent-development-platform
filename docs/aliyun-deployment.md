@@ -58,7 +58,7 @@ flowchart LR
     U -->|"JS / CSS / 公共图片 / 头像"| C["static.yryhx.cn CDN"]
     C --> P["公共资源 OSS Bucket（ACL 仍为私有，CDN 回源鉴权）"]
     U -->|"申请 15 分钟上传票据"| E
-    E -->|"签名 PUT URL"| U
+    E -->|"限大小 POST Policy"| U
     U -->|"直传任务附件 / 成果文件 / 课件原件"| R["私有 OSS Bucket"]
     U -->|"申请下载"| E
     E -->|"权限校验后签发 5 分钟 GET URL"| U
@@ -80,9 +80,9 @@ flowchart LR
 ## 3. 代码支持
 
 - `STORAGE_TYPE=local`：保持现有本地开发和紧急回退，前端自动使用原 multipart 接口。
-- `STORAGE_TYPE=oss`：前端先查询 `/api/v1/storage/capabilities`，再获取一次性上传票据并 PUT 到 OSS。
+- `STORAGE_TYPE=oss`：前端先查询 `/api/v1/storage/capabilities`，再获取一次性上传票据并按受大小约束的 POST Policy 上传到 OSS 临时对象；完成校验后服务端提交为不可变正式对象。
 - 上传票据有效期 15 分钟，绑定创建人、用途和业务对象；完成时后端通过 HEAD 校验对象大小和内容类型，票据只能消费一次。
-- 未完成且过期的上传对象每小时清理；已消费票据保留 7 天后删除票据记录，不删除业务对象。
+- 所有上传票据到期后按小时清理票据记录及其临时对象；已完成上传保存的是另一个从未向客户端签名的正式对象，不受票据清理影响。
 - OSS 下载地址有效期 5 分钟，Bucket 不开放公共读。
 - ECS 只使用实例 RAM 角色，不把长期 AccessKey 写入 `.env`。
 - 头像保存在公共资源 Bucket；若配置 `CDN_BASE_URL`，头像接口返回 CDN 302，否则由 ECS 回源读取。
@@ -119,7 +119,7 @@ OSS_ACCESS_KEY=
 OSS_SECRET_KEY=
 ```
 
-`OSS_ENDPOINT` 只供 ECS 内部读写和校验；浏览器 PUT/GET 签名 URL 必须由 `OSS_PUBLIC_ENDPOINT` 生成，不能把 `-internal` 地址返回给全国员工。
+`OSS_ENDPOINT` 只供 ECS 内部读写和校验；浏览器 POST/GET 签名地址必须由 `OSS_PUBLIC_ENDPOINT` 生成，不能把 `-internal` 地址返回给全国员工。
 
 ECS RAM 角色使用仅限这两个 Bucket 的自定义策略：
 
@@ -150,7 +150,7 @@ ECS RAM 角色使用仅限这两个 Bucket 的自定义策略：
 私有 Bucket CORS 只允许：
 
 - 来源：`https://yryhx.cn`、`https://www.yryhx.cn`
-- 方法：`PUT`、`GET`、`HEAD`
+- 私有 Bucket 方法：`POST`、`GET`、`HEAD`（迁移期可保留 `PUT`，新直传仅使用 `POST`）
 - 允许 Header：`*`
 - 暴露 Header：`ETag`、`x-oss-request-id`
 - 缓存时间：600 秒

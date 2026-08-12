@@ -23,6 +23,10 @@ if [[ "$OSS_PUBLIC_ENDPOINT" == *-internal.* ]]; then
   echo "INVALID:OSS_PUBLIC_ENDPOINT must be public"
   exit 1
 fi
+if [[ "$OSS_PRIVATE_BUCKET" == "$OSS_PUBLIC_BUCKET" ]]; then
+  echo "INVALID:OSS_PRIVATE_BUCKET and OSS_PUBLIC_BUCKET must be different"
+  exit 1
+fi
 if [[ "$STORAGE_TYPE" != "oss" ]]; then
   echo "INVALID:STORAGE_TYPE=$STORAGE_TYPE"
   exit 1

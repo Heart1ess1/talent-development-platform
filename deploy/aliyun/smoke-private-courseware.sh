@@ -158,12 +158,10 @@ ticket_payload="$(printf '{"originalName":"smoke.png","contentType":"image/png",
 ticket_response="$(curl -fsS -X POST "${auth[@]}" -H 'Content-Type: application/json' \
   --data "$ticket_payload" "$API_BASE/courses/$course_id/materials/upload-ticket")"
 ticket_id="$(printf '%s' "$ticket_response" | json_field data.ticketId)"
-upload_url="$(printf '%s' "$ticket_response" | json_field data.uploadUrl)"
 method="$(printf '%s' "$ticket_response" | json_field data.method)"
-test "$method" = "PUT"
-storage_key="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.unquote(urllib.parse.urlparse(sys.argv[1]).path.lstrip("/")))' "$upload_url")"
+test "$method" = "POST"
 
-curl -fsS -X PUT -H 'Content-Type: image/png' --data-binary "@$png" "$upload_url" >/dev/null
+storage_key="$(printf '%s' "$ticket_response" | python3 "$SCRIPT_DIR/oss-post-upload.py" "$png")"
 object_exists
 
 complete_response="$(curl -fsS -X POST "${auth[@]}" \

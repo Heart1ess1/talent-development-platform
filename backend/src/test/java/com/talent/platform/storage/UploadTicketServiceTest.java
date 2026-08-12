@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -41,6 +42,10 @@ class UploadTicketServiceTest {
     var user = new CurrentUser(7L, "employee", "员工", "EMPLOYEE", false);
     SecurityContextHolder.getContext().setAuthentication(
         new UsernamePasswordAuthenticationToken(user, null, List.of()));
+    when(db.queryForObject(contains("select id from sys_user"), eq(Long.class), eq(7L)))
+        .thenReturn(7L);
+    when(db.queryForObject(contains("select count(*) from object_upload_ticket"),
+        eq(Integer.class), eq(7L))).thenReturn(0);
   }
 
   @AfterEach
@@ -49,7 +54,7 @@ class UploadTicketServiceTest {
   }
 
   @Test
-  void issuesShortLivedOssPutTicket() {
+  void issuesShortLivedDirectUploadTicket() {
     Instant expiresAt = Instant.now().plusSeconds(600);
     when(storage.supportsDirectTransfer()).thenReturn(true);
     when(storage.prepareDirectUpload(
@@ -86,11 +91,11 @@ class UploadTicketServiceTest {
     )));
     when(storage.verifyDirectUpload("private/task/a.pdf", 2048L, "application/pdf"))
         .thenReturn(new FileStorageService.StoredObject(
-            "private/task/a.pdf", 2048L, "application/pdf"));
+            "private/committed/a.pdf", 2048L, "application/pdf"));
 
     var upload = service.consume(ticketId, "task-attachment", 30L);
 
-    assertThat(upload.storageKey()).isEqualTo("private/task/a.pdf");
+    assertThat(upload.storageKey()).isEqualTo("private/committed/a.pdf");
     verify(db).update(anyString(), eq(ticketId.toString()));
   }
 

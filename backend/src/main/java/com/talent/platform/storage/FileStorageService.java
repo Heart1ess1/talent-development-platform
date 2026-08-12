@@ -55,6 +55,12 @@ public interface FileStorageService {
       URI url,
       String method,
       Map<String, String> headers,
+      Map<String, String> formFields,
       Instant expiresAt
-  ) {}
+  ) {
+    public SignedUpload(String key, URI url, String method, Map<String, String> headers,
+                        Instant expiresAt) {
+      this(key, url, method, headers, Map.of(), expiresAt);
+    }
+  }
 }

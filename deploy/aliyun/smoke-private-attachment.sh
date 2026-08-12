@@ -130,13 +130,11 @@ echo "CHECK:create_upload_ticket"
 ticket_response="$(curl -fsS -X POST "${auth[@]}" -H 'Content-Type: application/json' \
   --data "$ticket_payload" "$API_BASE/tasks/$task_id/attachments/upload-ticket")"
 ticket_id="$(printf '%s' "$ticket_response" | json_field data.ticketId)"
-upload_url="$(printf '%s' "$ticket_response" | json_field data.uploadUrl)"
-test "$(printf '%s' "$ticket_response" | json_field data.method)" = "PUT"
-storage_key="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.unquote(urllib.parse.urlparse(sys.argv[1]).path.lstrip("/")))' "$upload_url")"
+test "$(printf '%s' "$ticket_response" | json_field data.method)" = "POST"
 
-step="put_signed_upload"
-echo "CHECK:put_signed_upload"
-curl -fsS -X PUT -H 'Content-Type: text/plain' --data-binary "@$source_file" "$upload_url" >/dev/null
+step="post_policy_upload"
+echo "CHECK:post_policy_upload"
+storage_key="$(printf '%s' "$ticket_response" | python3 "$SCRIPT_DIR/oss-post-upload.py" "$source_file")"
 object_exists
 
 step="complete_upload"

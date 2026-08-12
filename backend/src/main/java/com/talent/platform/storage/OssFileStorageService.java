@@ -4,9 +4,13 @@ import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import com.aliyun.oss.OSSException;
 import com.aliyun.oss.HttpMethod;
+import com.aliyun.oss.common.auth.Credentials;
+import com.aliyun.oss.common.auth.CredentialsProvider;
+import com.aliyun.oss.common.auth.DefaultCredentialProvider;
 import com.aliyun.oss.model.GeneratePresignedUrlRequest;
 import com.aliyun.oss.model.OSSObject;
 import com.aliyun.oss.model.ObjectMetadata;
+import com.aliyun.oss.model.PolicyConditions;
 import com.aliyun.oss.model.ResponseHeaderOverrides;
 import com.talent.platform.common.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +29,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +41,8 @@ public class OssFileStorageService implements FileStorageService {
   private final OSS oss;
   private final OSS signingOss;
   private final String bucket;
+  private final CredentialsProvider credentialsProvider;
+  private final String publicEndpoint;
 
   public OssFileStorageService(
       @Value("${app.storage.oss-endpoint}") String endpoint,
@@ -51,9 +58,25 @@ public class OssFileStorageService implements FileStorageService {
     if (publicEndpoint.contains("-internal.")) {
       throw new IllegalArgumentException("OSS_PUBLIC_ENDPOINT 必须是浏览器可访问的公网 Endpoint");
     }
-    this.oss = buildClient(endpoint, key, secret, ramRole);
-    this.signingOss = buildClient(publicEndpoint, key, secret, ramRole);
+    this.credentialsProvider = credentialsProvider(key, secret, ramRole);
+    var builder = new OSSClientBuilder();
+    this.oss = builder.build(endpoint, credentialsProvider);
+    this.signingOss = builder.build(publicEndpoint, credentialsProvider);
     this.bucket = bucket;
+    this.publicEndpoint = publicEndpoint;
+  }
+
+  OssFileStorageService(OSS oss, OSS signingOss, String bucket) {
+    this(oss, signingOss, bucket, null, "https://oss.invalid");
+  }
+
+  OssFileStorageService(OSS oss, OSS signingOss, String bucket,
+                        CredentialsProvider credentialsProvider, String publicEndpoint) {
+    this.oss = oss;
+    this.signingOss = signingOss;
+    this.bucket = bucket;
+    this.credentialsProvider = credentialsProvider;
+    this.publicEndpoint = publicEndpoint;
   }
 
   @Override
@@ -105,17 +128,34 @@ public class OssFileStorageService implements FileStorageService {
     String name = originalName == null ? "file" : originalName;
     String extension = name.lastIndexOf('.') >= 0 ? name.substring(name.lastIndexOf('.')) : "";
     extension = extension.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9.]", "");
-    String key = "private/" + safePurpose + "/" + LocalDate.now() + "/" + UUID.randomUUID() + extension;
+    String key = "staging/" + safePurpose + "/" + LocalDate.now() + "/" + UUID.randomUUID() + extension;
     Instant expiresAt = Instant.now().plus(validity);
     try {
-      var request = new GeneratePresignedUrlRequest(bucket, key, HttpMethod.PUT);
-      request.setExpiration(Date.from(expiresAt));
-      if (StringUtils.hasText(contentType)) request.setContentType(contentType);
-      URI url = signingOss.generatePresignedUrl(request).toURI();
-      Map<String, String> headers = StringUtils.hasText(contentType)
-          ? Map.of("Content-Type", contentType)
-          : Map.of();
-      return new SignedUpload(key, url, "PUT", headers, expiresAt);
+      Credentials credentials = credentialsProvider.getCredentials();
+      var conditions = new PolicyConditions();
+      conditions.addConditionItem(PolicyConditions.COND_KEY, key);
+      conditions.addConditionItem(PolicyConditions.COND_CONTENT_LENGTH_RANGE, size, size);
+      conditions.addConditionItem(PolicyConditions.COND_SUCCESS_ACTION_STATUS, "200");
+      conditions.addConditionItem("x-oss-forbid-overwrite", "true");
+      if (StringUtils.hasText(contentType)) {
+        conditions.addConditionItem(PolicyConditions.COND_CONTENT_TYPE, contentType);
+      }
+      if (StringUtils.hasText(credentials.getSecurityToken())) {
+        conditions.addConditionItem("x-oss-security-token", credentials.getSecurityToken());
+      }
+      String policy = signingOss.generatePostPolicy(Date.from(expiresAt), conditions);
+      var fields = new LinkedHashMap<String, String>();
+      fields.put("key", key);
+      fields.put("policy", policy);
+      fields.put("OSSAccessKeyId", credentials.getAccessKeyId());
+      fields.put("Signature", signingOss.calculatePostSignature(policy));
+      fields.put("success_action_status", "200");
+      fields.put("x-oss-forbid-overwrite", "true");
+      if (StringUtils.hasText(contentType)) fields.put("Content-Type", contentType);
+      if (StringUtils.hasText(credentials.getSecurityToken())) {
+        fields.put("x-oss-security-token", credentials.getSecurityToken());
+      }
+      return new SignedUpload(key, formUploadEndpoint(), "POST", Map.of(), fields, expiresAt);
     } catch (Exception exception) {
       throw new BusinessException(500, "OSS上传地址生成失败");
     }
@@ -137,7 +177,14 @@ public class OssFileStorageService implements FileStorageService {
         delete(key);
         throw new BusinessException(400, "上传文件类型校验失败，请重新上传");
       }
-      return new StoredObject(key, actualSize,
+      String committedKey = committedKey(key);
+      oss.copyObject(bucket, key, bucket, committedKey);
+      try {
+        delete(key);
+      } catch (RuntimeException ignored) {
+        // The signed URL can only recreate the staging object; scheduled cleanup removes it after expiry.
+      }
+      return new StoredObject(committedKey, actualSize,
           StringUtils.hasText(actualContentType) ? actualContentType : expectedContentType);
     } catch (BusinessException exception) {
       throw exception;
@@ -173,10 +220,24 @@ public class OssFileStorageService implements FileStorageService {
     return overrides;
   }
 
-  private OSS buildClient(String endpoint, String key, String secret, String ramRole) {
-    var builder = new OSSClientBuilder();
+  private String committedKey(String stagingKey) {
+    int dot = stagingKey == null ? -1 : stagingKey.lastIndexOf('.');
+    String extension = dot < 0 ? "" : stagingKey.substring(dot).toLowerCase(Locale.ROOT)
+        .replaceAll("[^a-z0-9.]", "");
+    return "private/committed/" + LocalDate.now() + "/" + UUID.randomUUID() + extension;
+  }
+
+  private URI formUploadEndpoint() {
+    URI endpoint = URI.create(publicEndpoint);
+    String host = endpoint.getHost();
+    if (host == null || host.isBlank()) throw new IllegalArgumentException("Invalid OSS public endpoint");
+    String bucketHost = host.startsWith(bucket + ".") ? host : bucket + "." + host;
+    return URI.create(endpoint.getScheme() + "://" + bucketHost + "/");
+  }
+
+  private static CredentialsProvider credentialsProvider(String key, String secret, String ramRole) {
     return StringUtils.hasText(ramRole)
-        ? builder.build(endpoint, new EcsRamRoleOssCredentialsProvider(ramRole))
-        : builder.build(endpoint, key, secret);
+        ? new EcsRamRoleOssCredentialsProvider(ramRole)
+        : new DefaultCredentialProvider(key, secret);
   }
 }

@@ -10,6 +10,7 @@ export interface UploadTicket{
   uploadUrl:string
   method:string
   headers:Record<string,string>
+  formFields:Record<string,string>
   expiresAt:string
 }
 
@@ -31,10 +32,18 @@ export async function createUploadTicket(ticketUrl:string,file:File){
     size:file.size
   })
   const ticket=response.data
+  const isFormUpload=(ticket.method||'PUT').toUpperCase()==='POST'
+  let body:BodyInit=file
+  if(isFormUpload){
+    const form=new FormData()
+    for(const [name,value] of Object.entries(ticket.formFields||{}))form.append(name,value)
+    form.append('file',file)
+    body=form
+  }
   const uploadResponse=await fetch(ticket.uploadUrl,{
     method:ticket.method||'PUT',
-    headers:ticket.headers||{},
-    body:file
+    headers:isFormUpload?{}:(ticket.headers||{}),
+    body
   })
   if(!uploadResponse.ok){
     throw new Error(`OSS 上传失败（HTTP ${uploadResponse.status}）`)

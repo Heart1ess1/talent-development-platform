@@ -33,6 +33,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Semaphore;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 @Service
@@ -42,8 +44,10 @@ public class CourseMaterialPreviewService {
   private static final Duration CACHE_RETENTION = Duration.ofDays(7);
   private static final Duration OFFICE_TIMEOUT = Duration.ofSeconds(120);
   private static final int CONVERSION_LOCK_COUNT = 128;
+  private static final long MAX_RENDER_PIXELS = 40_000_000L;
   private final FileStorageService storage;
   private final Object[] conversionLocks = new Object[CONVERSION_LOCK_COUNT];
+  private final Semaphore previewSlots = new Semaphore(2, true);
 
   @Value("${app.preview.cache-root:${java.io.tmpdir}/talent-preview-cache}")
   private String cacheRoot = Path.of(System.getProperty("java.io.tmpdir"), "talent-preview-cache").toString();
@@ -57,6 +61,10 @@ public class CourseMaterialPreviewService {
   }
 
   public int pageCount(String storageKey, String originalName) {
+    return withPreviewSlot(() -> pageCountInternal(storageKey, originalName));
+  }
+
+  private int pageCountInternal(String storageKey, String originalName) {
     String extension = extension(originalName);
     if ("pdf".equals(extension)) return pdfPageCount(loadOriginalPdf(storageKey));
     if (isOffice(extension)) return pdfPageCount(prepareOfficePdf(storageKey, originalName));
@@ -66,6 +74,10 @@ public class CourseMaterialPreviewService {
   }
 
   public byte[] renderPage(String storageKey, String originalName, int pageIndex, String watermark) {
+    return withPreviewSlot(() -> renderPageInternal(storageKey, originalName, pageIndex, watermark));
+  }
+
+  private byte[] renderPageInternal(String storageKey, String originalName, int pageIndex, String watermark) {
     String extension = extension(originalName);
     BufferedImage page;
     if ("pdf".equals(extension)) {
@@ -227,6 +239,12 @@ public class CourseMaterialPreviewService {
       if (pageIndex < 0 || pageIndex >= document.getNumberOfPages()) {
         throw new BusinessException(404, "课件页不存在");
       }
+      var box = document.getPage(pageIndex).getCropBox();
+      long pixelWidth = Math.max(1L, Math.round(box.getWidth() * 120d / 72d));
+      long pixelHeight = Math.max(1L, Math.round(box.getHeight() * 120d / 72d));
+      if (pixelWidth > MAX_RENDER_PIXELS / pixelHeight) {
+        throw new BusinessException(400, "Courseware page dimensions exceed the safe preview limit");
+      }
       return new PDFRenderer(document).renderImageWithDPI(pageIndex, 120, ImageType.RGB);
     } catch (BusinessException exception) {
       throw exception;
@@ -353,6 +371,20 @@ public class CourseMaterialPreviewService {
 
   private BusinessException previewFailure(Exception exception) {
     return new BusinessException(500, "课件预览生成失败");
+  }
+
+  private <T> T withPreviewSlot(Supplier<T> action) {
+    boolean acquired = false;
+    try {
+      acquired = previewSlots.tryAcquire(1, TimeUnit.SECONDS);
+      if (!acquired) throw new BusinessException(429, "Preview service is busy; retry shortly");
+      return action.get();
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new BusinessException(503, "Preview request was interrupted");
+    } finally {
+      if (acquired) previewSlots.release();
+    }
   }
 
   @Scheduled(cron = "0 43 3 * * *", zone = "Asia/Shanghai")

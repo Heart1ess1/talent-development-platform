@@ -252,7 +252,7 @@ public class ExamController {
   private Map<String,Object> attemptPayload(Long id,boolean includeQuestions){
     var attempt = new LinkedHashMap<>(db.queryForMap("""
         select a.id,a.plan_id,a.attempt_no,a.status,a.started_at,a.deadline_at,
-               a.objective_score,a.total_score,p.name exam_name,
+               a.objective_score,a.total_score,a.published,p.name exam_name,
                ep.randomize_questions,ep.randomize_options,ep.dynamic_assembly
         from exam_attempt a
         join exam_plan p on p.id=a.plan_id
@@ -301,8 +301,23 @@ public class ExamController {
         if(saved!=null)question.put("saved_answer",mapper.readTree(String.valueOf(saved)));
       }catch(Exception ignored){}
     }
+    if (shouldHideScores(SecurityUtils.current().can(Permissions.EXAM_MANAGE),
+        attempt.get("published"))) {
+      hideUnpublishedScores(attempt, questions);
+    }
     attempt.put("questions",questions);
     return attempt;
+  }
+  static void hideUnpublishedScores(Map<String,Object> attempt,List<Map<String,Object>> questions){
+    attempt.remove("objective_score");
+    attempt.remove("total_score");
+    for(var question:questions){
+      question.remove("answer_score");
+      question.remove("reviewer_comment");
+    }
+  }
+  static boolean shouldHideScores(boolean canManage,Object published){
+    return !canManage&&!truthy(published);
   }
   private int violationCount(Long attemptId){return db.queryForObject("select count(*) from exam_proctor_event where attempt_id=? and event_type in ('BLUR','HIDDEN','EXIT_FULLSCREEN')",Integer.class,attemptId);}
   private List<Long> parseIds(String raw,String field){if(raw==null||raw.isBlank())return List.of();try{return Arrays.stream(raw.split(",")).map(String::trim).filter(x->!x.isEmpty()).map(Long::valueOf).distinct().toList();}catch(NumberFormatException e){throw new BusinessException(400,field+"筛选条件无效");}}
@@ -511,7 +526,7 @@ public class ExamController {
     return normalized.isEmpty()?null:mapper.writeValueAsString(normalized);
   }
   private void requireEnabledBank(Long bankId){Integer count=db.queryForObject("select count(*) from exam_question_bank where id=? and enabled=true",Integer.class,bankId);if(count==null||count==0)throw new BusinessException(400,"所选题库不存在或已停用");}
-  private boolean truthy(Object value) {
+  private static boolean truthy(Object value) {
     if(value instanceof Boolean bool)return bool;
     if(value instanceof Number number)return number.intValue()!=0;
     return value!=null&&Boolean.parseBoolean(String.valueOf(value));

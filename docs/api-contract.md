@@ -71,7 +71,7 @@ Authorization: Bearer <token>
 | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/storage/capabilities` | 登录 | 查询当前环境是否启用 OSS 直传和签名下载 | `directUpload`、`signedDownload` |
 
-上传票据有效期 15 分钟，绑定创建人、用途和业务对象，只能消费一次。浏览器必须按票据返回的 `method`、`uploadUrl` 和 `headers` 直接上传；业务完成接口会从 OSS HEAD 元数据核对大小和类型。完整签名 URL 不应写入日志或持久化。
+上传票据有效期 15 分钟，绑定创建人、用途和业务对象，只能消费一次。浏览器必须按票据返回的 `method`、`uploadUrl`、`headers` 和 `formFields` 直接上传；OSS POST Policy 会强制精确文件大小、类型和禁止覆盖。完成接口校验临时对象后复制为从未对客户端签名的正式对象，再删除临时对象。完整签名字段不应写入日志或持久化。
 | `GET` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 查询本人工作信息和可维护个人资料 | 无 | 员工个人资料，包含只读批次、所属板块、服务站点、技术/技能导师、入职日期和状态 |
 | `PUT` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 维护本人非工作安排类个人资料 | `phone`、`email`、`birthDate`、`nativePlace`、`residence`、`school`、`major`、`education` | 空 |
 

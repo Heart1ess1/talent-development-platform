@@ -118,8 +118,9 @@ public class CourseMaterialLearningController {
 
   @GetMapping("/{materialId}/preview-sessions/{sessionId}/pages/{pageNumber}")
   public ResponseEntity<byte[]> previewPage(@PathVariable Long materialId, @PathVariable Long sessionId,
-                                            @PathVariable int pageNumber) {
+                                             @PathVariable int pageNumber) {
     var session = ownedSession(materialId, sessionId);
+    requireCurrentSessionAccess(materialId, session);
     var material = requireMaterial(materialId);
     String watermark = watermark(session);
     byte[] image = preview.renderPage(String.valueOf(material.get("storage_key")),
@@ -146,11 +147,15 @@ public class CourseMaterialLearningController {
   }
 
   private void touch(Long materialId, Long sessionId, boolean close) {
+    var session = ownedSession(materialId, sessionId);
+    requireCurrentSessionAccess(materialId, session);
     int updated = db.update("""
         update course_material_view_session
         set duration_seconds=duration_seconds+least(60,greatest(0,timestampdiff(second,last_seen_at,now()))),
             last_seen_at=now(),ended_at=case when ? then now() else ended_at end
         where id=? and material_id=? and user_id=? and ended_at is null
+          and last_seen_at>=date_sub(now(),interval 2 hour)
+          and started_at>=date_sub(now(),interval 8 hour)
         """, close, sessionId, materialId, SecurityUtils.current().id());
     if (updated == 0 && !close) throw new BusinessException(404, "课件预览会话已结束");
   }
@@ -162,6 +167,8 @@ public class CourseMaterialLearningController {
         join sys_user u on u.id=v.user_id
         left join employee e on e.id=v.employee_id
         where v.id=? and v.material_id=? and v.user_id=? and v.ended_at is null
+          and v.last_seen_at>=date_sub(now(),interval 2 hour)
+          and v.started_at>=date_sub(now(),interval 8 hour)
         """, sessionId, materialId, SecurityUtils.current().id());
     if (rows.isEmpty()) throw new BusinessException(404, "课件预览会话不存在或已结束");
     return rows.get(0);
@@ -172,6 +179,15 @@ public class CourseMaterialLearningController {
       return session.get("employee_name") + "（" + session.get("employee_no") + "）";
     }
     return session.get("display_name") + "（" + session.get("username") + "）";
+  }
+
+  private void requireCurrentSessionAccess(Long materialId, Map<String, Object> session) {
+    Object employeeId = session.get("employee_id");
+    if (employeeId != null) {
+      requireEmployeeMaterialAccess(materialId, ((Number) employeeId).longValue());
+    } else if (!SecurityUtils.current().can(Permissions.COURSE_MANAGE)) {
+      throw new AccessDeniedException("No longer authorized to preview this material");
+    }
   }
 
   private Map<String, Object> requireMaterial(Long materialId) {
