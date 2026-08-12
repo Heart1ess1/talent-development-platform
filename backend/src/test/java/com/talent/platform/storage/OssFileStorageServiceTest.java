@@ -21,6 +21,17 @@ import org.mockito.ArgumentCaptor;
 
 class OssFileStorageServiceTest {
   @Test
+  void marksTheProductionConstructorForSpringInjection() {
+    var autowired = java.util.Arrays.stream(OssFileStorageService.class.getDeclaredConstructors())
+        .filter(constructor -> constructor.isAnnotationPresent(
+            org.springframework.beans.factory.annotation.Autowired.class))
+        .toList();
+
+    assertThat(autowired).singleElement()
+        .satisfies(constructor -> assertThat(constructor.getParameterCount()).isEqualTo(6));
+  }
+
+  @Test
   void rejectsSharedPrivateAndPublicBucket() {
     assertThatThrownBy(() -> new OssStorageConfigurationValidator("same-bucket", "same-bucket"))
         .isInstanceOf(IllegalArgumentException.class)
