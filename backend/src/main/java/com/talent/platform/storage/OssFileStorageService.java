@@ -30,6 +30,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Date;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -146,9 +147,11 @@ public class OssFileStorageService implements FileStorageService {
         conditions.addConditionItem("x-oss-security-token", credentials.getSecurityToken());
       }
       String policy = signingOss.generatePostPolicy(Date.from(expiresAt), conditions);
+      String encodedPolicy = Base64.getEncoder()
+          .encodeToString(policy.getBytes(StandardCharsets.UTF_8));
       var fields = new LinkedHashMap<String, String>();
       fields.put("key", key);
-      fields.put("policy", policy);
+      fields.put("policy", encodedPolicy);
       fields.put("OSSAccessKeyId", credentials.getAccessKeyId());
       fields.put("Signature", signingOss.calculatePostSignature(policy));
       fields.put("success_action_status", "200");
