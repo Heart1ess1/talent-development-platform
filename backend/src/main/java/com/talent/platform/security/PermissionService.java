@@ -30,13 +30,14 @@ public class PermissionService {
   public void require(String permission){if(!SecurityUtils.current().can(permission))throw new AccessDeniedException("无此操作权限");}
   public void requireEmployee(Long employeeId){
     var u=SecurityUtils.current();if("ALL".equals(u.dataScope()))return;
-    String sql=switch(u.dataScope()){case "SELF"->"select count(*) from employee where id=? and user_id=?";case "MENTORED"->"select count(*) from employee where id=? and mentor_user_id=?";case "STATION"->"select count(*) from employee e join station_manager_scope s on s.station_id=e.station_id where e.id=? and s.user_id=?";default->null;};
-    if(sql==null||db.queryForObject(sql,Integer.class,employeeId,u.id())==0)throw new AccessDeniedException("无权访问该员工");
+    String sql=switch(u.dataScope()){case "SELF"->"select count(*) from employee where id=? and user_id=?";case "MENTORED"->"select count(*) from employee where id=? and (mentor_user_id=? or skill_mentor_user_id=?)";case "STATION"->"select count(*) from employee e join station_manager_scope s on s.station_id=e.station_id where e.id=? and s.user_id=?";default->null;};
+    Object[] args="MENTORED".equals(u.dataScope())?new Object[]{employeeId,u.id(),u.id()}:new Object[]{employeeId,u.id()};
+    if(sql==null||db.queryForObject(sql,Integer.class,args)==0)throw new AccessDeniedException("无权访问该员工");
   }
   public ScopeFilter employeeFilter(String alias){
     var u=SecurityUtils.current();return switch(u.dataScope()){
       case "SELF"->new ScopeFilter(" and "+alias+".user_id=?",List.of(u.id()));
-      case "MENTORED"->new ScopeFilter(" and "+alias+".mentor_user_id=?",List.of(u.id()));
+      case "MENTORED"->new ScopeFilter(" and ("+alias+".mentor_user_id=? or "+alias+".skill_mentor_user_id=?)",List.of(u.id(),u.id()));
       case "STATION"->new ScopeFilter(" and exists(select 1 from station_manager_scope sms where sms.station_id="+alias+".station_id and sms.user_id=?)",List.of(u.id()));
       default->new ScopeFilter("",List.of());};
   }
