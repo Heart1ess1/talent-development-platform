@@ -4,6 +4,7 @@ import {Delete,Document,Download,Paperclip,UploadFilled,View} from '@element-plu
 import {ElMessage,ElMessageBox,type UploadRequestOptions} from 'element-plus'
 import {api,type Envelope} from '@/api'
 import {formatCourseDate,formatFileSize} from '@/utils/course'
+import {uploadWithStorageFallback} from '@/storageTransfer'
 
 const props=withDefaults(defineProps<{
   items?:any[]
@@ -52,9 +53,12 @@ async function upload(options:UploadRequestOptions){
   if(!props.uploadUrl)return
   uploading.value=true
   try{
-    const form=new FormData()
-    form.append('file',options.file)
-    await api.post(props.uploadUrl,form)
+    await uploadWithStorageFallback({
+      file:options.file,
+      legacyUrl:props.uploadUrl,
+      ticketUrl:`${props.uploadUrl}/upload-ticket`,
+      completeUrl:ticketId=>`${props.uploadUrl}/upload-complete/${ticketId}`
+    })
     ElMessage.success('任务附件已上传')
     await load()
     emit('changed',rows.value)

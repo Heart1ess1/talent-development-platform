@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed, onMounted, reactive, ref, watch} from 'vue'
+import {computed, nextTick, onMounted, reactive, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {
@@ -20,6 +20,7 @@ import {
 import {api, type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import TaskAttachmentsPanel from '@/components/TaskAttachmentsPanel.vue'
+import {createUploadTicket,storageCapabilities,uploadWithStorageFallback} from '@/storageTransfer'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -201,9 +202,13 @@ async function dispatchManualTask() {
   try {
     const response = await api.post<any, Envelope<any>>('/tasks/dispatch-manual', manualDispatch)
     for(const item of manualFiles.value){
-      const form=new FormData()
-      form.append('file',item.raw)
-      await api.post(`/tasks/${response.data.taskId}/attachments`,form)
+      const uploadUrl=`/tasks/${response.data.taskId}/attachments`
+      await uploadWithStorageFallback({
+        file:item.raw,
+        legacyUrl:uploadUrl,
+        ticketUrl:`${uploadUrl}/upload-ticket`,
+        completeUrl:ticketId=>`${uploadUrl}/upload-complete/${ticketId}`
+      })
     }
     ElMessage.success(`任务已下发给 ${response.data.assignedEmployees} 人${manualFiles.value.length?`，并上传 ${manualFiles.value.length} 个附件`:''}`)
     Object.assign(manualDispatch, {title: '', description: '', requirements: '', deadline: '', batchId: null, businessUnitId: null, stationId: null})
@@ -260,6 +265,24 @@ async function open(row: any, mode: 'SUBMIT' | 'RESUBMIT' | 'VIEW' | 'REVIEW') {
 }
 
 async function doSubmit() {
+  const capabilities=await storageCapabilities()
+  if(capabilities.directUpload){
+    const ticketIds:string[]=[]
+    for(const item of files.value){
+      const ticket=await createUploadTicket(
+        `/assignments/${selected.value.id}/submission-files/upload-ticket`,
+        item.raw
+      )
+      ticketIds.push(ticket.ticketId)
+    }
+    await api.post(`/assignments/${selected.value.id}/submissions/direct`,{
+      content:submit.content,
+      uploadTicketIds:ticketIds
+    })
+    dialog.value=false
+    await load()
+    return
+  }
   const form = new FormData()
   form.append('content', submit.content)
   files.value.forEach(item => form.append('files', item.raw))
@@ -497,6 +520,10 @@ onMounted(async () => {
   selectedPlanId.value = Number.isFinite(planId) && plans.value.some(item => item.id === planId)
     ? planId
     : plans.value[0]?.id || null
+  if (route.query.focus === 'pending-review') {
+    await nextTick()
+    document.getElementById('pending-task-reviews')?.scrollIntoView({behavior: 'smooth', block: 'start'})
+  }
 })
 </script>
 
@@ -643,7 +670,7 @@ onMounted(async () => {
     </section>
 
     <template v-else-if="!employee">
-      <section v-if="canReview&&pendingReviews.length" class="task-workspace pending-section">
+      <section v-if="canReview&&pendingReviews.length" id="pending-task-reviews" class="task-workspace pending-section">
         <div class="task-workspace-head"><div><h2>待审核成果</h2><p>按提交时间排序，优先处理已等待较久的员工成果。</p></div><span class="result-count">{{pendingReviews.length}} 项待处理</span></div>
         <el-table :data="pendingReviews">
           <el-table-column prop="title" label="任务" min-width="210" show-overflow-tooltip/>

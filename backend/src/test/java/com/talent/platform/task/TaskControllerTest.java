@@ -3,6 +3,7 @@ package com.talent.platform.task;
 import com.talent.platform.common.BusinessException;
 import com.talent.platform.security.*;
 import com.talent.platform.storage.FileStorageService;
+import com.talent.platform.storage.UploadTicketService;
 import org.junit.jupiter.api.*;
 import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -37,7 +38,7 @@ class TaskControllerTest {
     taskStatus = mock(TaskStatusService.class);
     controller = new TaskController(
         db, storage, permissions, mock(AuditService.class), taskStatus,
-        mock(TaskAttachmentService.class));
+        mock(TaskAttachmentService.class), mock(UploadTicketService.class));
     var user = new CurrentUser(7L, "admin", "Admin", "TRAINING_ADMIN", false, 1,
         Set.of(Permissions.TASK_MANAGE), "ALL");
     SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));

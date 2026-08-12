@@ -4,6 +4,7 @@ import com.alibaba.excel.EasyExcel;
 import com.talent.platform.common.*;
 import com.talent.platform.security.*;
 import com.talent.platform.storage.FileStorageService;
+import com.talent.platform.storage.UploadTicketService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -21,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -36,15 +38,18 @@ public class TaskController {
   private final AuditService audit;
   private final TaskStatusService taskStatus;
   private final TaskAttachmentService taskAttachments;
+  private final UploadTicketService uploadTickets;
 
   public TaskController(JdbcTemplate db, FileStorageService storage, PermissionService permissions, AuditService audit,
-                        TaskStatusService taskStatus, TaskAttachmentService taskAttachments) {
+                        TaskStatusService taskStatus, TaskAttachmentService taskAttachments,
+                        UploadTicketService uploadTickets) {
     this.db = db;
     this.storage = storage;
     this.permissions = permissions;
     this.audit = audit;
     this.taskStatus = taskStatus;
     this.taskAttachments = taskAttachments;
+    this.uploadTickets = uploadTickets;
   }
 
   public record TaskRequest(@NotBlank String title, @NotBlank String description, String requirements,
@@ -74,6 +79,15 @@ public class TaskController {
       List<String> taskTitles) {}
   public record ReviewRequest(@NotNull @Pattern(regexp = "APPROVE|RETURN") String decision, String comment,
                               @Min(0) @Max(100) Integer score) {}
+  public record DirectUploadRequest(
+      @NotBlank @Size(max = 255) String originalName,
+      @Size(max = 128) String contentType,
+      @Min(1) long size
+  ) {}
+  public record DirectSubmissionRequest(
+      String content,
+      @Size(max = 5) List<@NotNull UUID> uploadTicketIds
+  ) {}
 
   @GetMapping("/tasks")
   public ApiResponse<List<Map<String, Object>>> tasks() {
@@ -129,6 +143,30 @@ public class TaskController {
     return ApiResponse.ok(attachmentId);
   }
 
+  @PostMapping("/tasks/{id}/attachments/upload-ticket")
+  public ApiResponse<UploadTicketService.UploadTicket> createTaskAttachmentUploadTicket(
+      @PathVariable Long id,
+      @Valid @RequestBody DirectUploadRequest request
+  ) {
+    permissions.require(Permissions.TASK_MANAGE);
+    task(id);
+    return ApiResponse.ok(taskAttachments.createUploadTicket(
+        "task-attachment", id, request.originalName(), request.contentType(), request.size()));
+  }
+
+  @PostMapping("/tasks/{id}/attachments/upload-complete/{ticketId}")
+  public ApiResponse<Long> completeTaskAttachmentUpload(
+      @PathVariable Long id,
+      @PathVariable UUID ticketId
+  ) {
+    permissions.require(Permissions.TASK_MANAGE);
+    task(id);
+    Long attachmentId = taskAttachments.completeUpload("task-attachment", id, ticketId, false);
+    audit.log("UPLOAD_TASK_ATTACHMENT", "TASK_ATTACHMENT", attachmentId, null,
+        Map.of("taskId", id, "transfer", "OSS_DIRECT"));
+    return ApiResponse.ok(attachmentId);
+  }
+
   @DeleteMapping("/tasks/{id}/attachments/{attachmentId}")
   public ApiResponse<Void> deleteTaskAttachment(
       @PathVariable Long id,
@@ -158,6 +196,14 @@ public class TaskController {
     Object rawContentType = attachment.get("content_type");
     String contentType = rawContentType == null
         ? "application/octet-stream" : String.valueOf(rawContentType);
+    var signedUrl = taskAttachments.storage().signedDownloadUrl(
+        String.valueOf(attachment.get("storage_key")), name, contentType, inline, Duration.ofMinutes(5));
+    if (signedUrl.isPresent()) {
+      return ResponseEntity.status(302)
+          .location(signedUrl.get())
+          .cacheControl(org.springframework.http.CacheControl.noStore())
+          .build();
+    }
     return ResponseEntity.ok()
         .contentType(MediaType.parseMediaType(contentType))
         .header(HttpHeaders.CONTENT_DISPOSITION,
@@ -435,6 +481,60 @@ public class TaskController {
     return ApiResponse.ok(submissionId);
   }
 
+  @PostMapping("/assignments/{id}/submission-files/upload-ticket")
+  @PreAuthorize("hasRole('EMPLOYEE')")
+  public ApiResponse<UploadTicketService.UploadTicket> createSubmissionFileUploadTicket(
+      @PathVariable Long id,
+      @Valid @RequestBody DirectUploadRequest request
+  ) {
+    var user = SecurityUtils.current();
+    assertAssignment(id, user, true);
+    assertSubmissionWindowOpen(id);
+    validateFileMetadata(request.originalName(), request.size());
+    return ApiResponse.ok(uploadTickets.issue(
+        "submission-file", id, request.originalName(), request.contentType(), request.size()));
+  }
+
+  @PostMapping("/assignments/{id}/submissions/direct")
+  @PreAuthorize("hasRole('EMPLOYEE')")
+  @Transactional
+  public ApiResponse<Long> submitDirect(
+      @PathVariable Long id,
+      @Valid @RequestBody DirectSubmissionRequest request
+  ) {
+    var user = SecurityUtils.current();
+    assertAssignment(id, user, true);
+    var assignment = assertSubmissionWindowOpen(id);
+    List<UUID> ticketIds = request.uploadTicketIds() == null ? List.of() : request.uploadTicketIds();
+    if ((request.content() == null || request.content().isBlank()) && ticketIds.isEmpty()) {
+      throw new BusinessException(400, "请填写说明或上传成果文件");
+    }
+    String assignmentStatus = String.valueOf(assignment.get("status"));
+    if ("PENDING_REVIEW".equals(assignmentStatus)) {
+      db.update("update task_submission set status='SUPERSEDED' where assignment_id=? and status='PENDING_REVIEW'", id);
+    }
+    Integer version = db.queryForObject(
+        "select coalesce(max(submission_version),0)+1 from task_submission where assignment_id=?",
+        Integer.class, id);
+    db.update("insert into task_submission(assignment_id,submission_version,content) values(?,?,?)",
+        id, version, request.content());
+    Long submissionId = db.queryForObject("select last_insert_id()", Long.class);
+    for (UUID ticketId : ticketIds) {
+      var upload = uploadTickets.consume(ticketId, "submission-file", id);
+      validateFileMetadata(upload.originalName(), upload.size());
+      db.update("""
+          insert into stored_file(
+            submission_id,original_name,content_type,size,storage_key,uploader_user_id
+          ) values(?,?,?,?,?,?)
+          """, submissionId, upload.originalName(), upload.contentType(), upload.size(),
+          upload.storageKey(), user.id());
+    }
+    db.update("update task_assignment set status='PENDING_REVIEW',version=version+1 where id=?", id);
+    audit.log("SUBMIT_TASK", "TASK_SUBMISSION", submissionId, null,
+        Map.of("assignmentId", id, "files", ticketIds.size(), "transfer", "OSS_DIRECT"));
+    return ApiResponse.ok(submissionId);
+  }
+
   @PostMapping("/submissions/{id}/review")
   @Transactional
   public ApiResponse<Void> review(@PathVariable Long id, @Valid @RequestBody ReviewRequest q) {
@@ -647,8 +747,31 @@ public class TaskController {
 
   private void validateFile(MultipartFile file) {
     if (file.isEmpty()) throw new BusinessException(400, "不能上传空文件");
-    String name = Optional.ofNullable(file.getOriginalFilename()).orElse("").toLowerCase();
+    validateFileMetadata(file.getOriginalFilename(), file.getSize());
+  }
+
+  private void validateFileMetadata(String originalName, long size) {
+    if (size <= 0) throw new BusinessException(400, "不能上传空文件");
+    if (size > 50L * 1024 * 1024) throw new BusinessException(400, "单个成果文件不能超过 50MB");
+    String name = Optional.ofNullable(originalName).orElse("").toLowerCase(Locale.ROOT);
     if (!name.matches(".*\\.(pdf|doc|docx|xls|xlsx|ppt|pptx|png|jpg|jpeg|zip)$")) throw new BusinessException(400, "不支持的文件类型: " + name);
+  }
+
+  private Map<String, Object> assertSubmissionWindowOpen(Long assignmentId) {
+    var assignment = db.queryForMap("""
+        select a.status,t.deadline
+        from task_assignment a
+        join challenge_task t on t.id=a.task_id
+        where a.id=?
+        """, assignmentId);
+    String status = String.valueOf(assignment.get("status"));
+    if (!List.of("NOT_SUBMITTED", "RETURNED", "PENDING_REVIEW").contains(status)) {
+      throw new BusinessException(400, "当前状态不能提交");
+    }
+    if (LocalDateTime.now().isAfter(asLocalDateTime(assignment.get("deadline")))) {
+      throw new BusinessException(400, "任务已截止");
+    }
+    return assignment;
   }
 
   private LocalDateTime asLocalDateTime(Object value) {

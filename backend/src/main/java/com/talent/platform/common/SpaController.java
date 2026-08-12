@@ -9,4 +9,6 @@ public class SpaController {
   public String spa(){return "forward:/index.html";}
   @GetMapping("/exams/{path:[a-zA-Z0-9_-]+}")
   public String examSpa(){return "forward:/index.html";}
+  @GetMapping("/evaluation/{path:[a-zA-Z0-9_-]+}")
+  public String evaluationSpa(){return "forward:/index.html";}
 }

@@ -25,11 +25,11 @@ import java.util.*;
 public class ExamController {
   private final JdbcTemplate db;private final PermissionService permissions;private final AuditService audit;private final ObjectMapper mapper;private final ExamScoringService scoring;
   public ExamController(JdbcTemplate db,PermissionService permissions,AuditService audit,ObjectMapper mapper,ExamScoringService scoring){this.db=db;this.permissions=permissions;this.audit=audit;this.mapper=mapper;this.scoring=scoring;}
-  private static final Set<String> OBJECTIVE_TYPES=Set.of("SINGLE","MULTIPLE","TRUE_FALSE");
+  private static final Set<String> QUESTION_TYPES=Set.of("SINGLE","MULTIPLE","TRUE_FALSE","SHORT");
   public record QuestionBankRequest(@NotBlank @Size(max=128) String name,@Size(max=500) String description,Boolean enabled){}
-  public record QuestionRequest(@NotNull Long bankId,@Pattern(regexp="SINGLE|MULTIPLE|TRUE_FALSE") String type,@NotBlank String stem,JsonNode options,@NotNull JsonNode answer,String explanation,@NotNull @DecimalMin(value="0",inclusive=false) BigDecimal score,List<@NotBlank @Size(max=32) String> tags){}
+  public record QuestionRequest(@NotNull Long bankId,@Pattern(regexp="SINGLE|MULTIPLE|TRUE_FALSE|SHORT") String type,@NotBlank String stem,JsonNode options,@NotNull JsonNode answer,String explanation,@NotNull @DecimalMin(value="0",inclusive=false) BigDecimal score,List<@NotBlank @Size(max=32) String> tags){}
   public record PaperQuestion(@NotNull Long questionId,@NotNull @DecimalMin(value="0",inclusive=false) BigDecimal score,@NotNull Integer sortOrder){}
-  public record RandomRule(@Pattern(regexp="SINGLE|MULTIPLE|TRUE_FALSE") String type,@Min(0) int count,@NotNull @DecimalMin(value="0",inclusive=false) BigDecimal score,List<@NotBlank @Size(max=32) String> tags,List<Long> bankIds){}
+  public record RandomRule(@Pattern(regexp="SINGLE|MULTIPLE|TRUE_FALSE|SHORT") String type,@Min(0) int count,@NotNull @DecimalMin(value="0",inclusive=false) BigDecimal score,List<@NotBlank @Size(max=32) String> tags,List<Long> bankIds){}
   public record PaperRequest(@NotBlank String name,String description,boolean randomAssembly,boolean dynamicAssembly,boolean randomizeQuestions,boolean randomizeOptions,List<@Valid PaperQuestion> questions,List<@Valid RandomRule> randomRules){}
   public record RowError(int row,String field,String message){} public record ImportResult(int imported,List<RowError> errors){}
   public record PlanRequest(@NotNull Long paperId,@NotBlank String name,List<Long> batchIds,List<Long> stationIds,@NotNull LocalDateTime startsAt,@NotNull LocalDateTime endsAt,@Min(1) int durationMinutes,@Min(1) int maxAttempts,@NotEmpty List<Long> employeeIds){}
@@ -153,8 +153,8 @@ public class ExamController {
   @GetMapping("/attempts/{id}") public ApiResponse<Map<String,Object>> attempt(@PathVariable Long id){assertAttempt(id);return ApiResponse.ok(attemptPayload(id,true));}
   @PutMapping("/attempts/{id}/answers") public ApiResponse<Void> save(@PathVariable Long id,@RequestBody AnswerRequest q)throws Exception{assertOwnActiveAttempt(id);if(attemptQuestionScore(id,q.questionId())==null)throw new BusinessException(400,"题目不属于该试卷");db.update("insert into exam_answer(attempt_id,question_id,answer_json) values(?,?,?) on duplicate key update answer_json=values(answer_json),saved_at=now()",id,q.questionId(),json(q.answer()));return ApiResponse.ok(null);}
   @PostMapping("/attempts/{id}/events") @Transactional public ApiResponse<EventResult> event(@PathVariable Long id,@Valid @RequestBody EventRequest q)throws Exception{assertOwnActiveAttempt(id);String status=db.queryForObject("select status from exam_attempt where id=? for update",String.class,id);if(!"IN_PROGRESS".equals(status)){int count=violationCount(id);return ApiResponse.ok(new EventResult(count,ExamProctorPolicy.ALLOWED_VIOLATIONS,true,status));}db.update("insert ignore into exam_proctor_event(attempt_id,event_type,detail,violation_key) values(?,?,?,?)",id,q.type(),q.detail(),q.eventId());int count=violationCount(id);boolean autoSubmitted=ExamProctorPolicy.shouldAutoSubmit(count);if(autoSubmitted){var result=scoring.score(id,"ANTI_CHEAT");status=String.valueOf(result.get("status"));audit.log("AUTO_SUBMIT_EXAM_ANTI_CHEAT","EXAM_ATTEMPT",id,null,Map.of("violationCount",count,"lastEvent",q));}return ApiResponse.ok(new EventResult(count,ExamProctorPolicy.ALLOWED_VIOLATIONS,autoSubmitted,status));}
-  @PostMapping("/attempts/{id}/submit") @Transactional public ApiResponse<Map<String,Object>> submit(@PathVariable Long id)throws Exception{assertOwnActiveAttempt(id);var result=scoring.score(id,"MANUAL");audit.log("SUBMIT_EXAM","EXAM_ATTEMPT",id,null,result);return ApiResponse.ok(result);}
-  @GetMapping("/review") public ApiResponse<List<Map<String,Object>>> reviewQueue(){permissions.require(Permissions.EXAM_MANAGE);return ApiResponse.ok(db.queryForList("select a.id,a.status,a.objective_score,a.started_at,a.submitted_at,e.name employee_name,p.name exam_name,(select count(*) from exam_proctor_event x where x.attempt_id=a.id) event_count from exam_attempt a join employee e on e.id=a.employee_id join exam_plan p on p.id=a.plan_id where a.status in ('PENDING_REVIEW','GRADED') order by a.submitted_at"));}
+  @PostMapping("/attempts/{id}/submit") @Transactional public ApiResponse<Map<String,Object>> submit(@PathVariable Long id)throws Exception{assertOwnActiveAttempt(id);var result=scoring.score(id,"MANUAL");audit.log("SUBMIT_EXAM","EXAM_ATTEMPT",id,null,result);LocalDateTime availableAt=db.queryForObject("select p.ends_at from exam_attempt a join exam_plan p on p.id=a.plan_id where a.id=?",LocalDateTime.class,id);return ApiResponse.ok(Map.of("status",result.get("status"),"scoreAvailableAt",availableAt));}
+  @GetMapping("/review") public ApiResponse<List<Map<String,Object>>> reviewQueue(){permissions.require(Permissions.EXAM_MANAGE);var f=permissions.employeeFilter("e");return ApiResponse.ok(db.queryForList("select a.id,a.plan_id,a.status,a.objective_score,a.total_score,a.published,a.started_at,a.submitted_at,e.name employee_name,p.name exam_name,(select count(*) from exam_proctor_event x where x.attempt_id=a.id) event_count from exam_attempt a join employee e on e.id=a.employee_id join exam_plan p on p.id=a.plan_id where a.status in ('PENDING_REVIEW','GRADED')"+f.sql()+" order by a.submitted_at",f.args().toArray()));}
   @PutMapping("/attempts/{attemptId}/questions/{questionId}/grade")
   public ApiResponse<Void> grade(@PathVariable Long attemptId,@PathVariable Long questionId,@Valid @RequestBody GradeRequest q){
     permissions.require(Permissions.EXAM_MANAGE);
@@ -184,8 +184,8 @@ public class ExamController {
     audit.log("GRADE_EXAM_ANSWER","EXAM_ATTEMPT",attemptId,null,q);
     return ApiResponse.ok(null);
   }
-  @PostMapping("/attempts/{id}/publish") public ApiResponse<Void> publishResult(@PathVariable Long id){permissions.require(Permissions.EXAM_MANAGE);if(db.update("update exam_attempt set published=true where id=? and status='GRADED'",id)==0)throw new BusinessException(400,"考试成绩尚未生成");audit.log("PUBLISH_EXAM_RESULT","EXAM_ATTEMPT",id,null,null);return ApiResponse.ok(null);}
-  @PostMapping("/results/manage/plans/{planId}/publish") public ApiResponse<Integer> publishPlanResults(@PathVariable Long planId){permissions.require(Permissions.EXAM_MANAGE);Integer exists=db.queryForObject("select count(*) from exam_plan where id=?",Integer.class,planId);if(exists==null||exists==0)throw new BusinessException(404,"考试计划不存在");int count=db.update("update exam_attempt set published=true where plan_id=? and status='GRADED' and published=false",planId);audit.log("PUBLISH_EXAM_PLAN_RESULTS","EXAM_PLAN",planId,null,Map.of("count",count));return ApiResponse.ok(count);}
+  @PostMapping("/attempts/{id}/publish") public ApiResponse<Void> publishResult(@PathVariable Long id){permissions.require(Permissions.EXAM_MANAGE);throw new BusinessException(400,"成绩将在整场考试结束后由系统自动发布，无需人工审批");}
+  @PostMapping("/results/manage/plans/{planId}/publish") public ApiResponse<Integer> publishPlanResults(@PathVariable Long planId){permissions.require(Permissions.EXAM_MANAGE);throw new BusinessException(400,"成绩将在整场考试结束后由系统自动发布，无需人工审批");}
   @GetMapping("/results/manage") public ApiResponse<List<Map<String,Object>>> managedResults(){permissions.require(Permissions.EXAM_MANAGE);return ApiResponse.ok(db.queryForList("select a.id,a.attempt_no,a.total_score,a.submitted_at,a.published,e.id employee_id,e.name employee_name,p.name exam_name,p.score_month,(select count(*) from exam_proctor_event x where x.attempt_id=a.id and x.event_type in ('BLUR','HIDDEN','EXIT_FULLSCREEN')) event_count from exam_attempt a join employee e on e.id=a.employee_id join exam_plan p on p.id=a.plan_id where a.status='GRADED' order by a.submitted_at desc"));}
   @GetMapping("/results/manage/plans") public ApiResponse<List<Map<String,Object>>> managedResultPlans(){permissions.require(Permissions.EXAM_MANAGE);String base="select p.id,p.name,ep.name paper_name,p.starts_at,p.ends_at,p.status,p.score_month,(select count(*) from exam_assignment ea where ea.plan_id=p.id) assigned_count,(select count(distinct a.employee_id) from exam_attempt a where a.plan_id=p.id) participant_count,(select count(*) from exam_assignment ea where ea.plan_id=p.id and exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id and a.status='GRADED')) completed_count,(select count(*) from exam_assignment ea where ea.plan_id=p.id and p.ends_at<now() and not exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id)) absent_count,(select count(*) from exam_assignment ea where ea.plan_id=p.id and exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id and a.status='GRADED' and a.published=true)) published_count,case when p.ends_at<now() then 'ENDED' when p.starts_at>now() then 'UPCOMING' else 'OPEN' end plan_phase from exam_plan p join exam_paper ep on ep.id=p.paper_id where p.status='PUBLISHED'";String sql="select x.*,(x.assigned_count-x.completed_count-x.absent_count) incomplete_count,case when x.completed_count=0 then 'NOT_READY' when x.published_count=0 then 'UNPUBLISHED' when x.published_count<x.completed_count then 'PARTIAL' else 'PUBLISHED' end publication_status from ("+base+") x order by x.starts_at desc";return ApiResponse.ok(db.queryForList(sql));}
   @GetMapping("/results/manage/plans/{planId}") public ApiResponse<List<Map<String,Object>>> managedPlanResults(@PathVariable Long planId){permissions.require(Permissions.EXAM_MANAGE);Integer exists=db.queryForObject("select count(*) from exam_plan where id=?",Integer.class,planId);if(exists==0)throw new BusinessException(404,"考试计划不存在");String sql="select e.id employee_id,e.employee_no,e.name employee_name,a.id,a.attempt_no,a.status attempt_status,a.started_at,a.submitted_at,a.total_score,a.published,(select count(*) from exam_proctor_event x where x.attempt_id=a.id and x.event_type in ('BLUR','HIDDEN','EXIT_FULLSCREEN')) event_count,case when a.status='GRADED' then 'COMPLETED' when p.ends_at<now() and a.id is null then 'ABSENT' when a.status='IN_PROGRESS' then 'IN_PROGRESS' when a.id is null then 'NOT_STARTED' else 'INCOMPLETE' end participation_status from exam_assignment ea join employee e on e.id=ea.employee_id join exam_plan p on p.id=ea.plan_id left join exam_attempt a on a.id=(select aa.id from exam_attempt aa where aa.plan_id=ea.plan_id and aa.employee_id=ea.employee_id order by (aa.status='GRADED') desc,aa.attempt_no desc limit 1) where ea.plan_id=? order by e.employee_no,e.id";return ApiResponse.ok(db.queryForList(sql,planId));}
@@ -267,13 +267,13 @@ public class ExamController {
     boolean randomizeQuestions = truthy(attempt.get("randomize_questions"));
     String order = randomizeQuestions ? " order by rand(?)" : dynamic ? " order by aq.sort_order" : " order by pq.sort_order";
     String sql = dynamic ? """
-        select q.id,q.question_type,q.stem,q.options_json,aq.score,x.answer_json saved_answer
+        select q.id,q.question_type,q.stem,q.options_json,aq.score,x.answer_json saved_answer,x.score answer_score,x.reviewer_comment
         from exam_attempt_question aq
         join question_bank q on q.id=aq.question_id
         left join exam_answer x on x.attempt_id=aq.attempt_id and x.question_id=q.id
         where aq.attempt_id=?
         """ : """
-        select q.id,q.question_type,q.stem,q.options_json,pq.score,x.answer_json saved_answer
+        select q.id,q.question_type,q.stem,q.options_json,pq.score,x.answer_json saved_answer,x.score answer_score,x.reviewer_comment
         from exam_attempt a
         join exam_plan p on p.id=a.plan_id
         join exam_paper_question pq on pq.paper_id=p.paper_id
@@ -309,7 +309,7 @@ public class ExamController {
   private void validateEnabledIds(String table,Set<Long> ids,String field){if(ids.isEmpty())return;String marks=String.join(",",Collections.nCopies(ids.size(),"?"));Integer count=db.queryForObject("select count(*) from "+table+" where enabled=true and id in ("+marks+")",Integer.class,ids.toArray());if(count==null||count!=ids.size())throw new BusinessException(400,field+"中包含不存在或已停用的选项");}
   private void assertAttempt(Long id){if(SecurityUtils.current().can(Permissions.EXAM_MANAGE))return;if(!"EMPLOYEE".equals(SecurityUtils.current().role()))throw new BusinessException(403,"仅考试管理员或考生本人可查看答卷");var row=db.queryForMap("select employee_id from exam_attempt where id=?",id);permissions.requireEmployee(((Number)row.get("employee_id")).longValue());}
   private void assertOwnActiveAttempt(Long id){var u=SecurityUtils.current();Integer n=db.queryForObject("select count(*) from exam_attempt a join employee e on e.id=a.employee_id where a.id=? and e.user_id=? and a.status='IN_PROGRESS' and a.deadline_at>=now()",Integer.class,id,u.id());if(n==0)throw new BusinessException(403,"考试已结束或无权操作");}
-  private List<PaperQuestion> manualQuestions(List<PaperQuestion> questions){if(questions==null||questions.isEmpty())throw new BusinessException(400,"手动组卷至少选择一道题");var ids=new HashSet<Long>();for(var q:questions){if(!ids.add(q.questionId()))throw new BusinessException(400,"试卷中不能重复选择同一道题");Integer count=db.queryForObject("select count(*) from question_bank q join exam_question_bank b on b.id=q.bank_id and b.enabled=true where q.id=? and q.enabled=true and q.question_type in ('SINGLE','MULTIPLE','TRUE_FALSE')",Integer.class,q.questionId());if(count==0)throw new BusinessException(400,"题目"+q.questionId()+"不存在、已停用、所属题库已停用或题型不受支持");}return questions;}
+  private List<PaperQuestion> manualQuestions(List<PaperQuestion> questions){if(questions==null||questions.isEmpty())throw new BusinessException(400,"手动组卷至少选择一道题");var ids=new HashSet<Long>();for(var q:questions){if(!ids.add(q.questionId()))throw new BusinessException(400,"试卷中不能重复选择同一道题");Integer count=db.queryForObject("select count(*) from question_bank q join exam_question_bank b on b.id=q.bank_id and b.enabled=true where q.id=? and q.enabled=true and q.question_type in ('SINGLE','MULTIPLE','TRUE_FALSE')",Integer.class,q.questionId());if(count==0)throw new BusinessException(400,"自动评分试卷仅支持单选题、多选题和判断题；题目"+q.questionId()+"不可用");}return questions;}
   private List<PaperQuestion> randomQuestions(List<RandomRule> rules) throws Exception {
     var validated = validateRandomRules(rules);
     var result = new ArrayList<PaperQuestion>();
@@ -330,7 +330,8 @@ public class ExamController {
     var usedTypes = new HashSet<String>();
     var selected = new ArrayList<RandomRule>();
     for (var rule : rules) {
-      if(!OBJECTIVE_TYPES.contains(rule.type())||!usedTypes.add(rule.type()))
+      if("SHORT".equals(rule.type()))throw new BusinessException(400,"自动评分试卷不支持简答题，请使用单选题、多选题或判断题");
+      if(!QUESTION_TYPES.contains(rule.type())||!usedTypes.add(rule.type()))
         throw new BusinessException(400,"随机组卷题型配置无效或重复");
       if(rule.count()>0)selected.add(new RandomRule(rule.type(),rule.count(),rule.score(),normalizeTags(rule.tags()),normalizeIds(rule.bankIds())));
     }
@@ -429,8 +430,48 @@ public class ExamController {
       throw new BusinessException(400,"试卷总分必须为100分，当前为"+
               total.stripTrailingZeros().toPlainString()+"分");
   }
-  private void validateQuestion(String type,JsonNode options,JsonNode answer){if(!OBJECTIVE_TYPES.contains(type))throw new BusinessException(400,"仅支持单选题、多选题和判断题");if("TRUE_FALSE".equals(type)){if(!answer.isBoolean())throw new BusinessException(400,"判断题答案必须为正确或错误");return;}if(options==null||!options.isArray()||options.size()<2)throw new BusinessException(400,"选择题至少需要两个选项");var values=new HashSet<String>();options.forEach(x->values.add(x.asText()));if(values.size()!=options.size())throw new BusinessException(400,"题目选项不能重复");if("SINGLE".equals(type)){if(!answer.isTextual()||!values.contains(answer.asText()))throw new BusinessException(400,"单选题答案必须是已有选项");}else{if(!answer.isArray()||answer.isEmpty())throw new BusinessException(400,"多选题至少需要一个正确答案");for(JsonNode x:answer)if(!values.contains(x.asText()))throw new BusinessException(400,"多选题答案必须是已有选项");}}
-  private QuestionRequest parseImportRow(Long bankId,QuestionImportRow row){String type=normalizeType(row.getType());String stem=trim(row.getStem());if(stem==null)throw new IllegalArgumentException("题干不能为空");if(row.getScore()==null||row.getScore().compareTo(BigDecimal.ZERO)<=0)throw new IllegalArgumentException("默认分值必须大于0");JsonNode options,answer;if("TRUE_FALSE".equals(type)){options=mapper.valueToTree(List.of(true,false));String raw=trim(row.getAnswer());if(raw==null)throw new IllegalArgumentException("判断题答案不能为空");if(Set.of("正确","对","TRUE","T","1").contains(raw.toUpperCase()))answer=mapper.valueToTree(true);else if(Set.of("错误","错","FALSE","F","0").contains(raw.toUpperCase()))answer=mapper.valueToTree(false);else throw new IllegalArgumentException("判断题答案应为正确或错误");}else{var values=new ArrayList<String>();for(String value:List.of(orEmpty(row.getOptionA()),orEmpty(row.getOptionB()),orEmpty(row.getOptionC()),orEmpty(row.getOptionD()),orEmpty(row.getOptionE()),orEmpty(row.getOptionF())))if(!value.isBlank())values.add(value.trim());if(values.size()<2)throw new IllegalArgumentException("选择题至少填写选项A和选项B");options=mapper.valueToTree(values);String raw=trim(row.getAnswer());if(raw==null)throw new IllegalArgumentException("正确答案不能为空");var answerValues=new ArrayList<String>();for(String letter:raw.toUpperCase().split("[,，、;；\\s]+")){if(letter.length()!=1||letter.charAt(0)<'A'||letter.charAt(0)>='A'+values.size())throw new IllegalArgumentException("正确答案请填写有效选项字母，如A或A,C");answerValues.add(values.get(letter.charAt(0)-'A'));}if("SINGLE".equals(type)){if(answerValues.size()!=1)throw new IllegalArgumentException("单选题只能填写一个答案");answer=mapper.valueToTree(answerValues.get(0));}else{if(answerValues.size()<2)throw new IllegalArgumentException("多选题至少填写两个答案");answer=mapper.valueToTree(answerValues);}}validateQuestion(type,options,answer);return new QuestionRequest(bankId,type,stem,options,answer,trim(row.getExplanation()),row.getScore(),parseTags(row.getTags()));}
+  private void validateQuestion(String type,JsonNode options,JsonNode answer){if(!QUESTION_TYPES.contains(type))throw new BusinessException(400,"仅支持单选题、多选题、判断题和简答题");if("SHORT".equals(type)){if(!answer.isTextual()||answer.asText().isBlank())throw new BusinessException(400,"简答题需要填写参考答案");return;}if("TRUE_FALSE".equals(type)){if(!answer.isBoolean())throw new BusinessException(400,"判断题答案必须为正确或错误");return;}if(options==null||!options.isArray()||options.size()<2)throw new BusinessException(400,"选择题至少需要两个选项");var values=new HashSet<String>();options.forEach(x->values.add(x.asText()));if(values.size()!=options.size())throw new BusinessException(400,"题目选项不能重复");if("SINGLE".equals(type)){if(!answer.isTextual()||!values.contains(answer.asText()))throw new BusinessException(400,"单选题答案必须是已有选项");}else{if(!answer.isArray()||answer.isEmpty())throw new BusinessException(400,"多选题至少需要一个正确答案");for(JsonNode x:answer)if(!values.contains(x.asText()))throw new BusinessException(400,"多选题答案必须是已有选项");}}
+  private QuestionRequest parseImportRow(Long bankId,QuestionImportRow row){
+    String type=normalizeType(row.getType());
+    String stem=trim(row.getStem());
+    if(stem==null)throw new IllegalArgumentException("题干不能为空");
+    if(row.getScore()==null||row.getScore().compareTo(BigDecimal.ZERO)<=0)throw new IllegalArgumentException("默认分值必须大于0");
+    JsonNode options,answer;
+    if("SHORT".equals(type)){
+      options=mapper.valueToTree(List.of());
+      String raw=trim(row.getAnswer());
+      if(raw==null)throw new IllegalArgumentException("简答题参考答案不能为空");
+      answer=mapper.valueToTree(raw);
+    }else if("TRUE_FALSE".equals(type)){
+      options=mapper.valueToTree(List.of(true,false));
+      String raw=trim(row.getAnswer());
+      if(raw==null)throw new IllegalArgumentException("判断题答案不能为空");
+      if(Set.of("正确","对","TRUE","T","1").contains(raw.toUpperCase()))answer=mapper.valueToTree(true);
+      else if(Set.of("错误","错","FALSE","F","0").contains(raw.toUpperCase()))answer=mapper.valueToTree(false);
+      else throw new IllegalArgumentException("判断题答案应为正确或错误");
+    }else{
+      var values=new ArrayList<String>();
+      for(String value:List.of(orEmpty(row.getOptionA()),orEmpty(row.getOptionB()),orEmpty(row.getOptionC()),orEmpty(row.getOptionD()),orEmpty(row.getOptionE()),orEmpty(row.getOptionF())))if(!value.isBlank())values.add(value.trim());
+      if(values.size()<2)throw new IllegalArgumentException("选择题至少填写选项A和选项B");
+      options=mapper.valueToTree(values);
+      String raw=trim(row.getAnswer());
+      if(raw==null)throw new IllegalArgumentException("正确答案不能为空");
+      var answerValues=new ArrayList<String>();
+      for(String letter:raw.toUpperCase().split("[,，、;；\\s]+")){
+        if(letter.length()!=1||letter.charAt(0)<'A'||letter.charAt(0)>='A'+values.size())throw new IllegalArgumentException("正确答案请填写有效选项字母，如A或A,C");
+        answerValues.add(values.get(letter.charAt(0)-'A'));
+      }
+      if("SINGLE".equals(type)){
+        if(answerValues.size()!=1)throw new IllegalArgumentException("单选题只能填写一个答案");
+        answer=mapper.valueToTree(answerValues.get(0));
+      }else{
+        if(answerValues.size()<2)throw new IllegalArgumentException("多选题至少填写两个答案");
+        answer=mapper.valueToTree(answerValues);
+      }
+    }
+    validateQuestion(type,options,answer);
+    return new QuestionRequest(bankId,type,stem,options,answer,trim(row.getExplanation()),row.getScore(),parseTags(row.getTags()));
+  }
   private List<String> parseTags(String raw) {
     if(raw==null||raw.isBlank())return List.of();
     var tags = Arrays.stream(raw.split("[,，、;；]+"))
@@ -476,8 +517,8 @@ public class ExamController {
     return value!=null&&Boolean.parseBoolean(String.valueOf(value));
   }
   private BigDecimal defaultScore(BigDecimal value){return value==null?BigDecimal.ZERO:value;}
-  private String normalizeType(String value){String type=trim(value);if(type==null)throw new IllegalArgumentException("题型不能为空");return switch(type.toUpperCase()){case "单选","单选题","SINGLE"->"SINGLE";case "多选","多选题","MULTIPLE"->"MULTIPLE";case "判断","判断题","TRUE_FALSE"->"TRUE_FALSE";default->throw new IllegalArgumentException("题型仅支持单选、多选、判断");};}
-  private String typeName(String type){return switch(type){case "SINGLE"->"单选题";case "MULTIPLE"->"多选题";default->"判断题";};}
+  private String normalizeType(String value){String type=trim(value);if(type==null)throw new IllegalArgumentException("题型不能为空");return switch(type.toUpperCase()){case "单选","单选题","SINGLE"->"SINGLE";case "多选","多选题","MULTIPLE"->"MULTIPLE";case "判断","判断题","TRUE_FALSE"->"TRUE_FALSE";case "简答","简答题","SHORT"->"SHORT";default->throw new IllegalArgumentException("题型仅支持单选、多选、判断、简答");};}
+  private String typeName(String type){return switch(type){case "SINGLE"->"单选题";case "MULTIPLE"->"多选题";case "SHORT"->"简答题";default->"判断题";};}
   private String trim(String value){return value==null||value.isBlank()?null:value.trim();}private String orEmpty(String value){return value==null?"":value;}
   private Long lastId(){return db.queryForObject("select last_insert_id()",Long.class);}private LocalDateTime time(Map<String,Object> m,String key){Object raw=m.get(key);if(raw instanceof LocalDateTime value)return value;if(raw instanceof Timestamp value)return value.toLocalDateTime();if(raw instanceof java.sql.Date value)return value.toLocalDate().atStartOfDay();if(raw instanceof java.util.Date value)return LocalDateTime.ofInstant(value.toInstant(),ZoneId.systemDefault());if(raw instanceof CharSequence value){String text=value.toString().trim();if(text.isEmpty())throw new BusinessException(500,"考试时间数据异常");try{return Timestamp.valueOf(text).toLocalDateTime();}catch(IllegalArgumentException ignored){return LocalDateTime.parse(text.replace(' ','T'));}}throw new BusinessException(500,"考试时间数据异常");}private String json(JsonNode n)throws Exception{return n==null?null:mapper.writeValueAsString(n);}private JsonNode tree(Object x)throws Exception{return x==null?null:mapper.readTree(String.valueOf(x));}
 }

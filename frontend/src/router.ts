@@ -14,12 +14,18 @@ const routes=[
     {path:'courses/sessions',component:()=>import('@/views/CourseSessionsView.vue'),meta:{permission:'course:manage'}},
     {path:'courses/attendance',component:()=>import('@/views/CourseAttendanceView.vue')},
     {path:'courses/my',component:()=>import('@/views/MyCoursesView.vue')},
+    {path:'courses/learning',component:()=>import('@/views/CourseLearningView.vue')},
+    {path:'courses/materials',component:()=>import('@/views/CoursewareManagementView.vue'),meta:{permission:'course:manage'}},
     {path:'training-plans',redirect:'/training-plans/manage'},
     {path:'training-plans/manage',component:()=>import('@/views/TrainingPlanManagementView.vue'),meta:{permission:'task:manage'}},
     {path:'training-plans/tasks',component:()=>import('@/views/TrainingPlanTasksView.vue'),meta:{permission:'task:manage'}},
     {path:'training-plans/tracking',component:()=>import('@/views/TasksView.vue')},
     {path:'tasks',component:()=>import('@/views/TasksView.vue')},
-    {path:'evaluation',component:()=>import('@/views/EvaluationView.vue'),meta:{permission:'evaluation:view'}},
+    {path:'evaluation',redirect:()=>useAuthStore().user?.role==='EMPLOYEE'?'/evaluation/results':'/evaluation/workbench'},
+    {path:'evaluation/workbench',component:()=>import('@/views/evaluation/EvaluationWorkbenchView.vue'),meta:{permission:'evaluation:view'}},
+    {path:'evaluation/monthly',component:()=>import('@/views/evaluation/EvaluationMonthlyView.vue'),meta:{permission:'evaluation:view'}},
+    {path:'evaluation/templates',component:()=>import('@/views/evaluation/EvaluationTemplatesView.vue'),meta:{permission:'evaluation:manage'}},
+    {path:'evaluation/results',component:()=>import('@/views/evaluation/EvaluationResultsView.vue'),meta:{permission:'evaluation:view'}},
     {path:'exams',redirect:'/exams/my'},
     {path:'exams/my',component:()=>import('@/views/exams/MyExamsView.vue')},
     {path:'exams/questions',component:()=>import('@/views/exams/ExamQuestionBankView.vue'),meta:{permission:'exam:manage'}},
@@ -39,8 +45,9 @@ router.beforeEach(to=>{
   if(to.path==='/login'&&a.user)return '/dashboard';
   if(a.user?.mustChangePassword&&to.path!='/profile')return '/profile';
   if(a.user?.role==='EMPLOYEE'&&to.path==='/employee-directory')return '/profile';
-  if(a.user?.role==='EMPLOYEE'&&['/courses/manage','/courses/sessions'].includes(to.path))return '/courses/my';
-  if(a.user?.role!=='EMPLOYEE'&&to.path==='/courses/my')return a.can('course:manage')?'/courses/manage':'/courses/attendance';
+  if(a.user?.role==='EMPLOYEE'&&to.path.startsWith('/evaluation/')&&to.path!=='/evaluation/results')return '/evaluation/results';
+  if(a.user?.role==='EMPLOYEE'&&['/courses/manage','/courses/sessions','/courses/materials'].includes(to.path))return '/courses/learning';
+  if(a.user?.role!=='EMPLOYEE'&&['/courses/my','/courses/learning'].includes(to.path))return a.can('course:manage')?'/courses/manage':'/courses/attendance';
   if(a.user?.role!=='EMPLOYEE'&&to.path==='/exams/my')return a.can('exam:manage')?'/exams/plans':'/exams/results';
   const permission=to.meta.permission as string|undefined;
   if(permission&&!a.can(permission))return '/dashboard';

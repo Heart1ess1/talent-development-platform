@@ -9,10 +9,11 @@ import '@/styles/exam-center.css'
 const papers=ref<any[]>([]),questions=ref<any[]>([]),banks=ref<any[]>([]),loading=ref(false),saving=ref(false)
 const drawerVisible=ref(false),detailVisible=ref(false),selectedDetail=ref<any>(null),detailLoading=ref(false)
 const keyword=ref(''),modeFilter=ref(''),questionKeyword=ref(''),questionType=ref(''),questionBankId=ref<number>()
+const objectiveTypes=['SINGLE','MULTIPLE','TRUE_FALSE']
 const emptyPaper=()=>({name:'',description:'',mode:'MANUAL',dynamicAssembly:false,randomizeQuestions:false,randomizeOptions:true,bankIds:[] as number[],selected:[] as number[],scores:{} as Record<number,number>,rules:{SINGLE:{count:0,score:5,tags:[] as string[]},MULTIPLE:{count:0,score:10,tags:[] as string[]},TRUE_FALSE:{count:0,score:5,tags:[] as string[]}}})
 const paper=reactive<any>(emptyPaper())
 
-const enabledQuestions=computed(()=>questions.value.filter(q=>truthy(q.enabled)&&truthy(q.bank_enabled)))
+const enabledQuestions=computed(()=>questions.value.filter(q=>truthy(q.enabled)&&truthy(q.bank_enabled)&&objectiveTypes.includes(q.question_type)))
 const filteredPapers=computed(()=>papers.value.filter(row=>{
   const match=!keyword.value||`${row.name} ${row.description||''}`.toLowerCase().includes(keyword.value.trim().toLowerCase())
   return match&&(!modeFilter.value||row.assembly_mode===modeFilter.value)
@@ -71,7 +72,7 @@ onMounted(load)
 <template>
   <div class="exam-module-page">
     <header class="exam-page-head">
-      <div><span class="eyebrow">考试中心 · 试卷管理</span><h1>试卷管理</h1><p>从指定题库选题或按规则抽题，形成可复用、可追溯的标准化试卷。</p></div>
+      <div><span class="eyebrow">考试中心 · 试卷管理</span><h1>试卷管理</h1><p>试卷仅使用客观题，由系统自动评分，并在整场考试结束后统一发布成绩。</p></div>
       <div class="exam-head-actions"><el-button type="primary" :icon="Plus" @click="openCreate">新建试卷</el-button></div>
     </header>
 
@@ -105,7 +106,7 @@ onMounted(load)
         <div class="paper-section-title"><span>2</span><div><strong>组卷方式</strong><small>手动组卷适合固定考核；随机组卷适合复用和防止题目重复。</small></div></div>
         <el-radio-group v-model="paper.mode" class="mode-cards"><el-radio-button value="MANUAL">手动选题</el-radio-button><el-radio-button value="RANDOM">规则抽题</el-radio-button></el-radio-group>
         <template v-if="paper.mode==='MANUAL'">
-          <div class="question-picker-filter"><el-input v-model="questionKeyword" clearable :prefix-icon="Search" placeholder="搜索题干"/><el-select v-model="questionBankId" clearable placeholder="全部题库"><el-option v-for="item in banks.filter(x=>truthy(x.enabled))" :key="item.id" :label="item.name" :value="item.id"/></el-select><el-select v-model="questionType" clearable placeholder="全部题型"><el-option v-for="(label,key) in typeLabels" :key="key" :label="label" :value="key"/></el-select></div>
+          <div class="question-picker-filter"><el-input v-model="questionKeyword" clearable :prefix-icon="Search" placeholder="搜索题干"/><el-select v-model="questionBankId" clearable placeholder="全部题库"><el-option v-for="item in banks.filter(x=>truthy(x.enabled))" :key="item.id" :label="item.name" :value="item.id"/></el-select><el-select v-model="questionType" clearable placeholder="全部题型"><el-option v-for="key in objectiveTypes" :key="key" :label="typeLabels[key]" :value="key"/></el-select></div>
           <div class="question-picker">
             <label v-for="item in selectableQuestions" :key="item.id" :class="{selected:paper.selected.includes(item.id)}"><el-checkbox v-model="paper.selected" :value="item.id"/><span class="question-copy"><strong>{{item.stem}}</strong><small>{{item.bank_name}} · {{typeLabels[item.question_type]}}</small></span><el-input-number v-if="paper.selected.includes(item.id)" v-model="paper.scores[item.id]" :min="0.01" :precision="2" controls-position="right"/><em v-if="paper.selected.includes(item.id)">分</em></label>
             <el-empty v-if="!selectableQuestions.length" :image-size="70" description="没有符合条件的可用题目"/>
@@ -113,7 +114,7 @@ onMounted(load)
         </template>
         <template v-else>
           <el-select v-model="paper.bankIds" multiple collapse-tags collapse-tags-tooltip clearable class="bank-source-select" placeholder="抽题范围：全部启用题库"><el-option v-for="item in banks.filter(x=>truthy(x.enabled))" :key="item.id" :label="item.name" :value="item.id"/></el-select>
-          <el-table :data="Object.keys(typeLabels).map(type=>({type,...paper.rules[type]}))" class="rule-table">
+          <el-table :data="objectiveTypes.map(type=>({type,...paper.rules[type]}))" class="rule-table">
             <el-table-column label="题型" width="105"><template #default="s">{{typeLabels[s.row.type]}}</template></el-table-column>
             <el-table-column label="可用量" width="90"><template #default="s">{{availableCount(s.row.type)}} 题</template></el-table-column>
             <el-table-column label="抽取题数" width="155"><template #default="s"><el-input-number v-model="paper.rules[s.row.type].count" :min="0" :max="availableCount(s.row.type)" controls-position="right"/></template></el-table-column>

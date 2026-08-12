@@ -111,12 +111,17 @@ public class EvaluationService {
   public Map<String,Object> schemeFor(Long employeeId, YearMonth month) {
     Long batchId = db.queryForObject("select batch_id from employee where id=?", Long.class, employeeId);
     if (batchId == null) throw new BusinessException(400, "员工未绑定培养批次");
-    var rows = db.queryForList("select * from score_scheme where batch_id=? and status in ('PUBLISHED','RETIRED') and effective_month<=? order by effective_month desc,version desc limit 1", batchId, month.atDay(1));
+    var rows = db.queryForList("select s.*,t.name template_name from score_scheme s left join evaluation_template t on t.id=s.template_id where s.batch_id=? and s.status in ('PUBLISHED','RETIRED') and s.effective_month<=? order by s.effective_month desc,s.version desc limit 1", batchId, month.atDay(1));
     if (rows.isEmpty()) throw new BusinessException(400, "该月份没有已发布的评分方案");
     return rows.get(0);
   }
 
-  public Map<String,Object> schemeById(Long id) { return db.queryForMap("select * from score_scheme where id=?", id); }
+  public Map<String,Object> schemeById(Long id) { return db.queryForMap("select s.*,t.name template_name from score_scheme s left join evaluation_template t on t.id=s.template_id where s.id=?", id); }
+
+  public BigDecimal componentMaxScore(Long employeeId,YearMonth month,String component) {
+    if(!COMPONENTS.contains(component))throw new BusinessException(400,"不支持的评分项");
+    return maxScore(schemeFor(employeeId,month),component);
+  }
 
   private Long writeMonthly(Long employeeId, YearMonth month, Map<String,Object> scheme, String reopenReason) {
     if (isLocked(employeeId, month) && (reopenReason == null || reopenReason.isBlank())) throw new BusinessException(400, "已发布月度汇总必须填写原因后重开");
@@ -140,12 +145,19 @@ public class EvaluationService {
 
   private MonthlyCalculation calculate(Long employeeId, YearMonth month, Map<String,Object> scheme) {
     LocalDate start = month.atDay(1), end = month.atEndOfMonth();
-    BigDecimal exam = avg("select avg(total_score) from exam_attempt a join exam_plan p on p.id=a.plan_id where a.employee_id=? and a.published=true and p.score_month=?", employeeId, start);
-    BigDecimal task = avg("select avg(a.final_score) from task_assignment a join challenge_task t on t.id=a.task_id where a.employee_id=? and a.status in ('APPROVED','OVERDUE') and date(t.deadline) between ? and ?", employeeId, start, end);
+    BigDecimal examPercent = avg("""
+      select avg(a.total_score*100/nullif(coalesce(
+        (select sum(aq.score) from exam_attempt_question aq where aq.attempt_id=a.id),
+        (select sum(pq.score) from exam_paper_question pq where pq.paper_id=p.paper_id)
+      ),0))
+      from exam_attempt a join exam_plan p on p.id=a.plan_id
+      where a.employee_id=? and a.published=true and p.score_month=?
+      """, employeeId, start);
+    BigDecimal taskPercent = avg("select avg(a.final_score) from task_assignment a join challenge_task t on t.id=a.task_id where a.employee_id=? and a.status in ('APPROVED','OVERDUE') and date(t.deadline) between ? and ?", employeeId, start, end);
     Map<String,Map<String,Object>> manual = manualScores(employeeId, start);
     Map<String,Map<String,Object>> overrides = overrideScores(employeeId, start);
     Map<String,BigDecimal> sourceScores = new LinkedHashMap<>();
-    sourceScores.put("EXAM", exam); sourceScores.put("TASK", task);
+    sourceScores.put("EXAM", scalePercent(examPercent,maxScore(scheme,"EXAM"))); sourceScores.put("TASK", scalePercent(taskPercent,maxScore(scheme,"TASK")));
     sourceScores.put("MENTOR", scoreOf(manual.get("MENTOR"))); sourceScores.put("STATION", scoreOf(manual.get("STATION"))); sourceScores.put("TRAINING", scoreOf(manual.get("TRAINING")));
 
     List<Map<String,Object>> components = new ArrayList<>();
@@ -155,16 +167,18 @@ public class EvaluationService {
     for (String code : COMPONENTS) {
       boolean enabled = bool(scheme.get(code.toLowerCase() + "_enabled"));
       BigDecimal weight = decimal(scheme, code.toLowerCase() + "_weight");
+      BigDecimal fullScore = maxScore(scheme,code);
       BigDecimal source = sourceScores.get(code);
       Map<String,Object> override = overrides.get(code);
       BigDecimal overrideScore = override == null ? null : decimal(override, "override_score");
       BigDecimal effective = overrideScore != null ? overrideScore : source;
-      BigDecimal contribution = enabled && effective != null ? effective.multiply(weight).divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP) : null;
+      BigDecimal normalized = effective == null ? null : effective.multiply(new BigDecimal("100")).divide(fullScore,6,RoundingMode.HALF_UP);
+      BigDecimal contribution = enabled && normalized != null ? normalized.multiply(weight).divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP) : null;
       if (enabled && effective == null) missing.add(code);
-      weightedScores.add(new EvaluationRules.WeightedScore(enabled,weight,effective));
+      weightedScores.add(new EvaluationRules.WeightedScore(enabled,weight,normalized));
       effectiveScores.put(code, effective);
       Map<String,Object> item = new LinkedHashMap<>();
-      item.put("code", code); item.put("enabled", enabled); item.put("weight", weight); item.put("sourceType", AUTO_COMPONENTS.contains(code) ? "AUTO" : "MANUAL");
+      item.put("code", code); item.put("enabled", enabled); item.put("weight", weight); item.put("fullScore", fullScore); item.put("sourceType", AUTO_COMPONENTS.contains(code) ? "AUTO" : "MANUAL");
       item.put("sourceScore", source); item.put("overrideScore", overrideScore); item.put("effectiveScore", effective); item.put("weightedScore", contribution == null ? null : contribution.setScale(2, RoundingMode.HALF_UP));
       item.put("status", !enabled ? "DISABLED" : effective == null ? "PENDING" : overrideScore != null ? "OVERRIDDEN" : AUTO_COMPONENTS.contains(code) ? "AUTOMATIC" : "SUBMITTED");
       if (manual.containsKey(code)) { item.put("comment", manual.get(code).get("comment")); item.put("evaluatorName", manual.get(code).get("evaluator_name")); item.put("submittedAt", manual.get(code).get("submitted_at")); }
@@ -176,7 +190,7 @@ public class EvaluationService {
     BigDecimal finalScore = EvaluationRules.finalScore(weightedScores,bonus,deduction);
     boolean locked = isLocked(employeeId, month);
     Map<String,Object> detail = new LinkedHashMap<>();
-    detail.put("employeeId", employeeId); detail.put("month", month.toString()); detail.put("schemeId", scheme.get("id")); detail.put("schemeVersion", scheme.get("version")); detail.put("locked", locked);
+    detail.put("employeeId", employeeId); detail.put("month", month.toString()); detail.put("schemeId", scheme.get("id")); detail.put("schemeVersion", scheme.get("version")); detail.put("templateId",scheme.get("template_id"));detail.put("templateName",scheme.get("template_name"));detail.put("locked", locked);
     detail.put("components", components); detail.put("bonus", bonus); detail.put("deduction", deduction); detail.put("finalScore", finalScore); detail.put("missingItems", missing);
     String snapshot = toJson(Map.of("schemeId", scheme.get("id"), "schemeVersion", scheme.get("version"), "components", components));
     return new MonthlyCalculation(number(scheme.get("id")).longValue(), detail, effectiveScores, bonus, deduction, finalScore, missing, snapshot);
@@ -201,6 +215,8 @@ public class EvaluationService {
   private BigDecimal scoreOf(Map<String,Object> row) { return row == null ? null : decimal(row, "score"); }
   private BigDecimal sumAdjustment(Long employeeId, LocalDate month, String type) { BigDecimal value = db.queryForObject("select coalesce(sum(points),0) from score_adjustment where employee_id=? and period_month=? and adjustment_type=?", BigDecimal.class, employeeId, month, type); return value == null ? BigDecimal.ZERO : value; }
   private BigDecimal avg(String sql, Object... args) { return db.queryForObject(sql, BigDecimal.class, args); }
+  private BigDecimal maxScore(Map<String,Object> scheme,String component){BigDecimal value=decimal(scheme,component.toLowerCase()+"_max_score");return value==null?new BigDecimal("100"):value;}
+  private BigDecimal scalePercent(BigDecimal percent,BigDecimal fullScore){return percent==null?null:percent.multiply(fullScore).divide(new BigDecimal("100"),2,RoundingMode.HALF_UP);}
   static BigDecimal decimal(Map<String,Object> row, String key) { Object value = row.get(key); return value == null ? null : new BigDecimal(String.valueOf(value)); }
   private static Number number(Object value) { return (Number)value; }
   private static boolean bool(Object value) { return Boolean.TRUE.equals(value) || value instanceof Number n && n.intValue() != 0 || "true".equalsIgnoreCase(String.valueOf(value)); }
