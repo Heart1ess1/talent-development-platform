@@ -5,9 +5,9 @@
 ## 当前基线
 
 - 最后核对日期：2026-08-12
-- GitHub：PR #3 已合并到 `main`，合并提交为 `0dc92decfc4d782b6a7b235cd59bc383dfba8ba8`。
-- 云服务器：PR #3 尚未部署；线上仍运行本次合并之前的版本。
-- 本次尚未发生：没有上传 PR #3 的新 JAR/前端资源，没有触发 Flyway V22～V24，没有重建应用容器，也没有执行 PR #3 上线后的业务冒烟测试。
+- GitHub：PR #3 及生产验收修复 PR #5～#7 均已合并；已部署的应用代码基线为 `491380fe05be7564a35bed33dd50ac031177a6e6`，其后的部署记录文档提交不要求重建 JAR。
+- 云服务器：已部署与该 `main` 对应的 IP 版生产 JAR，SHA-256 为 `115834bd12901f98c281783a270a7aa46d0293e64c3d1786219847f24cf3e0a0`。
+- 线上验收：应用健康状态为 `UP`，Flyway 为 V24；公开 OSS、私有课件直传/水印预览/禁止原件下载、私有附件签名下载及删除清理均已通过真实生产冒烟测试。
 - 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、HTTPS 和本地备份已经投入使用；ICP备案、正式 DNS 和 CDN 尚未完成。
 
 “代码已合并”不等于“云端已上线”。只有部署任务取得服务器端版本、健康检查、迁移记录和业务冒烟证据后，才能将状态改为 `Done`。
@@ -23,19 +23,19 @@
 | `Backlog` | 不阻塞当前网站运行，可排期优化 |
 | `Done` | 已完成且已经记录可复核证据 |
 
-## P0：PR #3 云服务器部署
+## 最近完成：PR #3 云服务器部署
 
-这些事项当前具备执行条件，也是让 PR #3 功能真正进入线上环境所必需的工作。必须按顺序执行。
+以下事项已于 2026-08-12 按顺序完成，保留为可复核的上线记录，不再属于待办任务。
 
 | 完成 | ID | 状态 | 任务 | 原因/依赖 | 完成证据 |
 | --- | --- | --- | --- | --- | --- |
-| [ ] | DEPLOY-001 | Ready | 核对私有 Bucket 的实际 CORS，并加入 `POST` | PR #3 已将浏览器直传升级为 OSS POST Policy；只保留 `PUT` 会导致线上上传失败 | `yryhx-talent-private-cn-shanghai` 允许站点来源执行 `POST/GET/HEAD`，公共访问仍被阻止 |
-| [ ] | DEPLOY-002 | Ready | 执行部署前 MySQL 备份并保存 SHA-256 | 新版本会执行 Flyway V22～V24，部署前必须保留可验证回退点 | `/data/talent-platform/backups/mysql/` 生成新的 `.sql.gz` 和对应 `.sha256`，gzip 校验通过 |
-| [ ] | DEPLOY-003 | Ready | 从 `origin/main@0dc92de` 构建 IP 版生产 JAR | ICP/CDN 尚未就绪，本轮不能部署引用 `static.yryhx.cn` 的 CDN 构建 | 前端 `AssetBase` 为 `/`；前端测试、构建和后端测试通过；记录新 JAR SHA-256 |
-| [ ] | DEPLOY-004 | Ready | 上传新 JAR、部署脚本及配置模板到 ECS | GitHub 合并不会自动把本地文件发送到服务器 | ECS 上待部署文件哈希与本机构建产物一致，脚本版本包含 OSS POST 上传支持 |
-| [ ] | DEPLOY-005 | Ready | 使用 `update-app.sh` 更新应用并触发 Flyway | 让考试自动发布、课件学习和安全直传代码真正运行 | 应用容器重建成功，`/actuator/health` 为 `UP`，Flyway 当前版本为 24 |
-| [ ] | DEPLOY-006 | Ready | 执行 OSS、课件、附件及核心业务冒烟测试 | 单纯健康检查不能证明上传、预览、权限和自动成绩流程可用 | `verify-oss-switch.sh`、`smoke-oss-app.sh`、`smoke-private-courseware.sh`、`smoke-private-attachment.sh` 全部通过；考试结束后成绩可见性回归通过 |
-| [ ] | DEPLOY-007 | Ready | 记录线上版本并验证回滚材料 | 后续必须能够判断服务器到底运行哪个提交 | 记录 Git 提交、JAR SHA-256、部署时间、数据库迁移版本、备份文件和回滚 JAR 路径 |
+| [x] | DEPLOY-001 | Done | 核对私有 Bucket 的实际 CORS，并加入 `POST` | PR #3 已将浏览器直传升级为 OSS POST Policy；只保留 `PUT` 会导致线上上传失败 | OPTIONS 预检为 200，允许 `GET, HEAD, PUT, POST`，允许来源 `http://139.224.51.21` |
+| [x] | DEPLOY-002 | Done | 执行部署前 MySQL 备份并保存 SHA-256 | 新版本会执行 Flyway V22～V24，部署前必须保留可验证回退点 | `/data/talent-platform/backups/mysql/talent-platform-20260812-230705.sql.gz`；SHA-256 `2eb3114fc2488896c1339871af761bff5ba47629d86d7f3338870d5eab994862` |
+| [x] | DEPLOY-003 | Done | 从 `origin/main@491380f` 构建 IP 版生产 JAR | ICP/CDN 尚未就绪，本轮不能部署引用 `static.yryhx.cn` 的 CDN 构建 | `AssetBase=/`；前端 12 项、后端 85 项测试通过；JAR SHA-256 `115834bd12901f98c281783a270a7aa46d0293e64c3d1786219847f24cf3e0a0` |
+| [x] | DEPLOY-004 | Done | 上传新 JAR、部署脚本及配置模板到 ECS | GitHub 合并不会自动把本地文件发送到服务器 | ECS JAR 哈希与本机构建产物一致；生产验收脚本已同步并通过 Linux 语法检查 |
+| [x] | DEPLOY-005 | Done | 使用 `update-app.sh` 更新应用并触发 Flyway | 让考试自动发布、课件学习和安全直传代码真正运行 | 2026-08-12 23:09 应用容器重建成功，`/actuator/health` 为 `UP`，Flyway 为 V24 |
+| [x] | DEPLOY-006 | Done | 执行 OSS、课件、附件及核心业务冒烟测试 | 单纯健康检查不能证明上传、预览、权限和自动成绩流程可用 | 四个生产脚本全部通过；考试结束前隐藏成绩、结束后可见的后端回归测试通过 |
+| [x] | DEPLOY-007 | Done | 记录线上版本并验证回滚材料 | 后续必须能够判断服务器到底运行哪个提交 | 回滚 JAR：`/data/talent-platform/releases/history/pre-491380f-20260812-230714/talent-platform.jar`；回滚 JAR SHA-256 `272cb2af3f1ae493992bd41379ac89b8c83bec24891e04b469d28ffb55a15a87` |
 
 部署时使用根路径静态资源构建：
 
@@ -65,7 +65,7 @@ flyway_schema_history 当前版本
 | [ ] | ICP-002 | Blocked | 完成管局审核和短信核验 | 必须等待管局流程发起 | 获得备案号，短信核验完成且备案状态正常 |
 | [ ] | CDN-001 | Blocked | 创建并配置 `static.yryhx.cn` CDN 域名 | 中国内地 CDN 域名需要备案号 | OSS 私有回源鉴权、HTTPS 证书、TLS 1.2/1.3、缓存规则配置完成 |
 | [ ] | DNS-001 | Blocked | 添加根域名、`www` 和 `static` 正式 DNS 记录 | 依赖备案号和 CDN 分配的真实 CNAME | `@` 指向 ECS，`www` 正确跳转，`static` 指向 CDN CNAME，TTL 初始为 600 秒 |
-| [ ] | CDN-002 | Blocked | 激活 CDN 专用候选构建 | 必须先确认 CDN 域名、证书、CNAME 和静态资源全部可用 | `activate-cdn-release.sh` 通过，静态资源 200、MIME 正确并命中缓存 |
+| [ ] | CDN-002 | Blocked | 从最新 `main` 重建并激活 CDN 专用候选 | 现有候选早于 `main@491380f`，且必须先确认 CDN 域名、证书和 CNAME 可用 | 重新执行 CDN 构建及静态资源同步；`activate-cdn-release.sh` 通过，静态资源 200、MIME 正确并命中缓存 |
 | [ ] | GO-LIVE-001 | Blocked | 完成正式域名全链路验收并观察 24 小时 | 依赖 DNS/CDN 正式切换 | HTTPS、API、登录、考试、课件、附件、OSS 权限和 CDN 缓存持续正常，之后再提高 TTL |
 
 ## 运行安全与可靠性

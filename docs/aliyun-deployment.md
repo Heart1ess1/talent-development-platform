@@ -12,13 +12,21 @@
 | 云盘 | 40 GiB 系统盘挂载 `/`；100 GiB ESSD 数据盘已格式化为 ext4 并按 UUID 持久挂载 `/data`，MySQL、上传回退目录、课件预览缓存、备份和发布候选均使用数据盘 |
 | 网络 | 安全组已开放 80、443；ECS Nginx 已安装主站证书并启用 HTTPS，使用 `--resolve` 绕过尚未切换的 DNS 后，外网 TLS 1.3、健康接口和 301 跳转均已验证通过 |
 | 文件 | 线上应用已切换为 `STORAGE_TYPE=oss`；长期 AccessKey 留空，ECS 通过 IMDSv2 获取临时凭证 |
-| OSS | 上海 ZRS Bucket `yryhx-talent-private-cn-shanghai` 与 `yryhx-talent-public-cn-shanghai` 已创建且保持私有 ACL；CORS、`TalentPlatformOssRole` 绑定和最小权限策略已生效；公共图片及私有课件真实上传/读取/删除验收通过 |
+| OSS | 上海 ZRS Bucket `yryhx-talent-private-cn-shanghai` 与 `yryhx-talent-public-cn-shanghai` 已创建且保持私有 ACL；CORS 已允许私有 Bucket 使用 `POST`，`TalentPlatformOssRole` 绑定和最小权限策略已生效；公共图片、私有课件和私有附件真实上传/读取/预览/删除验收通过 |
 | 域名 | `yryhx.cn` 使用阿里云 DNS，但根域名和 `www` 均没有 A/CNAME 记录 |
 | 证书 | 三张 DigiCert RSA 2048 DV 证书均已签发；`yryhx.cn` 证书同时覆盖 `www.yryhx.cn` 并已安装到 ECS，有效期至 2026-11-10；`static.yryhx.cn` 证书已签发，待 CDN 域名创建后部署 |
 | 备案 | 备案控制台显示“待提交管局”和“暂无备案号”；域名注册/转入未满两天，等待系统自动提交，在备案号下发前不添加中国内地 CDN 域名、不切换正式业务 DNS |
 | CDN/ESA | CDN 已按流量计费方式开通，当前 0 个加速域名、0 流量；`static.yryhx.cn` 仍需等 ICP 备案号下发后添加 |
 
-CDN 专用构建已预先暂存到数据盘的 `/data/talent-platform/releases/staging/cdn-20260812-2032/`，稳定入口 `/opt/talent-platform/staging/cdn-ready` 指向该候选包，JAR SHA-256 为 `70a9e90c6eeb37416e713bdd1e18a0d3d4b137f28f730da5a395f25b7141599b`。构建生成的 63 个内容哈希对象已同步到公共 Bucket 的 `assets/`，抽样对象已确认 MIME、`Cache-Control: public, max-age=31536000, immutable`、AES256 服务端加密及匿名访问 403。当前线上仍运行 IP 版 JAR，只有 CDN 域名与 HTTPS 验收通过后才执行 `activate-cdn-release.sh`。
+当前线上运行 IP 版 `main@491380fe05be7564a35bed33dd50ac031177a6e6`，JAR SHA-256 为 `115834bd12901f98c281783a270a7aa46d0293e64c3d1786219847f24cf3e0a0`，Flyway 为 V24。历史 CDN 候选包 `/data/talent-platform/releases/staging/cdn-20260812-2032/` 早于本次上线，已视为过期，不能直接激活；备案、CDN 域名与 HTTPS 就绪后，必须从当时最新 `main` 重新构建并同步静态资源，再执行 `activate-cdn-release.sh`。
+
+### 2026-08-12 部署记录
+
+- 数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20260812-230705.sql.gz`，SHA-256 `2eb3114fc2488896c1339871af761bff5ba47629d86d7f3338870d5eab994862`。
+- 部署前回滚 JAR：`/data/talent-platform/releases/history/pre-491380f-20260812-230714/talent-platform.jar`，SHA-256 `272cb2af3f1ae493992bd41379ac89b8c83bec24891e04b469d28ffb55a15a87`。
+- 构建校验：前端 12 项测试、生产构建和后端 85 项测试通过；静态资源根路径为 `/`。
+- 生产校验：`verify-oss-switch.sh`、`smoke-oss-app.sh`、`smoke-private-courseware.sh`、`smoke-private-attachment.sh` 全部通过，临时课程、任务及 OSS 正式对象已删除。
+- 验收期间发现并修复了 OSS 模式构造器注入、冒烟脚本路径和 POST Policy Base64 编码问题，分别经 PR #5、#6、#7 合并后重新构建部署。
 
 ### 数据盘实际布局
 
