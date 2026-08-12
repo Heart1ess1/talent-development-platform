@@ -5,8 +5,8 @@
 ## 当前基线
 
 - 最后核对日期：2026-08-13
-- GitHub：PR #3、生产验收修复 PR #5～#7 及综合评价优化 PR #9 均已合并；评分任务与评分人编排位于 Draft PR #11，分支提交为 `e53e4b08d7fd34423a2a57232589b5c3e1fc1470`，尚未合并 `main`。
-- 云服务器：已部署 PR #11 分支提交对应的 IP 版生产 JAR，SHA-256 为 `d46b3452fffd51baa5bde2c6c1abdbe2a243434cea870a416f1a93f684b4fffb`。生产环境当前因此领先于 `main`，后续合并或回退时必须显式核对提交和 JAR 哈希。
+- GitHub：PR #3、生产验收修复 PR #5～#7、综合评价优化 PR #9 及评分任务编排 PR #11 均已合并；PR #11 的 `main` 合并提交为 `f5e58c384434dbcde339c7137429dac17b9b8bd8`。
+- 云服务器：已部署 PR #11 功能提交 `e53e4b08d7fd34423a2a57232589b5c3e1fc1470` 对应的 IP 版生产 JAR，SHA-256 为 `d46b3452fffd51baa5bde2c6c1abdbe2a243434cea870a416f1a93f684b4fffb`；该功能已通过 PR #11 纳入 `main`。
 - 线上验收：应用健康状态为 `UP`，Flyway V26 成功；`evaluation_rating_task`、`evaluation_rating_reviewer` 已建表，评分任务页面返回 200，未登录 API 正确返回 401。此前公开 OSS、私有课件直传/水印预览/禁止原件下载、私有附件签名下载及删除清理验收继续有效。
 - 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、HTTPS 和本地备份已经投入使用；ICP备案、正式 DNS 和 CDN 尚未完成。
 
@@ -62,7 +62,8 @@ flyway_schema_history 当前版本
 | 完成 | ID | 状态 | 任务 | 验收标准 |
 | --- | --- | --- | --- | --- |
 | [x] | DEPLOY-008 | Done | 发布月度评价工作台与多来源加权 | PR #9 已合并；ECS 运行 `main@90d09a4`；JAR SHA-256 `7ead9945d8a0335741c2df2db4c04a7bdf7cff1b9e4eb1b69576eee02d21af4a`；Flyway V25、健康、员工队列、评价来源及模板接口均通过 |
-| [x] | DEPLOY-009 | Done | 发布评分任务与评分人编排 | Draft PR #11 分支提交 `e53e4b0` 已部署；前端 12 项、后端 92 项测试及生产构建通过；JAR SHA-256 `d46b3452fffd51baa5bde2c6c1abdbe2a243434cea870a416f1a93f684b4fffb`；Flyway V26、两张评分任务表、健康、页面和未登录权限边界均通过 |
+| [x] | DEPLOY-009 | Done | 发布评分任务与评分人编排 | PR #11 已合并；功能提交 `e53e4b0` 已部署；前端 12 项、后端 92 项测试及生产构建通过；JAR SHA-256 `d46b3452fffd51baa5bde2c6c1abdbe2a243434cea870a416f1a93f684b4fffb`；Flyway V26、两张评分任务表、健康、页面和未登录权限边界均通过 |
+| [ ] | DEPLOY-010 | Ready | 发布任务优先的全员/批次/板块评分人配置 | `codex/evaluation-group-reviewer-rules` 已完成 V27、后端测试、前端生产构建和独立数据库迁移启动验证；待代码复核、推送 GitHub、合并 `main` 后部署 ECS，并验收范围优先级、多人待办和已发布结果锁定 |
 
 ## 外部条件阻塞任务
 

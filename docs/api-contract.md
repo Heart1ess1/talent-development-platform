@@ -242,7 +242,11 @@ Authorization: Bearer <token>
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/evaluation/overview` | `evaluation:view`，按数据范围过滤 | 查询指定月份评价工作台指标与跨模块待办 | `month` | 方案覆盖、汇总状态、人工评分/任务审核/遗留考试阅卷和待自动下发数量 |
 | `GET` | `/api/v1/evaluation/assignments` | `evaluation:manage` | 查询月份人工评分任务与提交进度 | `month`；可选 `component`、`status`、`reviewerId`、`keyword` | 任务、当前评分人、过程平均分、正式平均分和状态 |
-| `GET` | `/api/v1/evaluation/assignments/{id}` | `evaluation:manage` | 查询评分任务详情 | 路径 `id` | 员工、作用域、评分人个人提交及任务设置 |
+| `GET` | `/api/v1/evaluation/assignments/overview` | `evaluation:manage` | 查询各人工评分任务类型的配置概览 | `month` | 员工/任务数、覆盖数、未分配/进行中/完成数、范围规则和评分人数 |
+| `GET` | `/api/v1/evaluation/assignments/scope-rules` | `evaluation:manage` | 查询某任务类型的人员范围规则 | `month`、`component=MENTOR|STATION|TRAINING` | 全员/批次/板块规则、评分人及实际覆盖人数和任务数 |
+| `PUT` | `/api/v1/evaluation/assignments/scope-rules` | `evaluation:manage` | 新增或更新人员范围评分人配置并自动重算员工任务 | `month`、`component`、`targetType=ALL|BATCH|BUSINESS_UNIT`、非全员时 `targetId`、`reviewerIds`、可选 `dueAt`、`note` | 范围规则 ID |
+| `DELETE` | `/api/v1/evaluation/assignments/scope-rules/{id}` | `evaluation:manage` | 删除人员范围规则并自动重算员工任务 | 路径 `id` | 空 |
+| `GET` | `/api/v1/evaluation/assignments/{id}` | `evaluation:manage` | 查询评分任务详情 | 路径 `id` | 员工、批次、板块、评分人来源及个人提交；详情只读 |
 | `GET` | `/api/v1/evaluation/assignments/reviewers` | `evaluation:manage` | 查询评分项可选评分人 | `component=MENTOR|STATION|TRAINING` | 对应角色的启用账号 |
 | `GET` | `/api/v1/evaluation/assignments/mine` | `evaluation:submit` | 查询明确分配给当前账号的评分任务 | `month`；可选 `component`、`status` | 本人任务及团队进度 |
 | `POST` | `/api/v1/evaluation/assignments/generate` | `evaluation:manage` | 根据已发布方案生成月份人工评分任务 | `month`、可选 `dueAt` | 新增任务数；重复调用幂等 |
@@ -277,6 +281,8 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/evaluation/summaries/{id}/reopen` | `ADMIN` 或 `SUPER_ADMIN` | 重开已发布月度汇总 | `reason` | 新汇总 ID |
 
 评分项包括 `EXAM`、`TASK`、`MENTOR`、`STATION`、`TRAINING`。每项原始得分允许使用自己的满分口径（最高 `999.99`），计算时换算为百分比后再乘综合权重，因此启用项权重之和必须为 `100%`。人工评分任务未全部提交时返回 `averageScore` 供过程查看，但 `finalAverageScore` 为空；全部当前评分人提交后才返回正式平均分。已发布月度汇总会锁定对应月份，除管理员重开外不可继续修改。
+
+人员范围规则的匹配优先级为 `BUSINESS_UNIT > BATCH > ALL`，每项员工任务只采用命中的最高优先级规则；同一规则可包含多名对应角色的评分人。保存、删除规则或重新生成月份任务时都会重新展开未锁定任务，已发布月份不被改写。`PUT /assignments/reviewers` 保留为兼容接口，管理端主流程不再从单员工任务编辑评分人。
 
 ## 考试中心
 
