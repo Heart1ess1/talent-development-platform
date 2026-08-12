@@ -33,6 +33,24 @@ public class EvaluationAssignmentController {
     @Pattern(regexp="REPLACE|ADD") String mode,
     LocalDateTime dueAt,
     @Size(max=500) String note){}
+  public record ScopeRuleRequest(
+    @NotNull YearMonth month,
+    @NotNull @Pattern(regexp="MENTOR|STATION|TRAINING") String component,
+    @NotNull @Pattern(regexp="ALL|BATCH|BUSINESS_UNIT") String targetType,
+    Long targetId,
+    @NotEmpty List<@NotNull Long> reviewerIds,
+    LocalDateTime dueAt,
+    @Size(max=500) String note){}
+
+  @GetMapping("/overview")
+  public ApiResponse<List<Map<String,Object>>> overview(@RequestParam YearMonth month){
+    permissions.require(Permissions.EVALUATION_MANAGE);return ApiResponse.ok(service.overview(month));
+  }
+
+  @GetMapping("/scope-rules")
+  public ApiResponse<List<Map<String,Object>>> scopeRules(@RequestParam YearMonth month,@RequestParam String component){
+    permissions.require(Permissions.EVALUATION_MANAGE);return ApiResponse.ok(service.scopeRules(month,component));
+  }
 
   @GetMapping
   public ApiResponse<List<Map<String,Object>>> list(@RequestParam YearMonth month,@RequestParam(required=false)String component,@RequestParam(required=false)String status,@RequestParam(required=false)Long reviewerId,@RequestParam(required=false)String keyword){
@@ -58,5 +76,15 @@ public class EvaluationAssignmentController {
   @PutMapping("/reviewers")
   public ApiResponse<Void> assign(@Valid @RequestBody AssignRequest request){
     permissions.require(Permissions.EVALUATION_MANAGE);service.assign(request.taskIds(),request.reviewerIds(),request.mode(),request.dueAt(),request.note());audit.log("ASSIGN_EVALUATION_REVIEWERS","EVALUATION_RATING_TASK",null,null,request);return ApiResponse.ok(null);
+  }
+
+  @PutMapping("/scope-rules")
+  public ApiResponse<Long> saveScopeRule(@Valid @RequestBody ScopeRuleRequest request){
+    permissions.require(Permissions.EVALUATION_MANAGE);Long id=service.saveScopeRule(request.month(),request.component(),request.targetType(),request.targetId(),request.reviewerIds(),request.dueAt(),request.note());audit.log("SAVE_EVALUATION_REVIEWER_SCOPE","EVALUATION_REVIEWER_SCOPE",id,null,request);return ApiResponse.ok(id);
+  }
+
+  @DeleteMapping("/scope-rules/{id}")
+  public ApiResponse<Void> deleteScopeRule(@PathVariable Long id){
+    permissions.require(Permissions.EVALUATION_MANAGE);Map<String,Object> before=service.deleteScopeRule(id);audit.log("DELETE_EVALUATION_REVIEWER_SCOPE","EVALUATION_REVIEWER_SCOPE",id,before,null);return ApiResponse.ok(null);
   }
 }

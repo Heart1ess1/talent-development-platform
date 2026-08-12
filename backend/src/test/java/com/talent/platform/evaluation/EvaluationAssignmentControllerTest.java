@@ -56,4 +56,14 @@ class EvaluationAssignmentControllerTest {
 
     verify(service).assign(List.of(10L,11L),List.of(21L,22L),"ADD",null,"联合评分");
   }
+
+  @Test void savingScopeRuleDelegatesTheTaskFirstConfiguration() {
+    YearMonth month=YearMonth.of(2026,8);
+    var request=new EvaluationAssignmentController.ScopeRuleRequest(
+      month,"MENTOR","BUSINESS_UNIT",9L,List.of(21L,22L),null,"板块联合评分");
+    when(service.saveScopeRule(month,"MENTOR","BUSINESS_UNIT",9L,List.of(21L,22L),null,"板块联合评分")).thenReturn(31L);
+
+    assertEquals(31L,controller.saveScopeRule(request).data());
+    verify(service).saveScopeRule(month,"MENTOR","BUSINESS_UNIT",9L,List.of(21L,22L),null,"板块联合评分");
+  }
 }

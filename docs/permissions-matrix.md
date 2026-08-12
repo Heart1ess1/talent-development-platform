@@ -45,6 +45,7 @@
   - `STATION_MANAGER` 只能提交 `STATION` 评分项。
 - `TRAINING_ADMIN` 只能提交 `TRAINING` 评分项。
 - 当某月已生成显式评分任务时，人工评分还必须校验当前账号是否为该任务的有效评分人；显式分配优先于旧的导师/站点数据范围推导。没有显式任务的历史月份继续按原数据范围兼容。
+- 评分人范围配置需要 `evaluation:manage`；全员、批次、板块规则只会选择与评分项角色匹配的启用账号，匹配优先级为板块、批次、全员，已发布月份保持锁定。
 - `EMPLOYEE` 的课程签到接口要求角色必须是 `EMPLOYEE`。
 - `EMPLOYEE` 的任务提交接口要求角色必须是 `EMPLOYEE`，且只能提交本人任务。
 - 员工开考和考试答题要求角色必须是 `EMPLOYEE`，且考试已发布、在开放时间内、本人已被分配且次数未用完。
@@ -80,8 +81,8 @@
 | 培养计划 / 任务下发 | `/tasks` | 管理侧需要 `task:manage`；员工侧显示“我的任务”，只访问本人任务。 |
 | 培养计划 / 任务跟踪 | `/training-plans/tracking` | 已登录，按员工数据范围查询任务执行情况；审核操作额外需要 `task:review`。 |
 | 综合评价 / 评价工作台 | `/evaluation/workbench` | `evaluation:view`；员工自动转到“我的评价”。 |
-| 综合评价 / 评分任务 | `/evaluation/assignments` | `evaluation:manage`；生成当月人工评分任务、批量分配评分人并查询进度。 |
-| 综合评价 / 评分任务详情 | `/evaluation/assignments/:id` | `evaluation:manage`；查看每位评分人的提交、个人分数及任务设置。 |
+| 综合评价 / 评分任务 | `/evaluation/assignments` | `evaluation:manage`；选择导师/站点/培训任务，按全员、批次或板块统一配置多名评分人并查询覆盖进度。 |
+| 综合评价 / 评分任务详情 | `/evaluation/assignments/:id` | `evaluation:manage`；只读查看员工任务的匹配依据、每位评分人的提交和个人分数。 |
 | 综合评价 / 我的评分任务 | `/evaluation/my-tasks` | `evaluation:submit`；仅显示明确分配给当前账号的任务。 |
 | 综合评价 / 月度评分 | `/evaluation/monthly` | `evaluation:view`；人工录分还需 `evaluation:submit`，员工不可进入。 |
 | 综合评价 / 评价模板 | `/evaluation/templates` | `evaluation:manage`。 |
