@@ -56,6 +56,7 @@ async function saveBank(){
 }
 function questionTypeChanged(){
   if(question.type==='TRUE_FALSE'){question.options=[];question.answer=true}
+  else if(question.type==='SHORT'){question.options=[];question.answer=''}
   else{question.options=['选项A','选项B'];question.answer=question.type==='MULTIPLE'?[]:'选项A'}
 }
 function openQuestion(row?:any){
@@ -67,7 +68,7 @@ function openQuestion(row?:any){
 async function saveQuestion(){
   if(!question.bankId)return ElMessage.warning('请选择所属题库')
   if(!question.stem.trim())return ElMessage.warning('请输入题干')
-  const options=question.type==='TRUE_FALSE'?[true,false]:question.options
+  const options=question.type==='TRUE_FALSE'?[true,false]:question.type==='SHORT'?[]:question.options
   saving.value=true
   try{
     const payload={bankId:question.bankId,type:question.type,stem:question.stem.trim(),options,answer:question.answer,score:question.score,explanation:question.explanation,tags:question.tags}
@@ -162,8 +163,8 @@ onMounted(load)
       <el-form label-position="top">
         <div class="exam-form-grid"><el-form-item label="所属题库" required><el-select v-model="question.bankId" filterable><el-option v-for="item in enabledBanks" :key="item.id" :label="item.name" :value="item.id"/></el-select></el-form-item><el-form-item label="题型" required><el-select v-model="question.type" @change="questionTypeChanged"><el-option v-for="(label,key) in typeLabels" :key="key" :label="label" :value="key"/></el-select></el-form-item></div>
         <el-form-item label="题干" required><el-input v-model="question.stem" type="textarea" :rows="4" maxlength="1000" show-word-limit placeholder="请输入清晰、无歧义的题目描述"/></el-form-item>
-        <el-form-item v-if="question.type!=='TRUE_FALSE'" label="选项" required><el-select v-model="question.options" multiple allow-create filterable default-first-option placeholder="输入选项后按回车"/></el-form-item>
-        <el-form-item label="正确答案" required><el-radio-group v-if="question.type==='TRUE_FALSE'" v-model="question.answer"><el-radio :value="true">正确</el-radio><el-radio :value="false">错误</el-radio></el-radio-group><el-select v-else v-model="question.answer" :multiple="question.type==='MULTIPLE'" placeholder="请选择正确答案"><el-option v-for="item in question.options" :key="item" :label="item" :value="item"/></el-select></el-form-item>
+        <el-form-item v-if="['SINGLE','MULTIPLE'].includes(question.type)" label="选项" required><el-select v-model="question.options" multiple allow-create filterable default-first-option placeholder="输入选项后按回车"/></el-form-item>
+        <el-form-item :label="question.type==='SHORT'?'参考答案':'正确答案'" required><el-radio-group v-if="question.type==='TRUE_FALSE'" v-model="question.answer"><el-radio :value="true">正确</el-radio><el-radio :value="false">错误</el-radio></el-radio-group><el-input v-else-if="question.type==='SHORT'" v-model="question.answer" type="textarea" :rows="4" maxlength="2000" show-word-limit placeholder="填写供阅卷人参考的答案要点"/><el-select v-else v-model="question.answer" :multiple="question.type==='MULTIPLE'" placeholder="请选择正确答案"><el-option v-for="item in question.options" :key="item" :label="item" :value="item"/></el-select></el-form-item>
         <div class="exam-form-grid"><el-form-item label="默认分值"><el-input-number v-model="question.score" :min="0.01" :precision="2" controls-position="right"/></el-form-item><el-form-item label="专业标签"><el-select v-model="question.tags" multiple allow-create filterable default-first-option collapse-tags placeholder="空白表示公共题"><el-option v-for="tag in tagOptions" :key="tag" :label="tag" :value="tag"/></el-select></el-form-item></div>
         <el-form-item label="答案解析"><el-input v-model="question.explanation" type="textarea" :rows="3" placeholder="用于阅卷复核和员工学习反馈"/></el-form-item>
       </el-form>

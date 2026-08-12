@@ -28,7 +28,15 @@ app:
     type: ${STORAGE_TYPE:local}
     local-root: ${LOCAL_STORAGE_ROOT:../data/uploads}
     oss-endpoint: ${OSS_ENDPOINT:}
+    oss-public-endpoint: ${OSS_PUBLIC_ENDPOINT:${OSS_ENDPOINT:}}
     oss-bucket: ${OSS_BUCKET:}
+    oss-private-bucket: ${OSS_PRIVATE_BUCKET:}
+    oss-public-bucket: ${OSS_PUBLIC_BUCKET:}
+    cdn-base-url: ${CDN_BASE_URL:}
     oss-access-key: ${OSS_ACCESS_KEY:}
     oss-secret-key: ${OSS_SECRET_KEY:}
+    oss-ram-role: ${OSS_RAM_ROLE:}
+  preview:
+    cache-root: ${PREVIEW_CACHE_ROOT:${java.io.tmpdir}/talent-preview-cache}
+    office-command: ${PREVIEW_OFFICE_COMMAND:libreoffice}
   cors-origins: ${CORS_ORIGINS:http://localhost:5173}

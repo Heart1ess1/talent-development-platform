@@ -4,6 +4,7 @@ import com.talent.platform.common.BusinessException;
 import com.talent.platform.security.AuditService;
 import com.talent.platform.security.CurrentUser;
 import com.talent.platform.storage.FileStorageService;
+import com.talent.platform.storage.PublicAssetStorageService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,13 +29,13 @@ import static org.mockito.Mockito.when;
 
 class AvatarControllerTest {
   private JdbcTemplate db;
-  private FileStorageService storage;
+  private PublicAssetStorageService storage;
   private AvatarController controller;
 
   @BeforeEach
   void setUp() {
     db = mock(JdbcTemplate.class);
-    storage = mock(FileStorageService.class);
+    storage = mock(PublicAssetStorageService.class);
     controller = new AvatarController(db, storage, mock(AuditService.class));
     var user = new CurrentUser(7L, "user", "用户", "ADMIN", false);
     SecurityContextHolder.getContext().setAuthentication(
@@ -51,7 +52,7 @@ class AvatarControllerTest {
     var file = imageFile(240, 320);
     when(db.queryForMap(anyString(), org.mockito.ArgumentMatchers.eq(7L)))
         .thenReturn(Map.of("avatar_storage_key", "old-key", "avatar_token", "old-token"));
-    when(storage.store(file))
+    when(storage.store("avatars", file))
         .thenReturn(new FileStorageService.StoredObject("new-key", file.getSize(), "image/png"));
 
     var result = controller.upload(file);
@@ -69,7 +70,7 @@ class AvatarControllerTest {
     assertThatThrownBy(() -> controller.upload(file))
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining("有效的图片");
-    verify(storage, never()).store(file);
+    verify(storage, never()).store(anyString(), org.mockito.ArgumentMatchers.eq(file));
   }
 
   private MockMultipartFile imageFile(int width, int height) throws Exception {

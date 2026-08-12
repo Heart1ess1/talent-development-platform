@@ -9,10 +9,11 @@
 ```text
 浏览器 / Vue SPA
   ├─ Axios + JWT ────────────────────────> Spring Boot /api/v1
-  └─ 生产环境静态资源 <───────────────────┘
+  ├─ 生产静态资源 / 公共图片 ─────────────> CDN → 公共 OSS Bucket
+  └─ 私有附件签名上传 / 下载 ─────────────> 私有 OSS Bucket
                                              ├─ JdbcTemplate / MyBatis-Plus → MySQL
                                              ├─ Flyway → db/migration
-                                             └─ FileStorageService → 本地磁盘或阿里云 OSS
+                                             └─ 本地模式回退 → 本地磁盘
 
 Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 ```
@@ -21,7 +22,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 
 1. 管理员维护批次、服务站、导师和员工；员工创建/导入时会同时创建 `EMPLOYEE` 账号。
 2. 培训管理员安排课程、签到、培养计划和闯关任务；员工提交成果，具备审核权限的人员审核。
-3. 考试管理员维护题库、试卷、考试计划；员工答题，客观题自动计分、主观题人工评分并发布结果。
+3. 考试管理员维护题库、客观题试卷和考试计划；员工交卷后立即自动计分，管理员即时可见，员工在整场考试结束后收到自动下发结果。
 4. 评价方案定义评分项和权重；考试、任务等数据参与月评，系统可生成月度/季度汇总并在发布后锁定。
 5. 所有登录态、访问范围和关键操作由安全与审计模块统一处理。
 
@@ -40,6 +41,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `backend/` | Java 17 / Spring Boot 服务，整合权限、业务 API、数据库迁移和文件存储。 |
 | `frontend/` | Vue 3 / TypeScript / Vite 单页应用。生产构建产物会被后端 Maven 构建打入 JAR。 |
 | `launcher/` | .NET 8 Windows Forms 启动器源码，用于发布包启动、更新、停止平台。 |
+| `deploy/aliyun/` | 阿里云 ECS 生产部署的 Compose、Nginx、安装、更新和验收脚本。 |
 | `docs/` | 需求、接口、权限、任务与本文件等长期维护文档。 |
 | `docker-compose.yml` | 本地 MySQL 8.4 服务与持久化卷。 |
 | `CONTRIBUTING.md` | 分支、提交、PR 和发版协作规范。 |
@@ -96,7 +98,9 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `importer/AttendanceImportRow.java` | 签到导入 Excel 行模型和列映射。 |
 | `station/StationChangeRequestController.java` | 员工服务站变更申请、本人记录、审批统计与多条件查询、管理员安全审批，以及按人员数据范围查询已生效历史。 |
 | `movement/LocationReportController.java` | 员工自主位置报备、本人轨迹，以及导师和管理角色按人员数据范围查询人员流动、当前位置和统计。 |
-| `course/CourseController.java` | 课程生命周期、课件权限与文件流、场次和人员安排、签到码自助签到、人工补录、统计与多条件查询。 |
+| `course/CourseController.java` | 课程生命周期、课件元数据与原文件下载封禁、场次和人员安排、签到码自助签到、人工补录、统计与多条件查询。 |
+| `course/CourseMaterialLearningController.java` | 员工课件清单、管理端学习统计、安全预览会话、学习心跳与账号级页面访问控制。 |
+| `course/CourseMaterialPreviewService.java` | 将 Word、PDF、PPT、OFD 或图片逐页渲染为带姓名/工号水印的 PNG；Office 使用 LibreOffice 转 PDF，OFD 使用 OFDRW 转图片，原课件不进入浏览器。 |
 
 ### 3.4 任务、文件与培养计划
 
@@ -107,23 +111,28 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `task/TaskStatusService.java` | 在启动、任务变动后计算最近截止时间并安排定时任务；把逾期未提交分配固化为 `OVERDUE` 和 0 分。 |
 | `task/TaskSchedulingConfiguration.java` | 提供任务状态服务使用的 Spring `TaskScheduler`。 |
 | `training/TrainingPlanController.java` | 培养计划统计、草稿创建、编辑、复制、安全启停/删除，以及计划任务编排、使用情况与完整排序校验。 |
-| `storage/FileStorageService.java` | 文件对象存储抽象：保存、读取、删除及返回存储键/大小/内容类型。 |
+| `storage/FileStorageService.java` | 私有文件对象存储抽象：保存、读取、删除、OSS 直传票据校验及短时签名下载。 |
 | `storage/LocalFileStorageService.java` | `STORAGE_TYPE=local` 时按日期和 UUID 写入本地目录，并防止路径穿越。 |
-| `storage/OssFileStorageService.java` | `STORAGE_TYPE=oss` 时通过阿里云 OSS 保存、读取和删除文件。 |
-| `storage/FileController.java` | 按任务数据范围授权后下载已上传附件。 |
+| `storage/OssFileStorageService.java` | `STORAGE_TYPE=oss` 时使用私有 Bucket 和 ECS RAM Role，提供限制大小的 POST Policy、临时对象提交、GET 预签名 URL 和内部读取。 |
+| `storage/UploadTicketService.java` | 创建绑定用户、用途和业务对象的 15 分钟上传票据，校验并单次消费，定时清理过期对象。 |
+| `storage/StorageTransferController.java` | 向前端返回本环境是否启用直传和签名下载。 |
+| `storage/PublicAssetStorageService.java` | 头像等公共资源的独立存储抽象。 |
+| `storage/LocalPublicAssetStorageService.java` | 本地模式复用本地存储读取公共图片。 |
+| `storage/OssPublicAssetStorageService.java` | OSS 模式把公共图片写入公共资源 Bucket，并在配置后返回 CDN URL。 |
+| `storage/FileController.java` | 按任务数据范围授权后返回本地文件，或 302 到 5 分钟 OSS 签名下载地址。 |
 
 ### 3.5 评价、考试和概览
 
 | 文件 | 职责 |
 | --- | --- |
-| `dashboard/DashboardController.java` | 汇总当前数据范围内的员工数、任务完成、签到、成绩与分布数据，供概览页展示。 |
-| `evaluation/EvaluationController.java` | 评分方案、月度评分项提交/覆盖、加扣分、月度/季度汇总生成、发布与重开的 API。 |
-| `evaluation/EvaluationService.java` | 评价核心计算：匹配适用方案、聚合考试/任务/人工评分、处理覆盖与加扣分、写入月度和季度汇总、锁定规则。 |
+| `dashboard/DashboardController.java` | 按角色生成两套概览模型：员工个人待办、学习日程、完成记录、季度评分和导师反馈；管理侧职责待办、四条业务进度、近期安排和风险员工，全部沿用人员数据范围。 |
+| `evaluation/EvaluationController.java` | 评价模板库、模板应用、工作台待办、月度方案、评分项提交/覆盖、加扣分、月度/季度汇总生成、发布与重开的 API。 |
+| `evaluation/EvaluationService.java` | 评价核心计算：匹配月份方案，把考试/任务来源折算到配置满分，聚合人工评分、覆盖与加扣分，并写入可追溯的月度和季度快照。 |
 | `evaluation/EvaluationRules.java` | 纯规则函数：校验月度评分项权重、季度权重，并计算限定在 0–100 的最终分数。 |
 | `evaluation/EvaluationScheduler.java` | 每月 1 日 02:00 自动生成上月月评；每季度首月 03:00 自动生成上季度汇总。 |
-| `exam/ExamController.java` | 多题库与题目维护、题库导入、手动/随机/一人一卷组卷、试卷历史保护、考试计划与分配、考生作答、防作弊事件、阅卷、单份/整场结果发布与 Excel 导出。 |
-| `exam/ExamScoringService.java` | 自动阅卷服务；统一读取静态试卷题目或动态答卷题目，客观题比对答案，主观题进入待阅卷，并处理超时交卷。 |
-| `exam/ExamScheduler.java` | 每分钟扫描超时进行中的答卷，调用评分服务自动提交。 |
+| `exam/ExamController.java` | 多题库与题目维护、客观题手动/随机/一人一卷组卷、考试计划与分配、考生作答、防作弊事件、管理端即时成绩和员工端延迟可见结果。 |
+| `exam/ExamScoringService.java` | 自动阅卷服务；统一读取静态或动态答卷题目，处理超时交卷，并在整场考试结束后批量标记成绩可见。 |
+| `exam/ExamScheduler.java` | 每分钟先提交到期答卷，再自动发布已结束考试的客观题成绩。 |
 | `exam/QuestionImportRow.java` | 题库 Excel 导入行模型和字段映射。 |
 | `exam/ResultExportRow.java` | 已发布考试成绩 Excel 导出的列定义。 |
 
@@ -160,6 +169,9 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `db/migration/V18__create_employee_location_report.sql` | 增加员工位置报备、时间轨迹及常用查询索引。 |
 | `db/migration/V19__course_materials.sql` | 增加课程课件元数据及课程、上传人关联。 |
 | `db/migration/V20__task_attachments.sql` | 增加计划任务和已下发任务的附件元数据、快照来源及访问索引。 |
+| `db/migration/V22__evaluation_template_library.sql` | 增加独立评价模板库、评分项满分和方案模板来源，保留既有方案的百分制默认口径。 |
+| `db/migration/V23__course_material_learning.sql` | 增加课件预览会话、员工学习次数和累计学习时长记录。 |
+| `db/migration/V24__object_upload_ticket.sql` | 增加 OSS 客户端直传票据、用途/归属绑定、有效期和单次消费状态。 |
 
 ## 5. 前端结构
 
@@ -185,7 +197,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | 文件 | 职责 |
 | --- | --- |
 | `views/LoginView.vue` | 与业务后台统一设计语言的响应式登录门户，包含品牌能力说明、账号记忆、大写锁定提示、前端校验、错误反馈和登录后路由跳转。 |
-| `views/DashboardView.vue` | 请求概览统计并用 ECharts 展示培养进度和成绩分布。 |
+| `views/DashboardView.vue` | 根据 `audience` 呈现员工个人学习主页或管理培养运营工作台，并提供课程、考试、任务和评价模块的可执行跳转。 |
 | `views/EmployeeDirectoryView.vue` | “人员管理”模块下的人员台账工作台：管理概览、状态页签、响应式筛选、单行人员列表、证件照与完整档案、新增编辑、双导师批量设置、基础数据、导入导出和服务站变更轨迹。 |
 | `views/LocationReportsView.vue` | 按角色呈现员工本人位置报备或管理侧人员流动看板，支持当前位置、筛选、统计和单人历史抽屉。 |
 | `views/ProfileView.vue` | 当前用户上传头像、修改密码；员工按“证件照”语义维护照片，并可维护本人资料、提交调站申请及查看审批记录。 |
@@ -194,7 +206,10 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `views/CourseSessionsView.vue` | 管理端场次安排：培训时间、地点、学时、签到窗口、签到码与参训人员维护。 |
 | `views/CourseAttendanceView.vue` | 按角色展示管理端签到工作台或员工签到记录，支持统计、筛选、补录和导入。 |
 | `views/MyCoursesView.vue` | 员工课程日程、签到入口和本人已安排课程的课件访问。 |
-| `components/CourseMaterialsPanel.vue` | 课程课件上传、列表、权限下载，以及 PDF、图片、视频、文本和 DOCX 安全预览。 |
+| `components/CourseMaterialsPanel.vue` | 管理课程课件上传、删除和安全预览，不再提供下载按钮。 |
+| `components/CourseMaterialPreview.vue` | 创建账号绑定的预览会话、加载逐页水印图、定时上报学习心跳并在关闭时结算。 |
+| `views/CourseLearningView.vue` | 员工课件学习页，仅展示可学习课件及已学习/未学习状态。 |
+| `views/CoursewareManagementView.vue` | 管理端课件概览和员工学习明细，展示人数、次数和学习时长。 |
 | `utils/course.ts` | 课程和场次类型、场次状态、签到来源、日期与文件大小显示规则。 |
 | `styles/courses.css` | 课程模块共享的桌面与移动端页面规范。 |
 | `views/TrainingPlanManagementView.vue` | 培养计划库工作台：统计、搜索、状态筛选、草稿创建、编辑、复制、启停和安全删除。 |
@@ -203,12 +218,19 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `utils/trainingPlan.ts` | 培养计划类型、启用判断、业务状态和日期显示规则。 |
 | `components/TaskAttachmentsPanel.vue` | 任务附件文件名展示、上传、删除、下载，以及 PDF、图片、文本和 DOCX 安全预览。 |
 | `views/TasksView.vue` | 管理侧任务下发和任务跟踪、员工侧我的任务、任务附件、提交/重提、审核、进度明细和筛选。 |
-| `views/EvaluationView.vue` | 评分方案、评分项录入、分数覆盖、加扣分以及月度/季度汇总生成、发布、重开。 |
+| `storageTransfer.ts` | 查询存储能力，在 OSS 模式执行受 Policy 限制的表单直传和完成确认，在本地模式回退 multipart 上传。 |
+| `views/evaluation/EvaluationWorkbenchView.vue` | 按月份展示方案覆盖、发布进度、缺失汇总和跨任务/考试/人工评价的待办入口。 |
+| `views/evaluation/EvaluationMonthlyView.vue` | 按员工和月份核对自动来源、提交职责内人工评分、管理员核定及加扣分，并预览综合分。 |
+| `views/evaluation/EvaluationTemplatesView.vue` | 管理独立评价模板，将模板应用到批次月份形成方案草稿，并维护发布和历史版本。 |
+| `views/evaluation/EvaluationResultsView.vue` | 查询月度/季度结果与分项快照，生成、发布或重开汇总；员工侧只显示本人已发布结果。 |
+| `evaluation/model.ts` | 综合评价的评分项定义、初始模板、状态和显示格式共享模型。 |
+| `styles/evaluation-center.css` | 综合评价四个二级页面共享的工作台、模板、评分卡、快照及响应式视觉规范。 |
+| `styles/dashboard.css` | 员工主页与管理操作台共用的指标卡、待办、业务进度、日程、风险人员及响应式视觉规范。 |
 | `views/exams/ExamQuestionBankView.vue` | 多题库目录、题目新增编辑、标签、启停、安全删除和指定题库 Excel 导入。 |
 | `views/exams/ExamPapersView.vue` | 分步抽屉式手动/随机/一人一卷组卷、题库范围、试卷详情和安全删除。 |
 | `views/exams/ExamPlansView.vue` | 考试时间、试卷、批次/板块范围、参考员工选择、草稿删除及发布。 |
-| `views/exams/MyExamsView.vue` | 员工考试列表、作答自动保存、计时和防作弊事件上报。 |
-| `views/exams/ExamResultsView.vue` | 考试完成情况、员工成绩明细、单份/整场成绩发布和 Excel 导出。 |
+| `views/exams/MyExamsView.vue` | 员工考试列表、客观题和简答题作答保存、计时和防作弊事件上报。 |
+| `views/exams/ExamResultsView.vue` | 考试完成情况、管理员即时成绩、员工延迟可见状态、历史简答题兼容阅卷和 Excel 导出；不再提供人工成绩发布。 |
 | `styles/exam-center.css` | 题库、试卷、考试计划和成绩管理共享的页面头、概览卡、工作区与响应式视觉规范。 |
 | `views/exams/examUi.ts` | 考试状态、题型和日期显示的共享前端工具。 |
 | `views/UsersView.vue` | 账号列表、创建、启停、重置密码、改角色/账号名/显示名及站点负责人范围配置。 |
@@ -226,7 +248,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `frontend/tsconfig.json` | TypeScript 根项目引用配置。 |
 | `frontend/tsconfig.app.json` | 浏览器端 TypeScript 编译选项。 |
 | `frontend/tsconfig.node.json` | Vite 配置等 Node 侧 TypeScript 编译选项。 |
-| `frontend/vite.config.ts` | Vue 插件、`@`→`src` 别名、5173 端口与 `/api` 本地代理。 |
+| `frontend/vite.config.ts` | Vue 插件、`@`→`src` 别名、5173 端口、`/api` 本地代理，以及生产 CDN `VITE_ASSET_BASE`。 |
 
 ## 6. 测试文件
 
@@ -247,6 +269,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `task/TaskStatusServiceTest.java` | 逾期任务刷新与截止时间调度计算。 |
 | `training/TrainingPlanControllerTest.java` | 培养计划和计划任务的管理接口。 |
 | `user/AvatarControllerTest.java` | 头像图片真实性校验、替换和旧文件清理。 |
+| `storage/UploadTicketServiceTest.java` | OSS 上传票据签发、对象校验、单次消费和跨用户拒绝。 |
 | `user/UserControllerTest.java` | 账号管理、角色和站点范围的规则。 |
 
 ## 7. Windows 启动器与部署辅助文件
@@ -257,6 +280,18 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `launcher/TalentPlatformLauncher.csproj` | .NET 8 Windows Forms 单文件、自包含、`win-x64` 发布配置。 |
 | `launcher/app.manifest` | Windows 应用清单（系统兼容性与运行方式）。 |
 | `docker-compose.yml` | MySQL 8.4 容器、默认开发账号、端口、健康检查和命名卷。 |
+| `deploy/aliyun/docker-compose.yml` | ECS 生产容器拓扑；只有 Nginx 暴露 80/443 端口，应用和 MySQL 留在内部网络；MySQL、上传回退目录和预览缓存绑定到 100 GiB 数据盘的 `/data/talent-platform/`。 |
+| `deploy/aliyun/nginx.conf` | ECS 的静态入口和反向代理配置。 |
+| `deploy/aliyun/build-production.ps1` | 使用 CDN AssetBase 构建生产前端，执行前后端测试并输出 JAR 哈希。 |
+| `deploy/aliyun/sync-public-assets.sh` | 通过 ECS RAM Role 同步内容哈希静态资源到公共 Bucket。 |
+| `deploy/aliyun/migrate-local-files.sh` | 只复制历史本地文件到私有/公共 Bucket，保留本地回退源。 |
+| `deploy/aliyun/install-runtime.sh` | 在 Alibaba Cloud Linux 4 安装并启用 Docker 与 Compose。 |
+| `deploy/aliyun/docker-talent-data.conf` | 将 Docker 启动顺序绑定到 `/data` 挂载，防止数据盘异常时误写系统盘。 |
+| `deploy/aliyun/bootstrap.sh` | 创建受限权限的生产环境变量、拉取镜像并首次启动。 |
+| `deploy/aliyun/update-app.sh` | 安装新 JAR、重建应用容器并等待健康检查。 |
+| `deploy/aliyun/backup-mysql.sh` | 将 MySQL 逻辑备份写入 100 GiB 数据盘并执行压缩、哈希与 14 天保留期管理。 |
+| `deploy/aliyun/talent-platform-backup.service` / `.timer` | 每日触发数据库逻辑备份并在停机错过后补跑。 |
+| `deploy/aliyun/verify.sh` | 检查容器、健康状态、Flyway 迁移和用户数据；首次改密前可额外验证初始登录。 |
 
 `launcher/bin/`、`launcher/obj/`、`backend/target/`、`frontend/dist/` 等为构建产物，不是需要维护的源代码；请勿将它们作为业务修改入口。
 

@@ -44,4 +44,14 @@ class ExamScoringServiceTest {
     verify(db).update(contains("update exam_attempt"),eq("GRADED"),eq(new BigDecimal("50")),
             eq(new BigDecimal("50")),eq(42L));
   }
+
+  @Test void endedObjectiveResultsArePublishedInOneServerSideUpdate(){
+    JdbcTemplate db=mock(JdbcTemplate.class);
+    when(db.update(contains("p.ends_at<=now()"))).thenReturn(3);
+
+    int published=new ExamScoringService(db,mapper).publishEndedResults();
+
+    assertEquals(3,published);
+    verify(db).update(contains("a.status='GRADED'"));
+  }
 }

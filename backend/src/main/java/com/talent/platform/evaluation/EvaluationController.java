@@ -29,26 +29,116 @@ public class EvaluationController {
 
   public record SchemeRequest(
     @NotNull Long batchId, @NotNull YearMonth effectiveMonth,
-    boolean examEnabled, @NotNull @DecimalMin("0") BigDecimal examWeight,
-    boolean taskEnabled, @NotNull @DecimalMin("0") BigDecimal taskWeight,
-    boolean mentorEnabled, @NotNull @DecimalMin("0") BigDecimal mentorWeight,
-    boolean stationEnabled, @NotNull @DecimalMin("0") BigDecimal stationWeight,
-    boolean trainingEnabled, @NotNull @DecimalMin("0") BigDecimal trainingWeight,
+    boolean examEnabled, @NotNull @DecimalMin("0") BigDecimal examWeight, @DecimalMin(value="0", inclusive=false) BigDecimal examMaxScore,
+    boolean taskEnabled, @NotNull @DecimalMin("0") BigDecimal taskWeight, @DecimalMin(value="0", inclusive=false) BigDecimal taskMaxScore,
+    boolean mentorEnabled, @NotNull @DecimalMin("0") BigDecimal mentorWeight, @DecimalMin(value="0", inclusive=false) BigDecimal mentorMaxScore,
+    boolean stationEnabled, @NotNull @DecimalMin("0") BigDecimal stationWeight, @DecimalMin(value="0", inclusive=false) BigDecimal stationMaxScore,
+    boolean trainingEnabled, @NotNull @DecimalMin("0") BigDecimal trainingWeight, @DecimalMin(value="0", inclusive=false) BigDecimal trainingMaxScore,
     @NotNull @DecimalMin(value="0", inclusive=false) BigDecimal quarterMonth1Weight,
     @NotNull @DecimalMin(value="0", inclusive=false) BigDecimal quarterMonth2Weight,
     @NotNull @DecimalMin(value="0", inclusive=false) BigDecimal quarterMonth3Weight,
     @NotNull @DecimalMin("0") BigDecimal bonusCap, @NotNull @DecimalMin("0") BigDecimal deductionCap) {}
-  public record EvaluationRequest(@NotNull Long employeeId, @NotNull YearMonth month, @NotNull @DecimalMin("0") @DecimalMax("100") BigDecimal score, @NotBlank String comment) {}
-  public record ComponentEvaluationRequest(@NotNull Long employeeId, @NotNull YearMonth month, @NotNull @DecimalMin("0") @DecimalMax("100") BigDecimal score, @NotBlank String comment) {}
-  public record OverrideRequest(@NotNull Long employeeId, @NotNull YearMonth month, @NotNull @DecimalMin("0") @DecimalMax("100") BigDecimal score, @NotBlank String reason) {}
+  public record TemplateRequest(
+    @NotBlank @Size(max=128) String name, @Size(max=500) String description,
+    boolean examEnabled, @NotNull @DecimalMin("0") BigDecimal examWeight, @NotNull @DecimalMin(value="0", inclusive=false) BigDecimal examMaxScore,
+    boolean taskEnabled, @NotNull @DecimalMin("0") BigDecimal taskWeight, @NotNull @DecimalMin(value="0", inclusive=false) BigDecimal taskMaxScore,
+    boolean mentorEnabled, @NotNull @DecimalMin("0") BigDecimal mentorWeight, @NotNull @DecimalMin(value="0", inclusive=false) BigDecimal mentorMaxScore,
+    boolean stationEnabled, @NotNull @DecimalMin("0") BigDecimal stationWeight, @NotNull @DecimalMin(value="0", inclusive=false) BigDecimal stationMaxScore,
+    boolean trainingEnabled, @NotNull @DecimalMin("0") BigDecimal trainingWeight, @NotNull @DecimalMin(value="0", inclusive=false) BigDecimal trainingMaxScore,
+    @NotNull @DecimalMin(value="0", inclusive=false) BigDecimal quarterMonth1Weight,
+    @NotNull @DecimalMin(value="0", inclusive=false) BigDecimal quarterMonth2Weight,
+    @NotNull @DecimalMin(value="0", inclusive=false) BigDecimal quarterMonth3Weight,
+    @NotNull @DecimalMin("0") BigDecimal bonusCap, @NotNull @DecimalMin("0") BigDecimal deductionCap) {}
+  public record ApplyTemplateRequest(@NotNull Long templateId, @NotNull Long batchId, @NotNull YearMonth effectiveMonth) {}
+  public record EvaluationRequest(@NotNull Long employeeId, @NotNull YearMonth month, @NotNull @DecimalMin("0") BigDecimal score, @NotBlank String comment) {}
+  public record ComponentEvaluationRequest(@NotNull Long employeeId, @NotNull YearMonth month, @NotNull @DecimalMin("0") BigDecimal score, @NotBlank String comment) {}
+  public record OverrideRequest(@NotNull Long employeeId, @NotNull YearMonth month, @NotNull @DecimalMin("0") BigDecimal score, @NotBlank String reason) {}
   public record AdjustmentRequest(@NotNull Long employeeId, @NotNull YearMonth month, @Pattern(regexp="BONUS|DEDUCTION") String type, @NotNull @DecimalMin(value="0",inclusive=false) BigDecimal points, @NotBlank String reason, Long evidenceFileId) {}
   public record PublishRequest(String waiverReason, @DecimalMin("0") @DecimalMax("100") BigDecimal overrideScore) {}
   public record ReopenRequest(@NotBlank String reason) {}
 
+  @GetMapping("/templates")
+  public ApiResponse<List<Map<String,Object>>> templates() {
+    permissions.require(Permissions.EVALUATION_MANAGE);
+    return ApiResponse.ok(db.queryForList("""
+      select t.*,creator.display_name creator_name,updater.display_name updater_name,
+        (select count(*) from score_scheme s where s.template_id=t.id and s.status<>'DELETED') applied_count
+      from evaluation_template t
+      join sys_user creator on creator.id=t.created_by
+      join sys_user updater on updater.id=t.updated_by
+      where t.status<>'DELETED'
+      order by t.status='ACTIVE' desc,t.updated_at desc,t.id desc
+      """));
+  }
+
+  @PostMapping("/templates")
+  public ApiResponse<Long> createTemplate(@Valid @RequestBody TemplateRequest q) {
+    permissions.require(Permissions.EVALUATION_MANAGE); validateTemplate(q);
+    Long userId=SecurityUtils.current().id();
+    db.update("insert into evaluation_template(name,description,exam_enabled,exam_weight,exam_max_score,task_enabled,task_weight,task_max_score,mentor_enabled,mentor_weight,mentor_max_score,station_enabled,station_weight,station_max_score,training_enabled,training_weight,training_max_score,quarter_month1_weight,quarter_month2_weight,quarter_month3_weight,bonus_cap,deduction_cap,created_by,updated_by) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      q.name().trim(),blankToNull(q.description()),q.examEnabled(),q.examWeight(),q.examMaxScore(),q.taskEnabled(),q.taskWeight(),q.taskMaxScore(),q.mentorEnabled(),q.mentorWeight(),q.mentorMaxScore(),q.stationEnabled(),q.stationWeight(),q.stationMaxScore(),q.trainingEnabled(),q.trainingWeight(),q.trainingMaxScore(),q.quarterMonth1Weight(),q.quarterMonth2Weight(),q.quarterMonth3Weight(),q.bonusCap(),q.deductionCap(),userId,userId);
+    Long id=db.queryForObject("select last_insert_id()",Long.class);audit.log("CREATE_EVALUATION_TEMPLATE","EVALUATION_TEMPLATE",id,null,q);return ApiResponse.ok(id);
+  }
+
+  @PutMapping("/templates/{id}")
+  public ApiResponse<Void> updateTemplate(@PathVariable Long id,@Valid @RequestBody TemplateRequest q) {
+    permissions.require(Permissions.EVALUATION_MANAGE);validateTemplate(q);
+    Map<String,Object> before=db.queryForMap("select * from evaluation_template where id=? and status<>'DELETED'",id);
+    db.update("update evaluation_template set name=?,description=?,exam_enabled=?,exam_weight=?,exam_max_score=?,task_enabled=?,task_weight=?,task_max_score=?,mentor_enabled=?,mentor_weight=?,mentor_max_score=?,station_enabled=?,station_weight=?,station_max_score=?,training_enabled=?,training_weight=?,training_max_score=?,quarter_month1_weight=?,quarter_month2_weight=?,quarter_month3_weight=?,bonus_cap=?,deduction_cap=?,updated_by=? where id=? and status<>'DELETED'",
+      q.name().trim(),blankToNull(q.description()),q.examEnabled(),q.examWeight(),q.examMaxScore(),q.taskEnabled(),q.taskWeight(),q.taskMaxScore(),q.mentorEnabled(),q.mentorWeight(),q.mentorMaxScore(),q.stationEnabled(),q.stationWeight(),q.stationMaxScore(),q.trainingEnabled(),q.trainingWeight(),q.trainingMaxScore(),q.quarterMonth1Weight(),q.quarterMonth2Weight(),q.quarterMonth3Weight(),q.bonusCap(),q.deductionCap(),SecurityUtils.current().id(),id);
+    audit.log("UPDATE_EVALUATION_TEMPLATE","EVALUATION_TEMPLATE",id,before,q);return ApiResponse.ok(null);
+  }
+
+  @PostMapping("/templates/{id}/copy")
+  public ApiResponse<Long> copyTemplate(@PathVariable Long id) {
+    permissions.require(Permissions.EVALUATION_MANAGE);
+    Map<String,Object> source=db.queryForMap("select * from evaluation_template where id=? and status<>'DELETED'",id);
+    Long userId=SecurityUtils.current().id();
+    db.update("insert into evaluation_template(name,description,status,exam_enabled,exam_weight,exam_max_score,task_enabled,task_weight,task_max_score,mentor_enabled,mentor_weight,mentor_max_score,station_enabled,station_weight,station_max_score,training_enabled,training_weight,training_max_score,quarter_month1_weight,quarter_month2_weight,quarter_month3_weight,bonus_cap,deduction_cap,created_by,updated_by) select concat(name,' - 副本'),description,'ACTIVE',exam_enabled,exam_weight,exam_max_score,task_enabled,task_weight,task_max_score,mentor_enabled,mentor_weight,mentor_max_score,station_enabled,station_weight,station_max_score,training_enabled,training_weight,training_max_score,quarter_month1_weight,quarter_month2_weight,quarter_month3_weight,bonus_cap,deduction_cap,?,? from evaluation_template where id=?",userId,userId,id);
+    Long created=db.queryForObject("select last_insert_id()",Long.class);audit.log("COPY_EVALUATION_TEMPLATE","EVALUATION_TEMPLATE",created,source,null);return ApiResponse.ok(created);
+  }
+
+  @DeleteMapping("/templates/{id}")
+  public ApiResponse<Void> deleteTemplate(@PathVariable Long id) {
+    permissions.require(Permissions.EVALUATION_MANAGE);
+    Map<String,Object> before=db.queryForMap("select * from evaluation_template where id=? and status<>'DELETED'",id);
+    db.update("update evaluation_template set status='DELETED',updated_by=? where id=?",SecurityUtils.current().id(),id);
+    audit.log("DELETE_EVALUATION_TEMPLATE","EVALUATION_TEMPLATE",id,before,null);return ApiResponse.ok(null);
+  }
+
+  @PostMapping("/templates/apply")
+  public ApiResponse<Long> applyTemplate(@Valid @RequestBody ApplyTemplateRequest q) {
+    permissions.require(Permissions.EVALUATION_MANAGE);
+    Map<String,Object> template=db.queryForMap("select * from evaluation_template where id=? and status='ACTIVE'",q.templateId());
+    Integer version=db.queryForObject("select coalesce(max(version),0)+1 from score_scheme where batch_id=?",Integer.class,q.batchId());
+    db.update("insert into score_scheme(batch_id,template_id,version,effective_month,exam_enabled,exam_weight,exam_max_score,task_enabled,task_weight,task_max_score,mentor_enabled,mentor_weight,mentor_max_score,station_enabled,station_weight,station_max_score,training_enabled,training_weight,training_max_score,quarter_month1_weight,quarter_month2_weight,quarter_month3_weight,bonus_cap,deduction_cap,created_by) select ?,id,?,?,exam_enabled,exam_weight,exam_max_score,task_enabled,task_weight,task_max_score,mentor_enabled,mentor_weight,mentor_max_score,station_enabled,station_weight,station_max_score,training_enabled,training_weight,training_max_score,quarter_month1_weight,quarter_month2_weight,quarter_month3_weight,bonus_cap,deduction_cap,? from evaluation_template where id=?",
+      q.batchId(),version,q.effectiveMonth().atDay(1),SecurityUtils.current().id(),q.templateId());
+    Long id=db.queryForObject("select last_insert_id()",Long.class);audit.log("APPLY_EVALUATION_TEMPLATE","SCORE_SCHEME",id,template,q);return ApiResponse.ok(id);
+  }
+
+  @GetMapping("/overview")
+  public ApiResponse<Map<String,Object>> overview(@RequestParam YearMonth month) {
+    permissions.require(Permissions.EVALUATION_VIEW);
+    var filter=permissions.employeeFilter("e");
+    var employeeArgs=new ArrayList<Object>(filter.args());employeeArgs.add(month.atDay(1));
+    Integer total=db.queryForObject("select count(*) from employee e where e.status='ACTIVE'"+filter.sql(),Integer.class,filter.args().toArray());
+    Integer covered=db.queryForObject("select count(*) from employee e where e.status='ACTIVE'"+filter.sql()+" and exists(select 1 from score_scheme sc where sc.batch_id=e.batch_id and sc.status='PUBLISHED' and sc.effective_month<=?)",Integer.class,employeeArgs.toArray());
+    var summaryArgs=new ArrayList<Object>();summaryArgs.add(month.toString());summaryArgs.addAll(filter.args());
+    List<Map<String,Object>> summaries=db.queryForList("select s.status,s.missing_items from score_summary s join employee e on e.id=s.employee_id where s.summary_type='MONTH' and s.period_key=?"+filter.sql()+" and s.version=(select max(x.version) from score_summary x where x.employee_id=s.employee_id and x.summary_type=s.summary_type and x.period_key=s.period_key)",summaryArgs.toArray());
+    int draft=(int)summaries.stream().filter(x->"DRAFT".equals(x.get("status"))).count();
+    int published=(int)summaries.stream().filter(x->"PUBLISHED".equals(x.get("status"))).count();
+    int missing=(int)summaries.stream().filter(x->!Objects.toString(x.get("missing_items"),"").isBlank()).count();
+    Map<String,Object> result=new LinkedHashMap<>();result.put("month",month.toString());result.put("totalEmployees",total);result.put("schemeCoveredEmployees",covered);result.put("draftSummaries",draft);result.put("publishedSummaries",published);result.put("missingSummaries",missing);
+    result.put("pendingManualScores",pendingManualScores(month));
+    result.put("pendingTaskReviews",pendingTaskReviews());result.put("pendingExamReviews",pendingExamReviews());result.put("unpublishedExamResults",unpublishedExamResults());
+    return ApiResponse.ok(result);
+  }
+
   @GetMapping("/schemes")
   public ApiResponse<List<Map<String,Object>>> schemes(@RequestParam(required=false) Long batchId) {
     permissions.require(Permissions.EVALUATION_MANAGE);
-    return ApiResponse.ok(batchId == null ? db.queryForList("select * from score_scheme where status<>'DELETED' order by batch_id,effective_month desc,version desc") : db.queryForList("select * from score_scheme where batch_id=? and status<>'DELETED' order by effective_month desc,version desc", batchId));
+    String select="select s.*,t.name template_name,b.name batch_name from score_scheme s left join evaluation_template t on t.id=s.template_id join talent_batch b on b.id=s.batch_id where s.status<>'DELETED'";
+    return ApiResponse.ok(batchId == null ? db.queryForList(select+" order by s.effective_month desc,s.batch_id,s.version desc") : db.queryForList(select+" and s.batch_id=? order by s.effective_month desc,s.version desc", batchId));
   }
 
   @PostMapping("/schemes")
@@ -56,8 +146,8 @@ public class EvaluationController {
     permissions.require(Permissions.EVALUATION_MANAGE);
     validateScheme(q);
     Integer version = db.queryForObject("select coalesce(max(version),0)+1 from score_scheme where batch_id=?", Integer.class, q.batchId());
-    db.update("insert into score_scheme(batch_id,version,effective_month,exam_enabled,exam_weight,task_enabled,task_weight,mentor_enabled,mentor_weight,station_enabled,station_weight,training_enabled,training_weight,quarter_month1_weight,quarter_month2_weight,quarter_month3_weight,bonus_cap,deduction_cap,created_by) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-      q.batchId(),version,q.effectiveMonth().atDay(1),q.examEnabled(),q.examWeight(),q.taskEnabled(),q.taskWeight(),q.mentorEnabled(),q.mentorWeight(),q.stationEnabled(),q.stationWeight(),q.trainingEnabled(),q.trainingWeight(),q.quarterMonth1Weight(),q.quarterMonth2Weight(),q.quarterMonth3Weight(),q.bonusCap(),q.deductionCap(),SecurityUtils.current().id());
+    db.update("insert into score_scheme(batch_id,version,effective_month,exam_enabled,exam_weight,exam_max_score,task_enabled,task_weight,task_max_score,mentor_enabled,mentor_weight,mentor_max_score,station_enabled,station_weight,station_max_score,training_enabled,training_weight,training_max_score,quarter_month1_weight,quarter_month2_weight,quarter_month3_weight,bonus_cap,deduction_cap,created_by) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      q.batchId(),version,q.effectiveMonth().atDay(1),q.examEnabled(),q.examWeight(),maxScore(q.examMaxScore()),q.taskEnabled(),q.taskWeight(),maxScore(q.taskMaxScore()),q.mentorEnabled(),q.mentorWeight(),maxScore(q.mentorMaxScore()),q.stationEnabled(),q.stationWeight(),maxScore(q.stationMaxScore()),q.trainingEnabled(),q.trainingWeight(),maxScore(q.trainingMaxScore()),q.quarterMonth1Weight(),q.quarterMonth2Weight(),q.quarterMonth3Weight(),q.bonusCap(),q.deductionCap(),SecurityUtils.current().id());
     Long id = db.queryForObject("select last_insert_id()",Long.class);
     audit.log("CREATE_SCORE_SCHEME","SCORE_SCHEME",id,null,q);
     return ApiResponse.ok(id);
@@ -68,8 +158,8 @@ public class EvaluationController {
     permissions.require(Permissions.EVALUATION_MANAGE);validateScheme(q);
     Map<String,Object> before=db.queryForMap("select * from score_scheme where id=? and status='DRAFT'",id);
     if(((Number)before.get("batch_id")).longValue()!=q.batchId())throw new BusinessException(400,"评分方案草稿不能更换培养批次");
-    db.update("update score_scheme set effective_month=?,exam_enabled=?,exam_weight=?,task_enabled=?,task_weight=?,mentor_enabled=?,mentor_weight=?,station_enabled=?,station_weight=?,training_enabled=?,training_weight=?,quarter_month1_weight=?,quarter_month2_weight=?,quarter_month3_weight=?,bonus_cap=?,deduction_cap=? where id=? and status='DRAFT'",
-      q.effectiveMonth().atDay(1),q.examEnabled(),q.examWeight(),q.taskEnabled(),q.taskWeight(),q.mentorEnabled(),q.mentorWeight(),q.stationEnabled(),q.stationWeight(),q.trainingEnabled(),q.trainingWeight(),q.quarterMonth1Weight(),q.quarterMonth2Weight(),q.quarterMonth3Weight(),q.bonusCap(),q.deductionCap(),id);
+    db.update("update score_scheme set effective_month=?,exam_enabled=?,exam_weight=?,exam_max_score=?,task_enabled=?,task_weight=?,task_max_score=?,mentor_enabled=?,mentor_weight=?,mentor_max_score=?,station_enabled=?,station_weight=?,station_max_score=?,training_enabled=?,training_weight=?,training_max_score=?,quarter_month1_weight=?,quarter_month2_weight=?,quarter_month3_weight=?,bonus_cap=?,deduction_cap=? where id=? and status='DRAFT'",
+      q.effectiveMonth().atDay(1),q.examEnabled(),q.examWeight(),maxScore(q.examMaxScore()),q.taskEnabled(),q.taskWeight(),maxScore(q.taskMaxScore()),q.mentorEnabled(),q.mentorWeight(),maxScore(q.mentorMaxScore()),q.stationEnabled(),q.stationWeight(),maxScore(q.stationMaxScore()),q.trainingEnabled(),q.trainingWeight(),maxScore(q.trainingMaxScore()),q.quarterMonth1Weight(),q.quarterMonth2Weight(),q.quarterMonth3Weight(),q.bonusCap(),q.deductionCap(),id);
     audit.log("UPDATE_SCORE_SCHEME","SCORE_SCHEME",id,before,q);return ApiResponse.ok(null);
   }
 
@@ -79,7 +169,7 @@ public class EvaluationController {
     Map<String,Object> source=db.queryForMap("select * from score_scheme where id=? and status in ('PUBLISHED','RETIRED')",id);
     Long batch=((Number)source.get("batch_id")).longValue();
     Integer version=db.queryForObject("select coalesce(max(version),0)+1 from score_scheme where batch_id=?",Integer.class,batch);
-    db.update("insert into score_scheme(batch_id,version,effective_month,exam_enabled,exam_weight,task_enabled,task_weight,mentor_enabled,mentor_weight,station_enabled,station_weight,training_enabled,training_weight,quarter_month1_weight,quarter_month2_weight,quarter_month3_weight,bonus_cap,deduction_cap,created_by) select batch_id,?,effective_month,exam_enabled,exam_weight,task_enabled,task_weight,mentor_enabled,mentor_weight,station_enabled,station_weight,training_enabled,training_weight,quarter_month1_weight,quarter_month2_weight,quarter_month3_weight,bonus_cap,deduction_cap,? from score_scheme where id=?",version,SecurityUtils.current().id(),id);
+    db.update("insert into score_scheme(batch_id,template_id,version,effective_month,exam_enabled,exam_weight,exam_max_score,task_enabled,task_weight,task_max_score,mentor_enabled,mentor_weight,mentor_max_score,station_enabled,station_weight,station_max_score,training_enabled,training_weight,training_max_score,quarter_month1_weight,quarter_month2_weight,quarter_month3_weight,bonus_cap,deduction_cap,created_by) select batch_id,template_id,?,effective_month,exam_enabled,exam_weight,exam_max_score,task_enabled,task_weight,task_max_score,mentor_enabled,mentor_weight,mentor_max_score,station_enabled,station_weight,station_max_score,training_enabled,training_weight,training_max_score,quarter_month1_weight,quarter_month2_weight,quarter_month3_weight,bonus_cap,deduction_cap,? from score_scheme where id=?",version,SecurityUtils.current().id(),id);
     Long created=db.queryForObject("select last_insert_id()",Long.class);audit.log("COPY_SCORE_SCHEME_TO_DRAFT","SCORE_SCHEME",created,source,null);return ApiResponse.ok(created);
   }
 
@@ -130,6 +220,7 @@ public class EvaluationController {
     String allowed = componentForRole(SecurityUtils.current().role());
     if (!allowed.equals(component) || !Set.of("MENTOR","STATION","TRAINING").contains(component)) throw new BusinessException(403,"当前角色不能提交该评分项");
     ensureEnabled(employeeId,month,component);
+    ensureWithinFullScore(employeeId,month,component,score);
     ensureUnlocked(employeeId,month);
     db.update("insert into monthly_evaluation(employee_id,period_month,evaluator_type,evaluator_user_id,score,comment) values(?,?,?,?,?,?) on duplicate key update evaluator_user_id=values(evaluator_user_id),score=values(score),comment=values(comment),submitted_at=now()", employeeId,month.atDay(1),component,SecurityUtils.current().id(),score,comment);
     service.refreshDraftIfPresent(employeeId,month);
@@ -141,7 +232,7 @@ public class EvaluationController {
     requireAdmin(); permissions.requireEmployee(q.employeeId());
     component = component.toUpperCase(Locale.ROOT);
     if (!Set.copyOf(EvaluationService.COMPONENTS).contains(component)) throw new BusinessException(400,"不支持的评分项");
-    ensureEnabled(q.employeeId(),q.month(),component); ensureUnlocked(q.employeeId(),q.month());
+    ensureEnabled(q.employeeId(),q.month(),component); ensureWithinFullScore(q.employeeId(),q.month(),component,q.score()); ensureUnlocked(q.employeeId(),q.month());
     Map<String,Object> detail = service.monthlyDetail(q.employeeId(),q.month());
     Object original = component(detail,component).get("sourceScore");
     var before = db.queryForList("select * from score_component_override where employee_id=? and period_month=? and component_type=?",q.employeeId(),q.month().atDay(1),component);
@@ -214,7 +305,16 @@ public class EvaluationController {
   }
 
   private void ensureEnabled(Long employeeId,YearMonth month,String component){Map<String,Object> scheme=service.schemeFor(employeeId,month);Object value=scheme.get(component.toLowerCase(Locale.ROOT)+"_enabled");if(!(Boolean.TRUE.equals(value)||value instanceof Number n&&n.intValue()!=0))throw new BusinessException(400,"该评分项在当前方案中未启用");}
-  private void validateScheme(SchemeRequest q){EvaluationRules.validateComponentWeights(List.of(new EvaluationRules.WeightedItem(q.examEnabled(),q.examWeight()),new EvaluationRules.WeightedItem(q.taskEnabled(),q.taskWeight()),new EvaluationRules.WeightedItem(q.mentorEnabled(),q.mentorWeight()),new EvaluationRules.WeightedItem(q.stationEnabled(),q.stationWeight()),new EvaluationRules.WeightedItem(q.trainingEnabled(),q.trainingWeight())));EvaluationRules.validateQuarterWeights(q.quarterMonth1Weight(),q.quarterMonth2Weight(),q.quarterMonth3Weight());}
+  private void validateScheme(SchemeRequest q){EvaluationRules.validateComponentWeights(List.of(new EvaluationRules.WeightedItem(q.examEnabled(),q.examWeight()),new EvaluationRules.WeightedItem(q.taskEnabled(),q.taskWeight()),new EvaluationRules.WeightedItem(q.mentorEnabled(),q.mentorWeight()),new EvaluationRules.WeightedItem(q.stationEnabled(),q.stationWeight()),new EvaluationRules.WeightedItem(q.trainingEnabled(),q.trainingWeight())));EvaluationRules.validateQuarterWeights(q.quarterMonth1Weight(),q.quarterMonth2Weight(),q.quarterMonth3Weight());validateMaxScores(List.of(maxScore(q.examMaxScore()),maxScore(q.taskMaxScore()),maxScore(q.mentorMaxScore()),maxScore(q.stationMaxScore()),maxScore(q.trainingMaxScore())));}
+  private void validateTemplate(TemplateRequest q){EvaluationRules.validateComponentWeights(List.of(new EvaluationRules.WeightedItem(q.examEnabled(),q.examWeight()),new EvaluationRules.WeightedItem(q.taskEnabled(),q.taskWeight()),new EvaluationRules.WeightedItem(q.mentorEnabled(),q.mentorWeight()),new EvaluationRules.WeightedItem(q.stationEnabled(),q.stationWeight()),new EvaluationRules.WeightedItem(q.trainingEnabled(),q.trainingWeight())));EvaluationRules.validateQuarterWeights(q.quarterMonth1Weight(),q.quarterMonth2Weight(),q.quarterMonth3Weight());validateMaxScores(List.of(q.examMaxScore(),q.taskMaxScore(),q.mentorMaxScore(),q.stationMaxScore(),q.trainingMaxScore()));}
+  private void validateMaxScores(List<BigDecimal> values){if(values.stream().anyMatch(x->x==null||x.compareTo(BigDecimal.ZERO)<=0||x.compareTo(new BigDecimal("999.99"))>0))throw new BusinessException(400,"各评分项满分必须在0到999.99之间");}
+  private void ensureWithinFullScore(Long employeeId,YearMonth month,String component,BigDecimal score){BigDecimal max=service.componentMaxScore(employeeId,month,component);if(score.compareTo(max)>0)throw new BusinessException(400,"评分不能超过该项满分 "+max.stripTrailingZeros().toPlainString());}
+  private int pendingManualScores(YearMonth month){String role=SecurityUtils.current().role();if(!List.of("MENTOR","STATION_MANAGER","TRAINING_ADMIN").contains(role))return 0;String component=componentForRole(role);String enabledColumn=component.toLowerCase(Locale.ROOT)+"_enabled";var filter=permissions.employeeFilter("e");var args=new ArrayList<Object>(filter.args());args.add(month.atDay(1));args.add(month.atDay(1));args.add(component);Integer value=db.queryForObject("select count(*) from employee e where e.status='ACTIVE'"+filter.sql()+" and coalesce((select sc."+enabledColumn+" from score_scheme sc where sc.batch_id=e.batch_id and sc.status='PUBLISHED' and sc.effective_month<=? order by sc.effective_month desc,sc.version desc limit 1),false)=true and not exists(select 1 from monthly_evaluation m where m.employee_id=e.id and m.period_month=? and m.evaluator_type=?)",Integer.class,args.toArray());return value==null?0:value;}
+  private int pendingTaskReviews(){if(!SecurityUtils.current().can(Permissions.TASK_REVIEW))return 0;var filter=permissions.employeeFilter("e");Integer value=db.queryForObject("select count(*) from task_submission s join task_assignment a on a.id=s.assignment_id join employee e on e.id=a.employee_id where s.status='PENDING_REVIEW'"+filter.sql(),Integer.class,filter.args().toArray());return value==null?0:value;}
+  private int pendingExamReviews(){if(!SecurityUtils.current().can(Permissions.EXAM_MANAGE))return 0;var filter=permissions.employeeFilter("e");Integer value=db.queryForObject("select count(*) from exam_attempt a join employee e on e.id=a.employee_id where a.status='PENDING_REVIEW'"+filter.sql(),Integer.class,filter.args().toArray());return value==null?0:value;}
+  private int unpublishedExamResults(){if(!SecurityUtils.current().can(Permissions.EXAM_MANAGE))return 0;var filter=permissions.employeeFilter("e");Integer value=db.queryForObject("select count(*) from exam_attempt a join employee e on e.id=a.employee_id where a.status='GRADED' and a.published=false"+filter.sql(),Integer.class,filter.args().toArray());return value==null?0:value;}
+  private static BigDecimal maxScore(BigDecimal value){return value==null?new BigDecimal("100"):value;}
+  private static String blankToNull(String value){return value==null||value.isBlank()?null:value.trim();}
   private void ensureUnlocked(Long employeeId,YearMonth month){if(service.isLocked(employeeId,month))throw new BusinessException(409,"月度评价已发布，请由管理员重开后修改");}
   private void requireAdmin(){if(!List.of("ADMIN","SUPER_ADMIN").contains(SecurityUtils.current().role()))throw new BusinessException(403,"仅管理员可执行此操作");}
   private String componentForRole(String role){return switch(role){case "MENTOR"->"MENTOR";case "STATION_MANAGER"->"STATION";case "TRAINING_ADMIN"->"TRAINING";default->throw new BusinessException(403,"当前角色不能提交人工评分");};}

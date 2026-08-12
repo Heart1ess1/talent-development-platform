@@ -47,7 +47,12 @@ public class ExamScoringService {
             status,objective,subjective?null:objective,id);
     return Map.of("status",status,"objectiveScore",objective,"submission",submittedStatus);
   }
-  @Transactional public int scoreExpired(){var ids=db.queryForList("select id from exam_attempt where status='IN_PROGRESS' and deadline_at<now()",Long.class);for(Long id:ids)try{score(id,"TIMEOUT");}catch(Exception e){throw new IllegalStateException(e);}return ids.size();}
+  @Transactional public int scoreExpired(){var ids=db.queryForList("select id from exam_attempt where status='IN_PROGRESS' and deadline_at<=now()",Long.class);for(Long id:ids)try{score(id,"TIMEOUT");}catch(Exception e){throw new IllegalStateException(e);}return ids.size();}
+  @Transactional public int publishEndedResults(){return db.update("""
+      update exam_attempt a join exam_plan p on p.id=a.plan_id
+      set a.published=true,a.version=a.version+1
+      where a.status='GRADED' and a.published=false and p.status='PUBLISHED' and p.ends_at<=now()
+      """);}
   static boolean answersMatch(String type,JsonNode expected,JsonNode actual){if(!"MULTIPLE".equals(type))return Objects.equals(expected,actual);if(expected==null||actual==null||!expected.isArray()||!actual.isArray()||expected.size()!=actual.size())return false;var expectedValues=new HashSet<String>();var actualValues=new HashSet<String>();expected.forEach(x->expectedValues.add(x.toString()));actual.forEach(x->actualValues.add(x.toString()));return expectedValues.size()==expected.size()&&actualValues.size()==actual.size()&&expectedValues.equals(actualValues);}
   private JsonNode tree(Object x)throws Exception{return x==null?null:mapper.readTree(String.valueOf(x));}
 }

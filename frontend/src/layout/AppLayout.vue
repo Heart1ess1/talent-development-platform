@@ -33,12 +33,14 @@ const examChildren=computed<MenuItem[]>(()=>{
 const courseChildren=computed<MenuItem[]>(()=>{
   if(isEmployee.value)return [
     {to:'/courses/my',label:'我的课程'},
+    {to:'/courses/learning',label:'课件学习'},
     {to:'/courses/attendance',label:'签到记录'}
   ]
   const children:MenuItem[]=[]
   if(auth.can('course:manage'))children.push(
     {to:'/courses/manage',label:'课程库'},
-    {to:'/courses/sessions',label:'场次安排'}
+    {to:'/courses/sessions',label:'场次安排'},
+    {to:'/courses/materials',label:'课件管理'}
   )
   children.push({to:'/courses/attendance',label:auth.can('attendance:manage')?'签到管理':'签到记录'})
   return children
@@ -49,6 +51,16 @@ const personnelChildren=computed<MenuItem[]>(()=>{
     {to:'/location-reports',label:'人员流动'}
   ]
   if(auth.can('master:manage'))children.push({to:'/station-change-review',label:'调站审批'})
+  return children
+})
+const evaluationChildren=computed<MenuItem[]>(()=>{
+  if(isEmployee.value)return [{to:'/evaluation/results',label:'我的评价'}]
+  const children:MenuItem[]=[
+    {to:'/evaluation/workbench',label:'评价工作台'},
+    {to:'/evaluation/monthly',label:'月度评分'}
+  ]
+  if(auth.can('evaluation:manage'))children.push({to:'/evaluation/templates',label:'评价模板'})
+  children.push({to:'/evaluation/results',label:'结果中心'})
   return children
 })
 const menus=computed<MenuItem[]>(()=>[
@@ -69,7 +81,7 @@ const menus=computed<MenuItem[]>(()=>[
       {to:'/training-plans/tracking',label:'任务跟踪'}
     ]}]
   ),
-  {to:'/evaluation',label:'综合评价',permission:'evaluation:view'},
+  {label:'综合评价',permission:'evaluation:view',children:evaluationChildren.value},
   {label:'考试中心',children:examChildren.value},
   {to:'/users',label:'账号管理',permission:'user:employee:manage'}
 ].filter(x=>!x.permission||auth.can(x.permission)))

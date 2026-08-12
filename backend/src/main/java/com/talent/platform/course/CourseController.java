@@ -7,6 +7,8 @@ import com.talent.platform.security.PermissionService;
 import com.talent.platform.security.Permissions;
 import com.talent.platform.security.SecurityUtils;
 import com.talent.platform.storage.FileStorageService;
+import com.talent.platform.storage.UploadTicketService;
+import org.apache.pdfbox.pdmodel.PDDocument;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -32,8 +34,13 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import javax.imageio.ImageIO;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -43,28 +50,40 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 @RestController
 @RequestMapping("/api/v1")
 public class CourseController {
   private static final long MATERIAL_MAX_SIZE = 50L * 1024 * 1024;
+  private static final int MATERIAL_MAX_PAGES = 500;
+  private static final int MATERIAL_MAX_ARCHIVE_ENTRIES = 10_000;
+  private static final byte[] OLE_MAGIC = {
+      (byte) 0xd0, (byte) 0xcf, 0x11, (byte) 0xe0,
+      (byte) 0xa1, (byte) 0xb1, 0x1a, (byte) 0xe1
+  };
 
   private final JdbcTemplate db;
   private final PermissionService permissions;
   private final AuditService audit;
   private final FileStorageService storage;
+  private final UploadTicketService uploadTickets;
   private final SecureRandom random = new SecureRandom();
 
   public CourseController(
       JdbcTemplate db,
       PermissionService permissions,
       AuditService audit,
-      FileStorageService storage
+      FileStorageService storage,
+      UploadTicketService uploadTickets
   ) {
     this.db = db;
     this.permissions = permissions;
     this.audit = audit;
     this.storage = storage;
+    this.uploadTickets = uploadTickets;
   }
 
   public record CourseRequest(
@@ -94,6 +113,12 @@ public class CourseController {
   ) {}
 
   public record EnrollRequest(@NotEmpty List<@NotNull Long> employeeIds) {}
+
+  public record DirectUploadRequest(
+      @NotBlank @Size(max = 255) String originalName,
+      @Size(max = 128) String contentType,
+      long size
+  ) {}
 
   @GetMapping("/courses")
   public ApiResponse<List<Map<String, Object>>> courses(
@@ -221,22 +246,55 @@ public class CourseController {
     }
   }
 
+  @PostMapping("/courses/{id}/materials/upload-ticket")
+  public ApiResponse<UploadTicketService.UploadTicket> createMaterialUploadTicket(
+      @PathVariable Long id,
+      @Valid @RequestBody DirectUploadRequest request
+  ) {
+    permissions.require(Permissions.COURSE_MANAGE);
+    one("select id from course where id=?", id);
+    validateMaterialMetadata(request.originalName(), request.size());
+    return ApiResponse.ok(uploadTickets.issue(
+        "course-material", id, request.originalName(), request.contentType(), request.size()));
+  }
+
+  @PostMapping("/courses/{id}/materials/upload-complete/{ticketId}")
+  @Transactional
+  public ApiResponse<Long> completeMaterialUpload(
+      @PathVariable Long id,
+      @PathVariable UUID ticketId
+  ) {
+    permissions.require(Permissions.COURSE_MANAGE);
+    one("select id from course where id=?", id);
+    var upload = uploadTickets.consume(ticketId, "course-material", id);
+    try {
+      validateStoredMaterial(upload.storageKey(), upload.originalName(), upload.size());
+      db.update("""
+          insert into course_material(course_id,original_name,content_type,size,storage_key,uploaded_by)
+          values(?,?,?,?,?,?)
+          """, id, upload.originalName(), upload.contentType(), upload.size(), upload.storageKey(),
+          SecurityUtils.current().id());
+      Long materialId = lastId();
+      audit.log("UPLOAD_COURSE_MATERIAL", "COURSE_MATERIAL", materialId, null,
+          Map.of("courseId", id, "name", upload.originalName(), "transfer", "OSS_DIRECT"));
+      return ApiResponse.ok(materialId);
+    } catch (RuntimeException exception) {
+      try {
+        storage.delete(upload.storageKey());
+      } catch (RuntimeException ignored) {
+        // Database rollback is authoritative; orphan cleanup can retry later.
+      }
+      throw exception;
+    }
+  }
+
   @GetMapping("/course-materials/{id}")
   public ResponseEntity<?> downloadMaterial(
       @PathVariable Long id,
       @RequestParam(required = false, defaultValue = "false") boolean inline
   ) {
-    var material = one("select * from course_material where id=?", id);
-    requireCourseAccess(number(material.get("course_id")));
-    String name = String.valueOf(material.get("original_name"));
-    String disposition = inline ? "inline" : "attachment";
-    Object rawContentType = material.get("content_type");
-    String contentType = rawContentType == null ? "application/octet-stream" : String.valueOf(rawContentType);
-    return ResponseEntity.ok()
-        .contentType(MediaType.parseMediaType(contentType))
-        .header(HttpHeaders.CONTENT_DISPOSITION,
-            disposition + "; filename*=UTF-8''" + URLEncoder.encode(name, StandardCharsets.UTF_8))
-        .body(storage.load(String.valueOf(material.get("storage_key"))));
+    one("select id from course_material where id=?", id);
+    throw new BusinessException(403, "课件仅支持带水印在线预览，不提供原文件查看或下载");
   }
 
   @DeleteMapping("/course-materials/{id}")
@@ -551,11 +609,87 @@ public class CourseController {
 
   private void validateMaterial(MultipartFile file) {
     if (file == null || file.isEmpty()) throw new BusinessException(400, "不能上传空文件");
-    if (file.getSize() > MATERIAL_MAX_SIZE) throw new BusinessException(400, "单个课件不能超过 50MB");
-    String name = Optional.ofNullable(file.getOriginalFilename()).orElse("").toLowerCase(Locale.ROOT);
-    if (!name.matches(".*\\.(pdf|ppt|pptx|doc|docx|xls|xlsx|txt|md|png|jpg|jpeg|zip|mp4)$")) {
-      throw new BusinessException(400, "支持 PDF、Office、图片、文本、ZIP 和 MP4 课件");
+    String name = Optional.ofNullable(file.getOriginalFilename()).orElse("");
+    validateMaterialMetadata(name, file.getSize());
+    try {
+      validateMaterialContent(name, file.getBytes());
+    } catch (IOException | IllegalArgumentException exception) {
+      throw new BusinessException(400, "课件内容与文件格式不符或文件已损坏");
     }
+  }
+
+  private void validateMaterialMetadata(String originalName, long size) {
+    if (size <= 0) throw new BusinessException(400, "不能上传空文件");
+    if (size > MATERIAL_MAX_SIZE) throw new BusinessException(400, "单个课件不能超过 50MB");
+    String name = Optional.ofNullable(originalName).orElse("").toLowerCase(Locale.ROOT);
+    if (!name.matches(".*\\.(pdf|doc|docx|ppt|pptx|ofd|png|jpg|jpeg)$")) {
+      throw new BusinessException(400, "仅支持 Word、PDF、PPT、OFD、PNG、JPG 课件安全预览");
+    }
+  }
+
+  private void validateStoredMaterial(String storageKey, String originalName, long size) {
+    validateMaterialMetadata(originalName, size);
+    try (var input = storage.load(storageKey).getInputStream()) {
+      validateMaterialContent(originalName, input.readAllBytes());
+    } catch (IOException | IllegalArgumentException exception) {
+      throw new BusinessException(400, "课件内容与文件格式不符或文件已损坏");
+    }
+  }
+
+  private void validateMaterialContent(String originalName, byte[] content) throws IOException {
+    String name = originalName.toLowerCase(Locale.ROOT);
+    if (name.endsWith(".pdf")) {
+      try (var document = PDDocument.load(content)) {
+        int pages = document.getNumberOfPages();
+        if (pages <= 0 || pages > MATERIAL_MAX_PAGES) throw new IOException("invalid pdf page count");
+      }
+    } else if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg")) {
+      if (ImageIO.read(new ByteArrayInputStream(content)) == null) throw new IOException("invalid image");
+    } else if (name.endsWith(".doc") || name.endsWith(".ppt")) {
+      if (!startsWith(content, OLE_MAGIC)) throw new IOException("invalid legacy office document");
+    } else if (name.endsWith(".docx")) {
+      validateZipPackage(content, "[content_types].xml", "word/document.xml");
+    } else if (name.endsWith(".pptx")) {
+      validateZipPackage(content, "[content_types].xml", "ppt/presentation.xml");
+    } else if (name.endsWith(".ofd")) {
+      validateZipPackage(content, "ofd.xml");
+    } else {
+      throw new IOException("unsupported material format");
+    }
+  }
+
+  private void validateZipPackage(byte[] content, String... requiredEntries) throws IOException {
+    if (content.length < 4 || content[0] != 'P' || content[1] != 'K') {
+      throw new IOException("invalid zip package");
+    }
+    Path temporary = Files.createTempFile("talent-material-", ".zip");
+    try {
+      Files.write(temporary, content);
+      var missing = new LinkedHashSet<String>();
+      for (String entry : requiredEntries) missing.add(entry.toLowerCase(Locale.ROOT));
+      try (var archive = new ZipFile(temporary.toFile())) {
+        int entries = 0;
+        var iterator = archive.entries();
+        while (iterator.hasMoreElements()) {
+          ZipEntry entry = iterator.nextElement();
+          if (++entries > MATERIAL_MAX_ARCHIVE_ENTRIES) throw new IOException("too many archive entries");
+          String normalized = entry.getName().replace('\\', '/').toLowerCase(Locale.ROOT);
+          while (normalized.startsWith("/")) normalized = normalized.substring(1);
+          missing.remove(normalized);
+        }
+      }
+      if (!missing.isEmpty()) throw new IOException("missing package entries: " + missing);
+    } finally {
+      Files.deleteIfExists(temporary);
+    }
+  }
+
+  private boolean startsWith(byte[] content, byte[] magic) {
+    if (content.length < magic.length) return false;
+    for (int index = 0; index < magic.length; index++) {
+      if (content[index] != magic[index]) return false;
+    }
+    return true;
   }
 
   private Map<String, Object> one(String sql, Object... args) {

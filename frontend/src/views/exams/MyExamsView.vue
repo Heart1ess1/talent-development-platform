@@ -24,7 +24,7 @@ async function start(row:any){
   const entered=await enterFullscreen()
   try{
     attempt.value=(await api.post<any,Envelope<any>>(`/exams/plans/${row.id}/attempts`)).data
-    attempt.value.questions.forEach((q:any)=>answers[q.id]=q.saved_answer??(q.question_type==='MULTIPLE'?[]:null))
+    attempt.value.questions.forEach((q:any)=>answers[q.id]=q.saved_answer??(q.question_type==='MULTIPLE'?[]:q.question_type==='SHORT'?'':null))
     violationCount.value=Number(attempt.value.violation_count||0);allowedViolations.value=Number(attempt.value.allowed_violations||3)
     isFullscreen.value=Boolean(document.fullscreenElement);activeViolationEventId=undefined;lastViolation=undefined;violationReportFailed.value=false;autoSubmitting.value=false;dialog.value=true
     document.addEventListener('visibilitychange',visibility);document.addEventListener('fullscreenchange',fullscreen);window.addEventListener('blur',blur)
@@ -75,7 +75,7 @@ onBeforeUnmount(()=>closeExam());onMounted(load)
 
     <el-dialog v-model="dialog" :title="attempt?.exam_name" width="760px" :close-on-click-modal="false" :close-on-press-escape="false" :show-close="false">
       <div class="exam-security-bar"><el-tag :type="isFullscreen?'success':'danger'">{{isFullscreen?'全屏答题中':'答题已锁定'}}</el-tag><span>异常操作：<strong>{{violationCount}}</strong> 次（超过 {{allowedViolations}} 次自动交卷）</span></div>
-      <div v-for="(q,i) in attempt?.questions" :key="q.id" class="exam-question"><h4>{{i+1}}. {{q.stem}}（{{q.score}}分）</h4><el-radio-group v-if="['SINGLE','TRUE_FALSE'].includes(q.question_type)" v-model="answers[q.id]" :disabled="!examCanAnswer" @change="save(q)"><el-radio v-for="o in options(q)" :key="String(o)" :value="o">{{optionLabel(o)}}</el-radio></el-radio-group><el-checkbox-group v-else v-model="answers[q.id]" :disabled="!examCanAnswer" @change="save(q)"><el-checkbox v-for="o in options(q)" :key="String(o)" :value="o">{{optionLabel(o)}}</el-checkbox></el-checkbox-group></div>
+      <div v-for="(q,i) in attempt?.questions" :key="q.id" class="exam-question"><h4>{{i+1}}. {{q.stem}}（{{q.score}}分）</h4><el-radio-group v-if="['SINGLE','TRUE_FALSE'].includes(q.question_type)" v-model="answers[q.id]" :disabled="!examCanAnswer" @change="save(q)"><el-radio v-for="o in options(q)" :key="String(o)" :value="o">{{optionLabel(o)}}</el-radio></el-radio-group><el-checkbox-group v-else-if="q.question_type==='MULTIPLE'" v-model="answers[q.id]" :disabled="!examCanAnswer" @change="save(q)"><el-checkbox v-for="o in options(q)" :key="String(o)" :value="o">{{optionLabel(o)}}</el-checkbox></el-checkbox-group><el-input v-else v-model="answers[q.id]" type="textarea" :rows="5" maxlength="3000" show-word-limit :disabled="!examCanAnswer" placeholder="请输入答案" @blur="save(q)"/></div>
       <template #footer><el-button type="primary" :disabled="!examCanAnswer" @click="submit">提交试卷</el-button></template>
     </el-dialog>
     <el-dialog v-model="violationDialog" class="anti-cheat-dialog" width="520px" append-to-body :show-close="false" :close-on-click-modal="false" :close-on-press-escape="false">

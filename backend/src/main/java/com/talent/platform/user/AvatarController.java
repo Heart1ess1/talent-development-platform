@@ -4,8 +4,7 @@ import com.talent.platform.common.ApiResponse;
 import com.talent.platform.common.BusinessException;
 import com.talent.platform.security.AuditService;
 import com.talent.platform.security.SecurityUtils;
-import com.talent.platform.storage.FileStorageService;
-import org.springframework.core.io.Resource;
+import com.talent.platform.storage.PublicAssetStorageService;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -33,10 +32,10 @@ public class AvatarController {
   private static final Set<String> CONTENT_TYPES = Set.of(MediaType.IMAGE_JPEG_VALUE, MediaType.IMAGE_PNG_VALUE);
 
   private final JdbcTemplate db;
-  private final FileStorageService storage;
+  private final PublicAssetStorageService storage;
   private final AuditService audit;
 
-  public AvatarController(JdbcTemplate db, FileStorageService storage, AuditService audit) {
+  public AvatarController(JdbcTemplate db, PublicAssetStorageService storage, AuditService audit) {
     this.db = db;
     this.storage = storage;
     this.audit = audit;
@@ -51,7 +50,7 @@ public class AvatarController {
     var before = db.queryForMap(
         "select avatar_storage_key,avatar_token from sys_user where id=?",
         user.id());
-    var stored = storage.store(file);
+    var stored = storage.store("avatars", file);
     var token = UUID.randomUUID().toString();
     try {
       db.update("""
@@ -94,19 +93,27 @@ public class AvatarController {
   }
 
   @GetMapping("/api/v1/avatars/{token}")
-  public ResponseEntity<Resource> image(@PathVariable UUID token) {
+  public ResponseEntity<?> image(@PathVariable UUID token) {
     var rows = db.queryForList(
         "select avatar_storage_key,avatar_content_type from sys_user where avatar_token=?",
         token.toString());
     if (rows.isEmpty()) throw new BusinessException(404, "头像不存在");
     var avatar = rows.get(0);
     var contentType = String.valueOf(avatar.get("avatar_content_type"));
+    String storageKey = String.valueOf(avatar.get("avatar_storage_key"));
+    var publicUrl = storage.publicUrl(storageKey);
+    if (publicUrl.isPresent()) {
+      return ResponseEntity.status(302)
+          .location(publicUrl.get())
+          .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePublic())
+          .build();
+    }
     return ResponseEntity.ok()
         .contentType(MediaType.parseMediaType(contentType))
         .cacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePublic().immutable())
         .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
         .header("X-Content-Type-Options", "nosniff")
-        .body(storage.load(String.valueOf(avatar.get("avatar_storage_key"))));
+        .body(storage.load(storageKey));
   }
 
   private String validate(MultipartFile file) {

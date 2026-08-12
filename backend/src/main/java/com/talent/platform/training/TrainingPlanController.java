@@ -3,6 +3,7 @@ package com.talent.platform.training;
 import com.talent.platform.common.*;
 import com.talent.platform.security.*;
 import com.talent.platform.task.TaskAttachmentService;
+import com.talent.platform.storage.UploadTicketService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -42,6 +43,11 @@ public class TrainingPlanController {
   public record PlanTaskOrderItem(@NotNull Long id, @NotNull @Min(1) Integer sortOrder) {}
   public record ReplacePlanTaskOrderRequest(@NotNull List<@Valid PlanTaskOrderItem> items) {}
   public record EnabledRequest(@NotNull Boolean enabled) {}
+  public record DirectUploadRequest(
+      @NotBlank @Size(max = 255) String originalName,
+      @Size(max = 128) String contentType,
+      @Min(1) long size
+  ) {}
 
   @GetMapping
   public ApiResponse<List<Map<String, Object>>> plans(
@@ -208,6 +214,33 @@ public class TrainingPlanController {
     audit.log("UPLOAD_PLAN_TASK_ATTACHMENT", "TASK_ATTACHMENT", attachmentId, null,
         Map.of("planId", planId, "taskId", taskId,
             "name", Optional.ofNullable(file.getOriginalFilename()).orElse("附件")));
+    return ApiResponse.ok(attachmentId);
+  }
+
+  @PostMapping("/{planId}/tasks/{taskId}/attachments/upload-ticket")
+  public ApiResponse<UploadTicketService.UploadTicket> createPlanTaskAttachmentUploadTicket(
+      @PathVariable Long planId,
+      @PathVariable Long taskId,
+      @Valid @RequestBody DirectUploadRequest request
+  ) {
+    permissions.require(Permissions.TASK_MANAGE);
+    one("select id from training_plan_task where id=? and plan_id=?", taskId, planId);
+    return ApiResponse.ok(taskAttachments.createUploadTicket(
+        "plan-task-attachment", taskId, request.originalName(), request.contentType(), request.size()));
+  }
+
+  @PostMapping("/{planId}/tasks/{taskId}/attachments/upload-complete/{ticketId}")
+  public ApiResponse<Long> completePlanTaskAttachmentUpload(
+      @PathVariable Long planId,
+      @PathVariable Long taskId,
+      @PathVariable UUID ticketId
+  ) {
+    permissions.require(Permissions.TASK_MANAGE);
+    one("select id from training_plan_task where id=? and plan_id=?", taskId, planId);
+    Long attachmentId = taskAttachments.completeUpload(
+        "plan-task-attachment", taskId, ticketId, true);
+    audit.log("UPLOAD_PLAN_TASK_ATTACHMENT", "TASK_ATTACHMENT", attachmentId, null,
+        Map.of("planId", planId, "taskId", taskId, "transfer", "OSS_DIRECT"));
     return ApiResponse.ok(attachmentId);
   }
 

@@ -3,6 +3,7 @@ package com.talent.platform.task;
 import com.talent.platform.common.BusinessException;
 import com.talent.platform.security.SecurityUtils;
 import com.talent.platform.storage.FileStorageService;
+import com.talent.platform.storage.UploadTicketService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class TaskAttachmentService {
@@ -19,10 +21,16 @@ public class TaskAttachmentService {
 
   private final JdbcTemplate db;
   private final FileStorageService storage;
+  private final UploadTicketService uploadTickets;
 
-  public TaskAttachmentService(JdbcTemplate db, FileStorageService storage) {
+  public TaskAttachmentService(
+      JdbcTemplate db,
+      FileStorageService storage,
+      UploadTicketService uploadTickets
+  ) {
     this.db = db;
     this.storage = storage;
+    this.uploadTickets = uploadTickets;
   }
 
   public List<Map<String, Object>> listForPlanTask(Long planTaskId) {
@@ -65,6 +73,41 @@ public class TaskAttachmentService {
   public Long uploadForTask(Long taskId, MultipartFile file) {
     validate(file);
     return store(file, null, taskId);
+  }
+
+  public UploadTicketService.UploadTicket createUploadTicket(
+      String purpose,
+      Long ownerId,
+      String originalName,
+      String contentType,
+      long size
+  ) {
+    validateMetadata(originalName, size);
+    return uploadTickets.issue(purpose, ownerId, originalName, contentType, size);
+  }
+
+  @Transactional
+  public Long completeUpload(String purpose, Long ownerId, UUID ticketId, boolean planTask) {
+    var upload = uploadTickets.consume(ticketId, purpose, ownerId);
+    try {
+      db.update("""
+          insert into task_attachment(
+            training_plan_task_id,challenge_task_id,original_name,content_type,size,storage_key,uploaded_by
+          ) values(?,?,?,?,?,?,?)
+          """,
+          planTask ? ownerId : null,
+          planTask ? null : ownerId,
+          upload.originalName(), upload.contentType(), upload.size(), upload.storageKey(),
+          SecurityUtils.current().id());
+      return db.queryForObject("select last_insert_id()", Long.class);
+    } catch (RuntimeException exception) {
+      try {
+        storage.delete(upload.storageKey());
+      } catch (RuntimeException ignored) {
+        // Database rollback is authoritative; orphan cleanup can retry later.
+      }
+      throw exception;
+    }
   }
 
   @Transactional
@@ -135,8 +178,13 @@ public class TaskAttachmentService {
 
   private void validate(MultipartFile file) {
     if (file == null || file.isEmpty()) throw new BusinessException(400, "不能上传空文件");
-    if (file.getSize() > MAX_SIZE) throw new BusinessException(400, "单个任务附件不能超过 50MB");
-    String name = Optional.ofNullable(file.getOriginalFilename()).orElse("").toLowerCase(Locale.ROOT);
+    validateMetadata(file.getOriginalFilename(), file.getSize());
+  }
+
+  private void validateMetadata(String originalName, long size) {
+    if (size <= 0) throw new BusinessException(400, "不能上传空文件");
+    if (size > MAX_SIZE) throw new BusinessException(400, "单个任务附件不能超过 50MB");
+    String name = Optional.ofNullable(originalName).orElse("").toLowerCase(Locale.ROOT);
     if (!name.matches(".*\\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|md|png|jpg|jpeg|zip)$")) {
       throw new BusinessException(400, "支持 PDF、Office、图片、文本和 ZIP 格式附件");
     }
