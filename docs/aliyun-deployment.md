@@ -18,11 +18,20 @@
 | 备案 | 备案控制台显示“待提交管局”和“暂无备案号”；域名注册/转入未满两天，等待系统自动提交，在备案号下发前不添加中国内地 CDN 域名、不切换正式业务 DNS |
 | CDN/ESA | CDN 已按流量计费方式开通，当前 0 个加速域名、0 流量；`static.yryhx.cn` 仍需等 ICP 备案号下发后添加 |
 
-当前线上运行 IP 版 Draft PR #11 分支提交 `e53e4b08d7fd34423a2a57232589b5c3e1fc1470`，JAR SHA-256 为 `d46b3452fffd51baa5bde2c6c1abdbe2a243434cea870a416f1a93f684b4fffb`，Flyway 为 V26。该提交尚未合并 `main`，因此后续部署必须显式比较 Git 提交与线上 JAR 哈希。历史 CDN 候选包 `/data/talent-platform/releases/staging/cdn-20260812-2032/` 早于本次上线，已视为过期，不能直接激活；备案、CDN 域名与 HTTPS 就绪后，必须从当时最新 `main` 重新构建并同步静态资源，再执行 `activate-cdn-release.sh`。
+当前线上运行 IP 版应用代码基线为 PR #12 的 `main` 合并提交 `3a611a44c8d1fc79c4a953148d1afbfade4e535f`，JAR SHA-256 为 `7ef1009d48211b5ae386543bfa3399ffe3a3a39de8119f2ae2bbf9f229f15ce5`，Flyway 为 V27。历史 CDN 候选包 `/data/talent-platform/releases/staging/cdn-20260812-2032/` 早于本次上线，已视为过期，不能直接激活；备案、CDN 域名与 HTTPS 就绪后，必须从当时最新 `main` 重新构建并同步静态资源，再执行 `activate-cdn-release.sh`。
+
+### 2026-08-13 任务优先评分人范围配置部署记录
+
+- GitHub：PR #12 已通过代码、安全边界和测试复核并合并，部署 `main` 合并提交 `3a611a44c8d1fc79c4a953148d1afbfade4e535f`。
+- 构建校验：从精确的 `origin/main` 隔离工作树采用根路径静态资源构建；前端 12 项、后端 96 项测试及生产构建通过，前端生产依赖审计为 0 个已知漏洞；生产 JAR SHA-256 为 `7ef1009d48211b5ae386543bfa3399ffe3a3a39de8119f2ae2bbf9f229f15ce5`。
+- 数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20260813-032813.sql.gz`，SHA-256 `7aad2d95612b3b5dba04f40d622596f7a4ca0351ab0d71e0366f96acfb91cd64`。
+- 生产校验：应用容器重建成功且健康状态为 `UP`；Flyway V27 成功；`evaluation_reviewer_scope_rule`、`evaluation_reviewer_scope_member`、`assignment_source` 和 `scope_rule_id` 均已落库；服务器 JAR 哈希与本机构建一致。
+- 公网校验：`/actuator/health` 返回 200，`/evaluation/assignments` 返回根路径资源版 SPA 页面 200，未登录 `/api/v1/evaluation/assignments/overview?month=2026-08` 返回 401。
+- 业务验收：在隔离 MySQL 8.4 环境完成创建全员规则、生成员工任务、自动写入 `SCOPE_RULE` 分配、覆盖统计和只读详情的浏览器主链路；生产环境未创建演示评分规则，避免污染真实评分配置。
 
 ### 2026-08-13 评分任务与评分人编排部署记录
 
-- GitHub：Draft PR #11，部署提交为 `e53e4b08d7fd34423a2a57232589b5c3e1fc1470`；尚未合并 `main`。
+- GitHub：PR #11 已合并，历史部署提交为 `e53e4b08d7fd34423a2a57232589b5c3e1fc1470`。
 - 构建校验：前端 12 项测试、生产构建及后端 92 项测试通过；采用根路径静态资源构建，生产 JAR SHA-256 为 `d46b3452fffd51baa5bde2c6c1abdbe2a243434cea870a416f1a93f684b4fffb`。
 - 数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20260813-023457.sql.gz`，SHA-256 `2dc785055384564d85b95e85a05d97bf3598355d6347ebc01e18d6be407831fd`。
 - 回滚材料：`/data/talent-platform/releases/history/pre-e53e4b0-20260813-023457/`，包含上一版 JAR、`.env` 和哈希文件。
