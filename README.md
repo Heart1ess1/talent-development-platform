@@ -81,7 +81,7 @@ GitHub 仓库首页只会自动显示根目录的 `README.md`。`docs/` 下的 M
 - [docs/api-contract.md](docs/api-contract.md)：当前 `/api/v1` 接口约定、认证、响应结构、错误码和主要接口清单。
 - [docs/permissions-matrix.md](docs/permissions-matrix.md)：角色、权限点、数据范围和前端路由权限。
 - [docs/task-board.md](docs/task-board.md)：轻量任务表，用于在未配置 GitHub Project 前追踪协作任务。
-- [docs/pending-tasks.md](docs/pending-tasks.md)：当前未完成任务、PR #3 云端部署顺序、外部阻塞条件和验收证据清单。
+- [docs/pending-tasks.md](docs/pending-tasks.md)：当前未完成任务、历次云端部署记录、外部阻塞条件和验收证据清单。
 - [docs/codebase-guide.md](docs/codebase-guide.md)：代码库结构、模块关系和每个源码/配置/迁移/测试文件的职责。
 - [docs/aliyun-deployment.md](docs/aliyun-deployment.md)：当前云端证据、OSS/CDN 安全分层、域名备案、迁移、回退和上线验收。
 

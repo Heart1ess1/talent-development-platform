@@ -18,7 +18,16 @@
 | 备案 | 备案控制台显示“待提交管局”和“暂无备案号”；域名注册/转入未满两天，等待系统自动提交，在备案号下发前不添加中国内地 CDN 域名、不切换正式业务 DNS |
 | CDN/ESA | CDN 已按流量计费方式开通，当前 0 个加速域名、0 流量；`static.yryhx.cn` 仍需等 ICP 备案号下发后添加 |
 
-当前线上运行 IP 版 `main@90d09a4a9276a30d21afe1a4de61fda741963bcf`，JAR SHA-256 为 `7ead9945d8a0335741c2df2db4c04a7bdf7cff1b9e4eb1b69576eee02d21af4a`，Flyway 为 V25。历史 CDN 候选包 `/data/talent-platform/releases/staging/cdn-20260812-2032/` 早于本次上线，已视为过期，不能直接激活；备案、CDN 域名与 HTTPS 就绪后，必须从当时最新 `main` 重新构建并同步静态资源，再执行 `activate-cdn-release.sh`。
+当前线上运行 IP 版 Draft PR #11 分支提交 `e53e4b08d7fd34423a2a57232589b5c3e1fc1470`，JAR SHA-256 为 `d46b3452fffd51baa5bde2c6c1abdbe2a243434cea870a416f1a93f684b4fffb`，Flyway 为 V26。该提交尚未合并 `main`，因此后续部署必须显式比较 Git 提交与线上 JAR 哈希。历史 CDN 候选包 `/data/talent-platform/releases/staging/cdn-20260812-2032/` 早于本次上线，已视为过期，不能直接激活；备案、CDN 域名与 HTTPS 就绪后，必须从当时最新 `main` 重新构建并同步静态资源，再执行 `activate-cdn-release.sh`。
+
+### 2026-08-13 评分任务与评分人编排部署记录
+
+- GitHub：Draft PR #11，部署提交为 `e53e4b08d7fd34423a2a57232589b5c3e1fc1470`；尚未合并 `main`。
+- 构建校验：前端 12 项测试、生产构建及后端 92 项测试通过；采用根路径静态资源构建，生产 JAR SHA-256 为 `d46b3452fffd51baa5bde2c6c1abdbe2a243434cea870a416f1a93f684b4fffb`。
+- 数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20260813-023457.sql.gz`，SHA-256 `2dc785055384564d85b95e85a05d97bf3598355d6347ebc01e18d6be407831fd`。
+- 回滚材料：`/data/talent-platform/releases/history/pre-e53e4b0-20260813-023457/`，包含上一版 JAR、`.env` 和哈希文件。
+- 生产校验：云助手任务成功且退出码为 0，应用健康状态为 `UP`，线上 JAR 哈希与本机构建一致，Flyway V26 成功；`evaluation_rating_task`、`evaluation_rating_reviewer` 两张表存在。
+- 公网校验：`/actuator/health` 返回 200，`/evaluation/assignments` 返回 SPA 页面 200，未登录 `/api/v1/evaluation/assignments?month=2026-08` 返回 401。
 
 ### 2026-08-13 综合评价优化部署记录
 
