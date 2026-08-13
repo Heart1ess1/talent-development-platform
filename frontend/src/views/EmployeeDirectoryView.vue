@@ -21,6 +21,7 @@ import {ElMessage,ElMessageBox} from 'element-plus'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import {avatarUrl,nameInitial} from '@/utils/avatar'
+import {loadEnabledBusinessUnits} from '@/utils/masterData'
 
 type DirectoryRow=Record<string,any>
 type StationChange=Record<string,any>
@@ -200,14 +201,14 @@ async function load(){
 }
 
 async function loadMasters(){
-  const [batchResponse,unitResponse,stationResponse,mentorResponse]=await Promise.all([
+  const [batchResponse,unitOptions,stationResponse,mentorResponse]=await Promise.all([
     api.get<any,Envelope<any[]>>('/batches'),
-    api.get<any,Envelope<any[]>>('/business-units'),
+    loadEnabledBusinessUnits(),
     api.get<any,Envelope<any[]>>('/stations'),
     api.get<any,Envelope<any[]>>('/mentors')
   ])
   batches.value=batchResponse.data
-  businessUnits.value=unitResponse.data.filter(item=>item.enabled)
+  businessUnits.value=unitOptions
   stations.value=stationResponse.data.filter(item=>item.enabled)
   mentors.value=mentorResponse.data
 }

@@ -11,8 +11,11 @@ Push-Location $FrontendDir
 try {
   $env:VITE_ASSET_BASE = $AssetBase
   pnpm install --frozen-lockfile
+  if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败，退出码：$LASTEXITCODE" }
   pnpm test
+  if ($LASTEXITCODE -ne 0) { throw "前端测试失败，退出码：$LASTEXITCODE" }
   pnpm build
+  if ($LASTEXITCODE -ne 0) { throw "前端构建失败，退出码：$LASTEXITCODE" }
 } finally {
   Remove-Item Env:VITE_ASSET_BASE -ErrorAction SilentlyContinue
   Pop-Location
@@ -21,6 +24,7 @@ try {
 Push-Location $BackendDir
 try {
   mvn clean package
+  if ($LASTEXITCODE -ne 0) { throw "后端构建失败，退出码：$LASTEXITCODE" }
 } finally {
   Pop-Location
 }

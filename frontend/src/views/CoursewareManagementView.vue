@@ -32,7 +32,7 @@ onMounted(load)
     <el-drawer v-model="detailOpen" size="min(900px, 94vw)">
       <template #header><div><h3>{{selected?.original_name}}</h3><p>{{selected?.course_name}} · 已学习 {{selected?.learned_count||0}} 人，未学习 {{selected?.unlearned_count||0}} 人</p></div></template>
       <el-table :data="learners" v-loading="detailLoading" empty-text="该课件尚未安排员工">
-        <el-table-column prop="employee_no" label="工号" width="120"/><el-table-column prop="employee_name" label="姓名" min-width="100"/><el-table-column prop="batch_name" label="批次" min-width="100"/><el-table-column prop="station_name" label="板块" min-width="110"/>
+        <el-table-column prop="employee_no" label="工号" width="120"/><el-table-column prop="employee_name" label="姓名" min-width="100"/><el-table-column prop="batch_name" label="批次" min-width="100"/><el-table-column prop="station_name" label="服务站点" min-width="110"/>
         <el-table-column label="学习状态" width="90"><template #default="s"><el-tag :type="s.row.learned?'success':'warning'" effect="plain">{{s.row.learned?'已学习':'未学习'}}</el-tag></template></el-table-column>
         <el-table-column prop="view_count" label="学习次数" width="90" align="center"/><el-table-column label="学习时长" width="120"><template #default="s">{{duration(s.row.duration_seconds)}}</template></el-table-column>
       </el-table>

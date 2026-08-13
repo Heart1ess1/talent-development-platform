@@ -302,8 +302,8 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/exams/papers` | `exam:manage` | 查询试卷 | 无 | 试卷列表 |
 | `GET` | `/api/v1/exams/papers/{id}` | `exam:manage` | 查看试卷结构详情 | 路径 `id` | 固定题目或随机抽题规则 |
 | `DELETE` | `/api/v1/exams/papers/{id}` | `exam:manage` | 删除未被考试计划使用的试卷 | 路径 `id` | 空 |
-| `GET` | `/api/v1/exams/plans/candidates` | `exam:manage` | 按批次、服务站和关键字筛选可参加考试的员工 | 可选逗号分隔 `batchIds`、`stationIds`、`keyword` | 启用状态员工列表 |
-| `POST` | `/api/v1/exams/plans` | `exam:manage` | 创建考试计划 | `paperId`、`name`、`batchIds`、`stationIds`、`startsAt`、`endsAt`、`durationMinutes`、`maxAttempts`、`employeeIds` | 计划 ID |
+| `GET` | `/api/v1/exams/plans/candidates` | `exam:manage` | 按批次、所属板块和关键字筛选可参加考试的员工 | 可选逗号分隔 `batchIds`、`businessUnitIds`、`keyword` | 启用状态员工列表，包含 `business_unit_name` |
+| `POST` | `/api/v1/exams/plans` | `exam:manage` | 创建考试计划 | `paperId`、`name`、`batchIds`、`businessUnitIds`、`startsAt`、`endsAt`、`durationMinutes`、`maxAttempts`、`employeeIds` | 计划 ID |
 | `POST` | `/api/v1/exams/plans/{id}/publish` | `exam:manage` | 发布考试计划 | 路径 `id` | 空 |
 | `DELETE` | `/api/v1/exams/plans/{id}` | `exam:manage` | 删除考试计划草稿 | 路径 `id` | 空 |
 | `POST` | `/api/v1/exams/plans/{id}/assign` | `exam:manage` | 补充分配考试 | `employeeIds` | 新增分配数量 |

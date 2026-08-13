@@ -21,6 +21,7 @@ import {api, type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import TaskAttachmentsPanel from '@/components/TaskAttachmentsPanel.vue'
 import {createUploadTicket,storageCapabilities,uploadWithStorageFallback} from '@/storageTransfer'
+import {loadEnabledBusinessUnits} from '@/utils/masterData'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -166,14 +167,14 @@ async function load() {
     ? (await api.get<any, Envelope<any[]>>('/assignments/pending-review')).data
     : []
   if (!canManage.value) return
-  const [batchResponse, businessUnitResponse, stationResponse, planResponse] = await Promise.all([
+  const [batchResponse, businessUnitOptions, stationResponse, planResponse] = await Promise.all([
     api.get<any, Envelope<any[]>>('/batches'),
-    api.get<any, Envelope<any[]>>('/business-units'),
+    loadEnabledBusinessUnits(),
     api.get<any, Envelope<any[]>>('/stations'),
     api.get<any, Envelope<any[]>>('/training-plans')
   ])
   batches.value = batchResponse.data
-  businessUnits.value = businessUnitResponse.data.filter(item => item.enabled === true || item.enabled === 1)
+  businessUnits.value = businessUnitOptions
   stations.value = stationResponse.data
   plans.value = planResponse.data.filter(item => item.enabled === true || item.enabled === 1)
   if (selectedPlanId.value && !plans.value.some(item => item.id === selectedPlanId.value)) {
