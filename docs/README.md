@@ -13,6 +13,7 @@
 | [pending-tasks.md](pending-tasks.md) | 汇总当前未完成任务、PR #3 云端部署顺序、外部阻塞条件和逐项验收证据。 | 项目负责人、部署运维人员、后续执行者 |
 | [codebase-guide.md](codebase-guide.md) | 梳理系统架构、核心业务链路，并说明每个源码、配置、迁移和测试文件的职责。 | 新加入或接手项目的开发者、维护者 |
 | [aliyun-deployment.md](aliyun-deployment.md) | 记录 ECS、私有 OSS 签名传输、公共 OSS＋CDN、`yryhx.cn`、迁移回退和费用边界。 | 项目维护者、部署运维人员 |
+| [business-flow-acceptance-2026-08-13.md](business-flow-acceptance-2026-08-13.md) | 记录全系统业务流程验收结果、问题分级、发布判定和优化实施顺序。 | 产品负责人、项目维护者、开发者、测试人员 |
 
 ## 维护规则
 
