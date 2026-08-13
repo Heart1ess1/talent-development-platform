@@ -27,7 +27,6 @@ const examChildren=computed<MenuItem[]>(()=>{
     {to:'/exams/plans',label:'考试计划'},
     {to:'/exams/results',label:'成绩管理'}
   ]
-  if(auth.user?.role==='EMPLOYEE')return [{to:'/exams/my',label:'我的考试'},{to:'/exams/results',label:'我的成绩'}]
   return [{to:'/exams/results',label:'考试成绩'}]
 })
 const courseChildren=computed<MenuItem[]>(()=>{
@@ -84,7 +83,10 @@ const menus=computed<MenuItem[]>(()=>[
     ]}]
   ),
   {label:'综合评价',permission:'evaluation:view',children:evaluationChildren.value},
-  {label:'考试中心',children:examChildren.value},
+  ...(isEmployee.value
+    ?[{to:'/exams/my',label:'我的考试'}]
+    :[{label:'考试中心',children:examChildren.value}]
+  ),
   {to:'/users',label:'账号管理',permission:'user:employee:manage'}
 ].filter(x=>!x.permission||auth.can(x.permission)))
 const activeMenuGroups=computed(()=>menus.value

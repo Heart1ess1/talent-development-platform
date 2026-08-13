@@ -51,6 +51,7 @@ router.beforeEach(to=>{
   if(a.user?.role==='EMPLOYEE'&&to.path.startsWith('/evaluation/')&&to.path!=='/evaluation/results')return '/evaluation/results';
   if(a.user?.role==='EMPLOYEE'&&['/courses/manage','/courses/sessions','/courses/materials'].includes(to.path))return '/courses/learning';
   if(a.user?.role!=='EMPLOYEE'&&['/courses/my','/courses/learning'].includes(to.path))return a.can('course:manage')?'/courses/manage':'/courses/attendance';
+  if(a.user?.role==='EMPLOYEE'&&to.path==='/exams/results')return {path:'/exams/my',query:{section:'results'}};
   if(a.user?.role!=='EMPLOYEE'&&to.path==='/exams/my')return a.can('exam:manage')?'/exams/plans':'/exams/results';
   const permission=to.meta.permission as string|undefined;
   if(permission&&!a.can(permission))return '/dashboard';

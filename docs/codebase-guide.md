@@ -237,8 +237,8 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `views/exams/ExamQuestionBankView.vue` | 多题库目录、题目新增编辑、标签、启停、安全删除和指定题库 Excel 导入。 |
 | `views/exams/ExamPapersView.vue` | 分步抽屉式手动/随机/一人一卷组卷、题库范围、试卷详情和安全删除。 |
 | `views/exams/ExamPlansView.vue` | 考试时间、试卷、批次/板块范围、参考员工选择、草稿删除及发布。 |
-| `views/exams/MyExamsView.vue` | 员工考试列表、客观题作答保存、计时和防作弊事件上报；仅对历史简答题答卷保留兼容显示。 |
-| `views/exams/ExamResultsView.vue` | 考试完成情况、管理员即时成绩、员工延迟可见状态、历史简答题兼容阅卷和 Excel 导出；不再提供人工成绩发布。 |
+| `views/exams/MyExamsView.vue` | 员工侧统一考试页面，整合考试安排、已发布成绩、客观题作答保存、计时和防作弊事件上报；仅对历史简答题答卷保留兼容显示。 |
+| `views/exams/ExamResultsView.vue` | 管理端考试完成情况、即时成绩、历史简答题兼容阅卷和 Excel 导出；不再提供人工成绩发布。 |
 | `styles/exam-center.css` | 题库、试卷、考试计划和成绩管理共享的页面头、概览卡、工作区与响应式视觉规范。 |
 | `views/exams/examUi.ts` | 考试状态、题型和日期显示的共享前端工具。 |
 | `views/exams/examProctor.ts` | 考试服务端时钟校准、截止时间倒计时格式化、防作弊事件 ID 兼容生成和 `keepalive` 可靠上报；`MyExamsView.vue` 负责考前诚信确认、全屏准入、状态轮询和到时自动交卷。 |
