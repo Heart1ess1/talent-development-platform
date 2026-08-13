@@ -3,14 +3,15 @@ import {computed,nextTick,onMounted,reactive,ref} from 'vue'
 import {ElMessage,ElMessageBox} from 'element-plus'
 import {Calendar,Clock,Document,Plus,Search,UserFilled} from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
+import {loadEnabledBusinessUnits} from '@/utils/masterData'
 import {dateTimeParts,planPhaseLabels,scoreMonth} from './examUi'
 import '@/styles/exam-center.css'
 
-const plans=ref<any[]>([]),papers=ref<any[]>([]),batches=ref<any[]>([]),stations=ref<any[]>([])
+const plans=ref<any[]>([]),papers=ref<any[]>([]),batches=ref<any[]>([]),businessUnits=ref<any[]>([])
 const candidates=ref<any[]>([]),selectedCandidates=ref<any[]>([]),candidateTable=ref<any>()
 const drawerVisible=ref(false),candidateLoading=ref(false),saving=ref(false)
 const keyword=ref(''),statusFilter=ref('')
-const scope=reactive<any>({batchIds:[] as number[],stationIds:[] as number[],keyword:''})
+const scope=reactive<any>({batchIds:[] as number[],businessUnitIds:[] as number[],keyword:''})
 const emptyPlan=()=>({paperId:null,name:'',startsAt:'',endsAt:'',durationMinutes:60,maxAttempts:1,employeeIds:[] as number[]})
 const plan=reactive<any>(emptyPlan())
 
@@ -26,7 +27,7 @@ const overview=computed(()=>({
 }))
 const selectedPaper=computed(()=>papers.value.find(x=>x.id===plan.paperId))
 const selectedBatchNames=computed(()=>scope.batchIds.length?batches.value.filter(x=>scope.batchIds.includes(x.id)).map(x=>x.name).join('、'):'全部')
-const selectedStationNames=computed(()=>scope.stationIds.length?stations.value.filter(x=>scope.stationIds.includes(x.id)).map(x=>x.name).join('、'):'全部')
+const selectedBusinessUnitNames=computed(()=>scope.businessUnitIds.length?businessUnits.value.filter(x=>scope.businessUnitIds.includes(x.id)).map(x=>x.name).join('、'):'全部')
 const scoreMonthLabel=computed(()=>plan.startsAt?plan.startsAt.slice(0,7):'选择开始时间后自动生成')
 const windowMinutes=computed(()=>{
   if(!plan.startsAt||!plan.endsAt)return 0
@@ -34,23 +35,23 @@ const windowMinutes=computed(()=>{
 })
 
 async function load(){
-  const [planRes,paperRes,batchRes,stationRes]=await Promise.all([
+  const [planRes,paperRes,batchRes,businessUnitOptions]=await Promise.all([
     api.get<any,Envelope<any[]>>('/exams/plans'),
     api.get<any,Envelope<any[]>>('/exams/papers'),
     api.get<any,Envelope<any[]>>('/batches'),
-    api.get<any,Envelope<any[]>>('/stations')
+    loadEnabledBusinessUnits()
   ])
-  plans.value=planRes.data;papers.value=paperRes.data;batches.value=batchRes.data.filter(x=>x.enabled);stations.value=stationRes.data.filter(x=>x.enabled)
+  plans.value=planRes.data;papers.value=paperRes.data;batches.value=batchRes.data.filter(x=>x.enabled);businessUnits.value=businessUnitOptions
 }
 function openCreate(){
-  Object.assign(plan,emptyPlan());Object.assign(scope,{batchIds:[],stationIds:[],keyword:''})
+  Object.assign(plan,emptyPlan());Object.assign(scope,{batchIds:[],businessUnitIds:[],keyword:''})
   candidates.value=[];selectedCandidates.value=[];drawerVisible.value=true
 }
 function clearCandidates(){candidates.value=[];selectedCandidates.value=[]}
 async function matchCandidates(){
   candidateLoading.value=true
   try{
-    const params={batchIds:scope.batchIds.join(','),stationIds:scope.stationIds.join(','),keyword:scope.keyword}
+    const params={batchIds:scope.batchIds.join(','),businessUnitIds:scope.businessUnitIds.join(','),keyword:scope.keyword}
     const res=await api.get<any,Envelope<any[]>>('/exams/plans/candidates',{params})
     candidates.value=res.data;selectedCandidates.value=[]
     await nextTick()
@@ -80,7 +81,7 @@ async function createPlan(publish:boolean){
   const message=validatePlan();if(message)return ElMessage.warning(message)
   saving.value=true
   try{
-    const payload={...plan,name:plan.name.trim(),batchId:scope.batchIds.length===1?scope.batchIds[0]:null,batchIds:scope.batchIds,stationIds:scope.stationIds,employeeIds:selectedCandidates.value.map(x=>x.id)}
+    const payload={...plan,name:plan.name.trim(),batchId:scope.batchIds.length===1?scope.batchIds[0]:null,batchIds:scope.batchIds,businessUnitIds:scope.businessUnitIds,employeeIds:selectedCandidates.value.map(x=>x.id)}
     const res=await api.post<any,Envelope<number>>('/exams/plans',payload)
     if(publish)await api.post(`/exams/plans/${res.data}/publish`)
     ElMessage.success(publish?'考试计划已创建并发布':'考试计划已保存为草稿')
@@ -137,7 +138,7 @@ onMounted(load)
         </el-table-column>
         <el-table-column label="计分月份" width="100"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column>
         <el-table-column label="批次" width="112" class-name="batch-column" label-class-name="batch-column" show-overflow-tooltip><template #default="s">{{planBatchNames(s.row)}}</template></el-table-column>
-        <el-table-column label="板块" width="100" show-overflow-tooltip><template #default="s">{{s.row.target_station_names||'全部'}}</template></el-table-column>
+        <el-table-column label="板块" width="100" show-overflow-tooltip><template #default="s">{{s.row.target_business_unit_names||'全部'}}</template></el-table-column>
         <el-table-column label="参考人数" width="100" align="center" header-align="center"><template #default="s"><strong>{{s.row.assigned_count??0}}</strong></template></el-table-column>
         <el-table-column label="计划状态" width="92"><template #default="s"><el-tag :type="planPhase(s.row).type" effect="plain">{{planPhase(s.row).label}}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="126" fixed="right"><template #default="s"><div v-if="s.row.status==='DRAFT'" class="exam-table-actions"><el-button link type="primary" @click="publishPlan(s.row)">发布</el-button><el-button link type="danger" @click="deletePlan(s.row)">删除</el-button></div><span v-else class="muted">已发布</span></template></el-table-column>
@@ -178,17 +179,17 @@ onMounted(load)
           <div class="section-title"><span>3</span><div><strong>参考人员范围</strong><small>批次与板块均支持多选；某项不选择表示该维度全部，可在匹配结果中排除个别人员</small></div></div>
           <div class="scope-grid">
             <el-select v-model="scope.batchIds" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部批次" @change="clearCandidates"><el-option v-for="x in batches" :key="x.id" :label="x.name" :value="x.id"/></el-select>
-            <el-select v-model="scope.stationIds" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部板块" @change="clearCandidates"><el-option v-for="x in stations" :key="x.id" :label="x.name" :value="x.id"/></el-select>
+            <el-select v-model="scope.businessUnitIds" multiple clearable placeholder="全部板块" @change="clearCandidates"><el-option v-for="x in businessUnits" :key="x.id" :label="x.name" :value="x.id"/></el-select>
             <el-input v-model="scope.keyword" clearable placeholder="姓名或工号（可选）" :prefix-icon="Search" @input="clearCandidates" @keyup.enter="matchCandidates"/>
             <el-button type="primary" plain :loading="candidateLoading" @click="matchCandidates">匹配人员</el-button>
           </div>
-          <div class="scope-summary"><span>参考批次：<strong>{{selectedBatchNames}}</strong></span><span>参考板块：<strong>{{selectedStationNames}}</strong></span></div>
+          <div class="scope-summary"><span>参考批次：<strong>{{selectedBatchNames}}</strong></span><span>参考板块：<strong>{{selectedBusinessUnitNames}}</strong></span></div>
           <div class="candidate-head">
             <span><el-icon><UserFilled/></el-icon> 匹配 {{candidates.length}} 人，已选择 <strong>{{selectedCandidates.length}}</strong> 人</span>
             <span class="muted">默认全选，可取消不需要参加的员工</span>
           </div>
           <el-table ref="candidateTable" :data="candidates" v-loading="candidateLoading" height="230" empty-text="请先设置筛选条件并点击“匹配人员”" @selection-change="onSelectionChange">
-            <el-table-column type="selection" width="44"/><el-table-column prop="employee_no" label="工号" width="112"/><el-table-column prop="name" label="姓名" min-width="100"/><el-table-column prop="batch_name" label="批次" min-width="100"><template #default="s">{{s.row.batch_name||'未设置'}}</template></el-table-column><el-table-column prop="station_name" label="所属板块" min-width="110"><template #default="s">{{s.row.station_name||'未设置'}}</template></el-table-column>
+            <el-table-column type="selection" width="44"/><el-table-column prop="employee_no" label="工号" width="112"/><el-table-column prop="name" label="姓名" min-width="100"/><el-table-column prop="batch_name" label="批次" min-width="100"><template #default="s">{{s.row.batch_name||'未设置'}}</template></el-table-column><el-table-column prop="business_unit_name" label="所属板块" min-width="110"><template #default="s">{{s.row.business_unit_name||'未设置'}}</template></el-table-column>
           </el-table>
         </section>
       </el-form>

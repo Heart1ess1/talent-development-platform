@@ -175,6 +175,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `db/migration/V25__evaluation_source_weights.sql` | 增加任务/考试内部权重、站点汇总模式、多导师/多站点评分作用域及员工月度站点权重。 |
 | `db/migration/V26__evaluation_rating_tasks.sql` | 增加人工评分任务与有效评分人表，并把历史月度人工评分回填为可查询任务。 |
 | `db/migration/V27__evaluation_group_reviewer_rules.sql` | 增加按月份、评分项和全员/批次/板块维护的评分人范围规则及成员表，并记录员工任务评分人的分配来源。 |
+| `db/migration/V28__use_business_units_for_exam_plan_scopes.sql` | 将考试计划的“板块”范围从历史服务站口径统一为所属板块主数据，并迁移同名历史范围。 |
 | `db/migration/V23__course_material_learning.sql` | 增加课件预览会话、员工学习次数和累计学习时长记录。 |
 | `db/migration/V24__object_upload_ticket.sql` | 增加 OSS 客户端直传票据、用途/归属绑定、有效期和单次消费状态。 |
 

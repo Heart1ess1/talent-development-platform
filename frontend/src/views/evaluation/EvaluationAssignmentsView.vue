@@ -5,6 +5,7 @@ import {Calendar,EditPen,Plus,Refresh,Setting,UserFilled} from '@element-plus/ic
 import {ElMessage,ElMessageBox} from 'element-plus'
 import {api,type Envelope} from '@/api'
 import {componentLabels,type ComponentCode} from '@/evaluation/model'
+import {loadEnabledBusinessUnits} from '@/utils/masterData'
 import '@/styles/evaluation-center.css'
 
 type ManualComponent='MENTOR'|'STATION'|'TRAINING'
@@ -31,7 +32,7 @@ const totals=computed(()=>({tasks:summaries.value.reduce((n,x)=>n+x.taskCount,0)
 const filteredTasks=computed(()=>{const q=detailKeyword.value.trim().toLowerCase();return q?employeeTasks.value.filter(x=>[x.employee_name,x.employee_no,x.batch_name,x.business_unit_name,x.scope_name].some(v=>String(v||'').toLowerCase().includes(q))):employeeTasks.value})
 
 async function loadOverview(){loading.value=true;try{summaries.value=(await api.get<any,Envelope<Summary[]>>('/evaluation/assignments/overview',{params:{month:month.value}})).data}finally{loading.value=false}}
-async function loadMasters(){const [batchResult,unitResult]=await Promise.all([api.get<any,Envelope<any[]>>('/batches'),api.get<any,Envelope<any[]>>('/business-units')]);batches.value=batchResult.data.filter(x=>x.enabled);businessUnits.value=unitResult.data.filter(x=>x.enabled)}
+async function loadMasters(){const [batchResult,unitOptions]=await Promise.all([api.get<any,Envelope<any[]>>('/batches'),loadEnabledBusinessUnits()]);batches.value=batchResult.data.filter(x=>x.enabled);businessUnits.value=unitOptions}
 async function generate(){const dueAt=`${month.value}-${String(new Date(Number(month.value.slice(0,4)),Number(month.value.slice(5,7)),0).getDate()).padStart(2,'0')}T23:59:59`;await ElMessageBox.confirm('系统将依据本月已发布评分方案生成三类人工评分任务。已有任务不会重复创建，已配置的范围规则会自动应用。','生成本月评分任务',{type:'info'});const count=(await api.post<any,Envelope<number>>('/evaluation/assignments/generate',{month:month.value,dueAt})).data;ElMessage.success(`已新增 ${count} 个员工评分任务`);await loadOverview()}
 async function loadComponent(){drawerLoading.value=true;try{const code=activeComponent.value;const [ruleResult,reviewerResult,taskResult]=await Promise.all([
   api.get<any,Envelope<ScopeRule[]>>('/evaluation/assignments/scope-rules',{params:{month:month.value,component:code}}),
