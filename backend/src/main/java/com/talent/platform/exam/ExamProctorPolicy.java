@@ -1,5 +1,6 @@
 package com.talent.platform.exam;
 
+import java.time.LocalDateTime;
 import java.util.Set;
 
 final class ExamProctorPolicy {
@@ -14,5 +15,13 @@ final class ExamProctorPolicy {
 
   static boolean shouldAutoSubmit(int violationCount) {
     return violationCount > ALLOWED_VIOLATIONS;
+  }
+
+  static boolean deadlineReached(LocalDateTime deadline, LocalDateTime now) {
+    return !deadline.isAfter(now);
+  }
+
+  static boolean shouldSettleTimeout(String status, LocalDateTime deadline, LocalDateTime now) {
+    return "IN_PROGRESS".equals(status) && deadlineReached(deadline, now);
   }
 }

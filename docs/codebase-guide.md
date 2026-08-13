@@ -144,7 +144,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | --- | --- |
 | `backend/pom.xml` | Maven 构建、Java 17、Spring Boot、MyBatis-Plus、Flyway、JWT、EasyExcel、OSS 等依赖；构建时并入前端静态资源。 |
 | `backend/src/main/resources/application.yml` | 数据库、上传大小、时区、JWT、初始管理员、演示账号、存储策略和 CORS 的环境变量默认值。 |
-| `backend/src/main/resources/templates/question-bank-template.xlsx` | 旧版题库模板样例；当前下载接口根据 `QuestionImportRow` 动态生成包含专业标签列的新模板。 |
+| `backend/src/main/resources/templates/question-bank-template.xlsx` | 题库正式导入模板；包含三类客观题题型和专业标签下拉、分值校验、填写指南及示例，下载接口直接返回该受版本控制的模板。 |
 
 ### Flyway 迁移（按版本只增不改）
 
@@ -237,10 +237,11 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `views/exams/ExamQuestionBankView.vue` | 多题库目录、题目新增编辑、标签、启停、安全删除和指定题库 Excel 导入。 |
 | `views/exams/ExamPapersView.vue` | 分步抽屉式手动/随机/一人一卷组卷、题库范围、试卷详情和安全删除。 |
 | `views/exams/ExamPlansView.vue` | 考试时间、试卷、批次/板块范围、参考员工选择、草稿删除及发布。 |
-| `views/exams/MyExamsView.vue` | 员工考试列表、客观题和简答题作答保存、计时和防作弊事件上报。 |
+| `views/exams/MyExamsView.vue` | 员工考试列表、客观题作答保存、计时和防作弊事件上报；仅对历史简答题答卷保留兼容显示。 |
 | `views/exams/ExamResultsView.vue` | 考试完成情况、管理员即时成绩、员工延迟可见状态、历史简答题兼容阅卷和 Excel 导出；不再提供人工成绩发布。 |
 | `styles/exam-center.css` | 题库、试卷、考试计划和成绩管理共享的页面头、概览卡、工作区与响应式视觉规范。 |
 | `views/exams/examUi.ts` | 考试状态、题型和日期显示的共享前端工具。 |
+| `views/exams/examProctor.ts` | 考试服务端时钟校准、截止时间倒计时格式化、防作弊事件 ID 兼容生成和 `keepalive` 可靠上报；`MyExamsView.vue` 负责考前诚信确认、全屏准入、状态轮询和到时自动交卷。 |
 | `views/UsersView.vue` | 账号列表、创建、启停、重置密码、改角色/账号名/显示名及站点负责人范围配置。 |
 | `utils/avatar.ts` | 头像公开地址与姓名末字默认头像的统一前端规则。 |
 | `utils/role.ts` | 英文角色代码到中文界面文案的统一映射；权限判断仍使用原始代码。 |
