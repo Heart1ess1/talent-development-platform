@@ -312,6 +312,8 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/exams/attempts/{id}` | `exam:manage` 或考生本人 | 查看答卷 | 路径 `id` | 答卷和题目 |
 | `PUT` | `/api/v1/exams/attempts/{id}/answers` | 考生本人，进行中 | 保存答案 | `questionId`、`answer` | 空 |
 | `POST` | `/api/v1/exams/attempts/{id}/events` | 考生本人，进行中 | 记录防作弊事件 | `type=BLUR|HIDDEN|EXIT_FULLSCREEN|RECONNECT`、唯一 `eventId`、`detail` | 违规次数、允许次数和自动交卷状态 |
+| `GET` | `/api/v1/exams/attempts/{id}/status` | 考生本人 | 考试页面每 3 秒同步答卷状态、服务器时间和截止时间 | 路径 `id` | 状态、违规次数、`serverNowEpochMillis`、`deadlineEpochMillis` |
+| `POST` | `/api/v1/exams/attempts/{id}/timeout` | 考生本人，且已到服务端截止时间 | 倒计时归零后立即执行超时交卷；后台约每 5 秒扫描过期答卷继续兜底 | 路径 `id` | 评分状态和提交类型；未到截止时间返回 `400` |
 | `POST` | `/api/v1/exams/attempts/{id}/submit` | 考生本人，进行中 | 提交答卷并触发评分 | 路径 `id` | 状态和 `scoreAvailableAt`，不返回分数 |
 | `GET` | `/api/v1/exams/review` | `exam:manage`，按数据范围过滤 | 查询阅卷与待发布队列 | 无 | 待阅卷/已评分答卷、总分和发布状态 |
 | `PUT` | `/api/v1/exams/attempts/{attemptId}/questions/{questionId}/grade` | `exam:manage` | 主观题评分 | `score`、`comment` | 空 |
@@ -323,7 +325,7 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/exams/results` | 登录，按数据范围过滤 | 查询已发布考试结果与已结束考试的缺考记录 | 可选 `employeeId` | 结果列表，包含 `result_status=COMPLETED|ABSENT`；缺考记录的 `total_score=0` |
 | `GET` | `/api/v1/exams/results/export` | `exam:manage`，按数据范围过滤 | 导出已发布成绩 | 可选 `planId`、`month=yyyy-MM`、`major` | Excel 文件 |
 
-题库兼容 `SINGLE`、`MULTIPLE`、`TRUE_FALSE`、`SHORT`，但新建试卷仅允许前三种客观题；试卷总分必须等于 100 分。员工交卷后立即评分，管理员端可即时查看，员工端结果查询只返回 `published=true` 的成绩。`ExamScheduler` 每分钟先处理到期答卷，再将 `ends_at<=now()` 的已评分成绩统一标记为已发布。`dynamicAssembly=true` 时必须同时使用随机组卷；员工开始考试时，系统按员工档案 `major` 匹配题目 `tags`，无标签题作为公共题，每次答卷保存实际抽取题目。
+题库新增、编辑和 Excel 导入仅允许 `SINGLE`、`MULTIPLE`、`TRUE_FALSE` 三类客观题；历史 `SHORT` 数据只保留答卷展示和人工阅卷兼容，不再提供新增入口。试卷总分必须等于 100 分。员工交卷后立即评分，管理员端可即时查看，员工端结果查询只返回 `published=true` 的成绩。`ExamScheduler` 约每 5 秒处理到期答卷，并每分钟将 `ends_at<=now()` 的已评分成绩统一标记为已发布。`dynamicAssembly=true` 时必须同时使用随机组卷；员工开始考试时，系统按员工档案 `major` 匹配题目 `tags`，无标签题作为公共题，每次答卷保存实际抽取题目。
 
 动态试卷的题目集合以 `exam_attempt_question` 为准。开始考试后，查看答卷、保存答案、提交、自动评分和人工阅卷必须使用同一集合，不能重新按标签抽题。前端旧 `/exams` 地址只重定向到按角色可访问的拆分页面，不代表存在第二套考试 API。
 
