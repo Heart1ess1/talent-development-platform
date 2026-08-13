@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import {computed,onBeforeUnmount,onMounted,reactive,ref} from 'vue'
+import {useRoute} from 'vue-router'
 import {ElMessage} from 'element-plus'
 import {api,type Envelope} from '@/api'
-import {dateTimeParts,participationLabels,planPhaseLabels,parseJson} from './examUi'
+import {dateTimeParts,participationLabels,planPhaseLabels,parseJson,resultStatusLabels,scoreMonth} from './examUi'
 import {createProctorEventId,examDeadlineMillis,formatExamCountdown,postProctorEvent,remainingExamSeconds,serverClockOffsetMillis,type ProctorEvent,type ProctorEventType} from './examProctor'
 
-const plans=ref<any[]>([]),dialog=ref(false),attempt=ref<any>()
+const route=useRoute()
+const plans=ref<any[]>([]),results=ref<any[]>([]),activeSection=ref(route.query.section==='results'?'results':'plans'),dialog=ref(false),attempt=ref<any>()
 const integrityDialog=ref(false),integrityAccepted=ref(false),pendingPlan=ref<any>(),starting=ref(false)
 const answers=reactive<Record<number,any>>({})
 const violationDialog=ref(false),violationCount=ref(0),allowedViolations=ref(3),isFullscreen=ref(false),restoringFullscreen=ref(false),violationReporting=ref(false),violationReportFailed=ref(false),violationSyncPending=ref(false),autoSubmitting=ref(false)
@@ -14,9 +16,16 @@ let activeViolation:ProctorEvent|undefined,countdownTimer:ReturnType<typeof setI
 const examCanAnswer=computed(()=>dialog.value&&isFullscreen.value&&!violationDialog.value&&!autoSubmitting.value&&remainingSeconds.value>0)
 const countdownText=computed(()=>formatExamCountdown(remainingSeconds.value))
 
-async function load(){plans.value=(await api.get<any,Envelope<any[]>>('/exams/plans')).data}
+async function load(){
+  const [planResponse,resultResponse]=await Promise.all([
+    api.get<any,Envelope<any[]>>('/exams/plans'),
+    api.get<any,Envelope<any[]>>('/exams/results')
+  ])
+  plans.value=planResponse.data;results.value=resultResponse.data
+}
 function planPhase(row:any){return planPhaseLabels[row.plan_phase]??{label:row.status,type:'info'}}
 function participation(row:any){return participationLabels[row.participation_status]??{label:'--',type:'info'}}
+function resultStatus(row:any){return resultStatusLabels[row.result_status]??{label:'--',type:'success'}}
 function canStart(row:any){return ['READY','IN_PROGRESS'].includes(row.participation_status)}
 async function enterFullscreen(){
   if(document.fullscreenElement){isFullscreen.value=true;return true}
@@ -120,15 +129,30 @@ onBeforeUnmount(()=>closeExam());onMounted(load)
 
 <template>
   <div class="page">
-    <div class="page-head"><div><h2>我的考试</h2><p class="muted">查看考试安排，并在开放时间内进入或继续考试</p></div></div>
-    <el-card>
-      <el-table :data="plans" empty-text="暂无考试安排" class="plan-table">
-        <el-table-column prop="name" label="考试" min-width="110" show-overflow-tooltip/><el-table-column prop="paper_name" label="试卷" min-width="100" show-overflow-tooltip/>
-        <el-table-column label="开始时间" width="112"><template #default="s"><span class="datetime-cell"><span>{{dateTimeParts(s.row.starts_at).date}}</span><span>{{dateTimeParts(s.row.starts_at).time}}</span></span></template></el-table-column>
-        <el-table-column label="结束时间" width="112"><template #default="s"><span class="datetime-cell"><span>{{dateTimeParts(s.row.ends_at).date}}</span><span>{{dateTimeParts(s.row.ends_at).time}}</span></span></template></el-table-column>
-        <el-table-column prop="duration_minutes" label="时长(分钟)" width="90"/><el-table-column label="计划状态" width="94"><template #default="s"><el-tag :type="planPhase(s.row).type" effect="plain">{{planPhase(s.row).label}}</el-tag></template></el-table-column><el-table-column label="我的状态" width="112"><template #default="s"><el-tag :type="participation(s.row).type" effect="plain">{{participation(s.row).label}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="94"><template #default="s"><el-button v-if="canStart(s.row)" link type="primary" @click="requestStart(s.row)">{{s.row.participation_status==='IN_PROGRESS'?'继续考试':'进入考试'}}</el-button><span v-else class="muted">--</span></template></el-table-column>
-      </el-table>
+    <div class="page-head"><div><h2>我的考试</h2><p class="muted">统一查看考试安排、参加考试和查询已发布成绩</p></div></div>
+    <el-card class="exam-overview-card">
+      <el-tabs v-model="activeSection" class="exam-tabs">
+        <el-tab-pane name="plans">
+          <template #label><span>考试安排 <el-tag size="small" effect="plain">{{plans.length}}</el-tag></span></template>
+          <el-table :data="plans" empty-text="暂无考试安排" class="plan-table">
+            <el-table-column prop="name" label="考试" min-width="110" show-overflow-tooltip/><el-table-column prop="paper_name" label="试卷" min-width="100" show-overflow-tooltip/>
+            <el-table-column label="开始时间" width="112"><template #default="s"><span class="datetime-cell"><span>{{dateTimeParts(s.row.starts_at).date}}</span><span>{{dateTimeParts(s.row.starts_at).time}}</span></span></template></el-table-column>
+            <el-table-column label="结束时间" width="112"><template #default="s"><span class="datetime-cell"><span>{{dateTimeParts(s.row.ends_at).date}}</span><span>{{dateTimeParts(s.row.ends_at).time}}</span></span></template></el-table-column>
+            <el-table-column prop="duration_minutes" label="时长(分钟)" width="90"/><el-table-column label="计划状态" width="94"><template #default="s"><el-tag :type="planPhase(s.row).type" effect="plain">{{planPhase(s.row).label}}</el-tag></template></el-table-column><el-table-column label="我的状态" width="112"><template #default="s"><el-tag :type="participation(s.row).type" effect="plain">{{participation(s.row).label}}</el-tag></template></el-table-column>
+            <el-table-column label="操作" width="94"><template #default="s"><el-button v-if="canStart(s.row)" link type="primary" @click="requestStart(s.row)">{{s.row.participation_status==='IN_PROGRESS'?'继续考试':'进入考试'}}</el-button><span v-else class="muted">--</span></template></el-table-column>
+          </el-table>
+        </el-tab-pane>
+        <el-tab-pane name="results">
+          <template #label><span>考试成绩 <el-tag size="small" type="success" effect="plain">{{results.length}}</el-tag></span></template>
+          <el-alert title="成绩在整场考试结束后自动发布；考试进行期间不会提前显示分数。" type="info" :closable="false" show-icon class="result-notice"/>
+          <el-table :data="results" empty-text="暂无已发布成绩" class="result-table">
+            <el-table-column prop="exam_name" label="考试" min-width="160"/>
+            <el-table-column prop="total_score" label="成绩" width="100"><template #default="s"><strong class="result-score">{{s.row.total_score}}</strong></template></el-table-column>
+            <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="resultStatus(s.row).type" effect="plain">{{resultStatus(s.row).label}}</el-tag></template></el-table-column>
+            <el-table-column label="计分月份" width="130"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column>
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
     </el-card>
 
     <el-dialog v-model="integrityDialog" title="诚信考试确认" width="600px" :close-on-click-modal="false" :close-on-press-escape="false" :show-close="false">
@@ -163,5 +187,5 @@ onBeforeUnmount(()=>closeExam());onMounted(load)
 </template>
 
 <style scoped>
-.page-head p{margin:6px 0 0}.plan-table :deep(.el-table__cell){padding:10px 0}.datetime-cell{display:inline-flex;flex-direction:column;line-height:1.35;white-space:nowrap}.datetime-cell span:last-child{color:#606266}.integrity-summary h3{margin:0 0 8px;color:#172554}.integrity-meta{display:flex;flex-wrap:wrap;gap:8px 24px;margin-bottom:16px;color:#64748b}.integrity-rules{margin:16px 0;padding-left:22px;color:#334155;line-height:1.8}.integrity-check{height:auto;font-weight:600}.exam-security-bar{position:sticky;top:-16px;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px;margin-bottom:12px;background:#f8fafc;border:1px solid #dbeafe;border-radius:6px;box-shadow:0 3px 10px rgb(15 23 42 / 8%);color:#475569}.exam-security-bar strong{color:#dc2626}.exam-security-bar small{color:#d97706}.exam-countdown{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}.exam-countdown strong{color:#176b58;font-size:20px}.exam-countdown.danger strong{color:#dc2626}.deadline-alert{margin-bottom:12px}.exam-question{padding:8px 0 16px;border-bottom:1px solid #ebeef5}.submit-hint{margin-right:12px;color:#64748b}.anti-cheat-title{color:#b91c1c;font-size:20px;font-weight:700}.anti-cheat-content{text-align:center;color:#b91c1c;font-size:17px;font-weight:600;line-height:1.8}.anti-cheat-content p{margin:8px 0}.anti-cheat-content strong{font-size:24px}.anti-cheat-icon{display:flex;align-items:center;justify-content:center;width:56px;height:56px;margin:0 auto 14px;border:3px solid #dc2626;border-radius:50%;font-size:36px;font-weight:800}:global(.anti-cheat-dialog){border:3px solid #dc2626;border-radius:10px}:global(.anti-cheat-dialog .el-dialog__header){border-bottom:1px solid #fecaca}:global(.anti-cheat-dialog .el-dialog__footer){text-align:center;border-top:1px solid #fecaca}@media(max-width:700px){.integrity-meta,.exam-security-bar{align-items:flex-start;flex-direction:column}.exam-countdown{margin-left:0}}
+.page-head p{margin:6px 0 0}.exam-overview-card :deep(.el-card__body){padding-top:8px}.exam-tabs :deep(.el-tabs__header){margin-bottom:18px}.exam-tabs :deep(.el-tabs__item>span){display:flex;align-items:center;gap:8px}.plan-table :deep(.el-table__cell),.result-table :deep(.el-table__cell){padding:10px 0}.result-notice{margin-bottom:14px}.result-score{color:#1769aa;font-size:18px}.datetime-cell{display:inline-flex;flex-direction:column;line-height:1.35;white-space:nowrap}.datetime-cell span:last-child{color:#606266}.integrity-summary h3{margin:0 0 8px;color:#172554}.integrity-meta{display:flex;flex-wrap:wrap;gap:8px 24px;margin-bottom:16px;color:#64748b}.integrity-rules{margin:16px 0;padding-left:22px;color:#334155;line-height:1.8}.integrity-check{height:auto;font-weight:600}.exam-security-bar{position:sticky;top:-16px;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px;margin-bottom:12px;background:#f8fafc;border:1px solid #dbeafe;border-radius:6px;box-shadow:0 3px 10px rgb(15 23 42 / 8%);color:#475569}.exam-security-bar strong{color:#dc2626}.exam-security-bar small{color:#d97706}.exam-countdown{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}.exam-countdown strong{color:#176b58;font-size:20px}.exam-countdown.danger strong{color:#dc2626}.deadline-alert{margin-bottom:12px}.exam-question{padding:8px 0 16px;border-bottom:1px solid #ebeef5}.submit-hint{margin-right:12px;color:#64748b}.anti-cheat-title{color:#b91c1c;font-size:20px;font-weight:700}.anti-cheat-content{text-align:center;color:#b91c1c;font-size:17px;font-weight:600;line-height:1.8}.anti-cheat-content p{margin:8px 0}.anti-cheat-content strong{font-size:24px}.anti-cheat-icon{display:flex;align-items:center;justify-content:center;width:56px;height:56px;margin:0 auto 14px;border:3px solid #dc2626;border-radius:50%;font-size:36px;font-weight:800}:global(.anti-cheat-dialog){border:3px solid #dc2626;border-radius:10px}:global(.anti-cheat-dialog .el-dialog__header){border-bottom:1px solid #fecaca}:global(.anti-cheat-dialog .el-dialog__footer){text-align:center;border-top:1px solid #fecaca}@media(max-width:700px){.integrity-meta,.exam-security-bar{align-items:flex-start;flex-direction:column}.exam-countdown{margin-left:0}}
 </style>
