@@ -5,8 +5,8 @@
 ## 当前基线
 
 - 最后核对日期：2026-08-17
-- GitHub：截至 CDN 数据盘发布流程 PR #18 均已合并；远端 `main` 当前提交为 `dde9add3389e3170dfebc04a7f2c2c9c83c40ab4`。
-- 云服务器：已部署 `main@c612f187` 对应的 IP 版生产 JAR，SHA-256 为 `f00929940a455a002f420b4173c6e96a42818d3ccf562454ae6e9ddefbf3f090`。
+- GitHub：ICP备案页脚 PR #19 已合并；远端 `main` 当前提交为 `d0fde6c2e53c9a5d6bf35d455d390bfc9ec27daf`。
+- 云服务器：已部署 `main@d0fde6c2` 对应的 IP 版生产 JAR，SHA-256 为 `2a181f6996a415dbf9d3aecef6067e0c59dc4c16c54fdbe23bfd5c4303c6f895`。
 - 线上验收：应用健康状态为 `UP`，Flyway V28 成功；MySQL、应用和 Nginx 容器均正常。此前公开 OSS、私有课件直传/水印预览/禁止原件下载、私有附件签名下载及删除清理验收继续有效。
 - 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、HTTPS 和每日本地备份已经投入使用；ICP备案已完成，正式 DNS 和 CDN 尚未完成。
 
@@ -71,10 +71,10 @@ flyway_schema_history 当前版本
 | --- | --- | --- | --- | --- | --- |
 | [x] | ICP-001 | Done | 备案系统提交管局 | 外部等待条件已经解除 | 2026-08-17 备案控制台显示管局审核通过 |
 | [x] | ICP-002 | Done | 完成管局审核和短信核验 | 外部等待条件已经解除 | 已取得主体备案号 `湘ICP备2026035229号`，网站备案号 `湘ICP备2026035229号-1`，域名为 `yryhx.cn` |
-| [ ] | ICP-003 | In Progress | 在全站底部展示 ICP 备案号并链接工信部备案系统 | 合规页脚代码正在开发、测试和部署 | 登录页及登录后所有页面底部显示 `湘ICP备2026035229号-1`，点击后在新窗口打开 `https://beian.miit.gov.cn/` |
+| [x] | ICP-003 | Done | 在全站底部展示 ICP 备案号并链接工信部备案系统 | 外部条件与部署均已完成 | PR #19 已合并并部署 `main@d0fde6c2`；2026-08-17 生产浏览器验收确认登录页及登录后全局布局显示 `湘ICP备2026035229号-1`，链接为 `https://beian.miit.gov.cn/`，新窗口与安全属性正确 |
 | [ ] | CDN-001 | In Progress | 创建并配置 `static.yryhx.cn` CDN 域名 | 备案已完成；当前 CDN 控制台仍为 0 个域名 | OSS 私有回源鉴权、HTTPS 证书、TLS 1.2/1.3、缓存规则配置完成 |
 | [ ] | DNS-001 | Ready | 添加根域名、`www` 和 `static` 正式 DNS 记录 | 备案条件已满足；`static` 仍需 CDN 分配真实 CNAME | `@` 的 A 记录指向 `139.224.51.21`，`www` 的 CNAME 指向 `yryhx.cn`，`static` 指向 CDN 实际 CNAME；TTL 初始 600 秒，公共 DNS、HTTPS 和跳转实测通过 |
-| [ ] | CDN-002 | In Progress | 从最新 `main` 重建并激活 CDN 专用候选 | 已基于 `main@dde9add3` 生成候选 `/data/talent-platform/releases/staging/cdn-dde9add3-20260817-152422` 并同步 71 个静态对象；备案页脚合并后仍需基于新的 `main` 再构建一次，避免激活旧前端 | 从最新 `main` 执行 CDN 构建及静态资源同步；`activate-cdn-release.sh` 通过，静态资源 200、MIME 正确并命中缓存 |
+| [ ] | CDN-002 | In Progress | 从最新 `main` 重建并激活 CDN 专用候选 | 已基于 `main@d0fde6c2` 生成候选 `/data/talent-platform/releases/staging/cdn-d0fde6c2-20260817-154555`，73 个静态对象已同步 OSS；仍需 CDN 域名、证书和 DNS 就绪后激活 | 候选 JAR SHA-256 `bba246fc633a74829cd049645e876be1960ce1fb422304d65b6d51275edfcc3f`；`activate-cdn-release.sh` 通过，静态资源 200、MIME 正确并命中缓存 |
 | [ ] | GO-LIVE-001 | Blocked | 完成正式域名全链路验收并观察 24 小时 | 依赖 DNS/CDN 正式切换 | HTTPS、API、登录、考试、课件、附件、OSS 权限和 CDN 缓存持续正常，之后再提高 TTL |
 | [ ] | MPS-001 | Blocked | 完成公安联网备案并在网站底部展示公安备案号 | 需先完成正式域名上线，并等待项目负责人提供公安机关审核通过的备案号 | 将真实公安备案号及 `https://beian.mps.gov.cn/` 链接加入同一合规页脚，更新本文档并验证公开页面可见；不得提前展示占位备案号 |
 
