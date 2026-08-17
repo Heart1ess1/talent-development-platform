@@ -5,6 +5,7 @@ import {ArrowDown,Lock,SwitchButton} from '@element-plus/icons-vue'
 import {useAuthStore} from '@/stores/auth'
 import {avatarUrl,nameInitial} from '@/utils/avatar'
 import {roleLabel as formatRoleLabel} from '@/utils/role'
+import ComplianceFooter from '@/components/ComplianceFooter.vue'
 
 const auth=useAuthStore(),route=useRoute(),router=useRouter()
 const userInitials=computed(()=>{
@@ -155,6 +156,7 @@ function handleUserCommand(command:string){
         </el-dropdown>
       </el-header>
       <el-main><router-view/></el-main>
+      <ComplianceFooter class="app-compliance"/>
       <el-footer class="mobile-nav"><router-link v-for="m in mobileMenus" :key="m.to" :to="m.to!">{{m.label}}</router-link></el-footer>
     </el-container>
   </el-container>
@@ -185,6 +187,7 @@ header{height:64px;padding:0 22px;background:white;border-bottom:1px solid #e5e7
 .account-menu-item strong{color:#344054;font-size:13px;font-weight:500}
 .account-menu-item span{color:#98a2b3;font-size:10px}
 main{padding:0}
+.app-compliance{flex:0 0 auto}
 .mobile-nav{display:none}
 @media(max-width:800px){
   header{padding:0 12px;justify-content:space-between}
@@ -197,5 +200,6 @@ main{padding:0}
   .mobile-nav a{font-size:12px;color:#606266;text-decoration:none}
   .mobile-nav a.router-link-active{color:#1769aa}
   main{padding-bottom:55px}
+  .app-compliance{padding-bottom:68px}
 }
 </style>

@@ -16,9 +16,10 @@
 | 域名 | `yryhx.cn` 使用阿里云 DNS；备案已完成，根域名、`www` 和 `static` 的正式业务记录仍待切换 |
 | 证书 | 三张 DigiCert RSA 2048 DV 证书均已签发；`yryhx.cn` 证书同时覆盖 `www.yryhx.cn` 并已安装到 ECS，有效期至 2026-11-10；`static.yryhx.cn` 证书已签发，待 CDN 域名创建后部署 |
 | 备案 | 管局审核已通过；主体备案号为 `湘ICP备2026035229号`，`yryhx.cn` 的网站备案号为 `湘ICP备2026035229号-1` |
+| 网站合规页脚 | 登录页及登录后所有业务页面统一展示 `湘ICP备2026035229号-1`，并链接工信部备案系统 `https://beian.miit.gov.cn/`；公安备案号待审核完成后再加入，不展示占位号 |
 | CDN/ESA | CDN 已按流量计费方式开通，当前仍为 0 个加速域名；备案阻塞已解除，正在添加 `static.yryhx.cn`，不启用 ESA 等非必要增值服务 |
 
-当前线上运行 IP 版应用代码基线为 PR #17 的 `main` 合并提交 `c612f187907fba3646965e0531ebaed919836499`，JAR SHA-256 为 `f00929940a455a002f420b4173c6e96a42818d3ccf562454ae6e9ddefbf3f090`，Flyway 为 V28。历史 CDN 候选包 `/data/talent-platform/releases/staging/cdn-20260812-2032/` 早于本次上线，已视为过期，不能直接激活；CDN 域名与 HTTPS 就绪后，必须从当时最新 `main` 重新构建并同步静态资源，再执行 `prepare-cdn-release.sh` 和 `activate-cdn-release.sh`。
+当前线上运行 IP 版应用代码基线仍为 PR #17 的 `main` 合并提交 `c612f187907fba3646965e0531ebaed919836499`，JAR SHA-256 为 `f00929940a455a002f420b4173c6e96a42818d3ccf562454ae6e9ddefbf3f090`，Flyway 为 V28。CDN 数据盘发布流程 PR #18 已合并为 `main@dde9add3389e3170dfebc04a7f2c2c9c83c40ab4`，并生成候选 `/data/talent-platform/releases/staging/cdn-dde9add3-20260817-152422`；该候选早于备案页脚改动，不能作为最终激活版本。CDN 域名与 HTTPS 就绪后，必须从当时最新 `main` 重新构建并同步静态资源，再执行 `prepare-cdn-release.sh` 和 `activate-cdn-release.sh`。
 
 ### 2026-08-13 任务优先评分人范围配置部署记录
 
@@ -270,6 +271,8 @@ sudo bash /opt/talent-platform/migrate-local-files.sh
    - `www`：CNAME 指向 `yryhx.cn`。
    - `static`：CNAME 指向 CDN 控制台实际分配的 CNAME；不要手工猜测该值。
 7. 连续验收 24 小时后再调高 TTL。
+
+正式网站首页底部必须居中展示 ICP 备案号并链接工信部备案管理系统。公安联网备案在正式域名上线后继续办理；收到审核通过的真实公安备案号后，将其加入同一页脚并链接 `https://beian.mps.gov.cn/`，同时更新 `pending-tasks.md`，不得使用占位编号。
 
 不要把 `/api/*`、登录响应、HTML、考试、签到、个人水印课件页加入公共缓存规则。
 

@@ -4,6 +4,7 @@ import type {FormInstance,FormRules} from 'element-plus'
 import {ArrowRight,CircleCheck,Connection,DataAnalysis,Lock,User} from '@element-plus/icons-vue'
 import {useRouter} from 'vue-router'
 import {useAuthStore} from '@/stores/auth'
+import ComplianceFooter from '@/components/ComplianceFooter.vue'
 
 const rememberedUsername=localStorage.getItem('rememberedUsername')||''
 const formRef=ref<FormInstance>()
@@ -118,7 +119,7 @@ async function submit(){
           <div class="security-tip"><span><el-icon><Lock/></el-icon></span><p><strong>账号安全提示</strong>首次登录或密码被重置后，系统将引导您设置新密码。</p></div>
         </div>
 
-        <footer class="login-footer">© 2026 人才培养平台 · 内部业务系统</footer>
+        <ComplianceFooter class="login-footer" compact/>
       </section>
     </section>
   </main>
