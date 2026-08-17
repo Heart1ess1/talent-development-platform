@@ -10,16 +10,25 @@
 | --- | --- |
 | ECS | 华东 2（上海），4 核 8 GiB，公网 IP `139.224.51.21`，应用运行中 |
 | 云盘 | 40 GiB 系统盘挂载 `/`；100 GiB ESSD 数据盘已格式化为 ext4 并按 UUID 持久挂载 `/data`，MySQL、上传回退目录、课件预览缓存、备份和发布候选均使用数据盘 |
-| 网络 | 安全组已开放 80、443；ECS Nginx 已安装主站证书并启用 HTTPS，使用 `--resolve` 绕过尚未切换的 DNS 后，外网 TLS 1.3、健康接口和 301 跳转均已验证通过 |
+| 网络 | 安全组已开放 80、443；ECS Nginx 已安装主站证书并启用 HTTPS；正式 DNS 已生效，根域名与 `www` 的外网 TLS、健康接口和 301 跳转均已验证通过 |
 | 文件 | 线上应用已切换为 `STORAGE_TYPE=oss`；长期 AccessKey 留空，ECS 通过 IMDSv2 获取临时凭证 |
 | OSS | 上海 ZRS Bucket `yryhx-talent-private-cn-shanghai` 与 `yryhx-talent-public-cn-shanghai` 已创建且保持私有 ACL；CORS 已允许私有 Bucket 使用 `POST`，`TalentPlatformOssRole` 绑定和最小权限策略已生效；公共图片、私有课件和私有附件真实上传/读取/预览/删除验收通过 |
-| 域名 | `yryhx.cn` 使用阿里云 DNS；备案已完成，根域名、`www` 和 `static` 的正式业务记录仍待切换 |
-| 证书 | 三张 DigiCert RSA 2048 DV 证书均已签发；`yryhx.cn` 证书同时覆盖 `www.yryhx.cn` 并已安装到 ECS，有效期至 2026-11-10；`static.yryhx.cn` 证书已签发，待 CDN 域名创建后部署 |
+| 域名 | `yryhx.cn` 使用阿里云 DNS；`@` A 指向 `139.224.51.21`，`www` CNAME 指向根域名，`static` CNAME 指向 `static.yryhx.cn.w.kunlunaq.com`，三条正式业务记录已生效 |
+| 证书 | 三张 DigiCert RSA 2048 DV 证书均已签发；主站证书已安装到 ECS，`cert-70iod6` 已部署到 CDN 并覆盖 `static.yryhx.cn`；当前证书均有效至 2026-11-10 |
 | 备案 | 管局审核已通过；主体备案号为 `湘ICP备2026035229号`，`yryhx.cn` 的网站备案号为 `湘ICP备2026035229号-1` |
 | 网站合规页脚 | 已随 `main@d0fde6c2` 部署；登录页及登录后所有业务页面统一展示 `湘ICP备2026035229号-1`，并链接工信部备案系统 `https://beian.miit.gov.cn/`；公安备案号待审核完成后再加入，不展示占位号 |
-| CDN/ESA | CDN 已按流量计费方式开通，当前仍为 0 个加速域名；备案阻塞已解除，正在添加 `static.yryhx.cn`，不启用 ESA 等非必要增值服务 |
+| CDN/ESA | `static.yryhx.cn` 已启用中国内地“图片小文件”CDN；源站为私有 ACL 的公共静态资源 OSS Bucket，同账号私有回源、HTTPS、HTTP→HTTPS、TLS 1.2/1.3、Gzip 和一年 immutable 缓存均已验证；不启用 ESA 等非必要增值服务 |
 
-当前线上运行 IP 版应用代码基线为 PR #19 的 `main` 合并提交 `d0fde6c2e53c9a5d6bf35d455d390bfc9ec27daf`，JAR SHA-256 为 `2a181f6996a415dbf9d3aecef6067e0c59dc4c16c54fdbe23bfd5c4303c6f895`，Flyway 为 V28。部署前 JAR 保存在 `/data/talent-platform/releases/history/pre-d0fde6c2-20260817-154341/`，数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260817-154341.sql.gz`。CDN 候选 `/data/talent-platform/releases/staging/cdn-d0fde6c2-20260817-154555` 已从同一 `main` 构建，JAR SHA-256 为 `bba246fc633a74829cd049645e876be1960ce1fb422304d65b6d51275edfcc3f`，并已向公共 OSS 同步 73 个静态对象；待 CDN 域名与 HTTPS 就绪后再执行 `activate-cdn-release.sh`。
+当前线上运行 CDN 版应用代码基线为 PR #19 的 `main` 合并提交 `d0fde6c2e53c9a5d6bf35d455d390bfc9ec27daf`，JAR SHA-256 为 `bba246fc633a74829cd049645e876be1960ce1fb422304d65b6d51275edfcc3f`，Flyway 为 V28。候选 `/data/talent-platform/releases/staging/cdn-d0fde6c2-20260817-154555` 已通过 `activate-cdn-release.sh` 激活，HTML 从 ECS 返回且不缓存，带内容哈希的 `/assets/` 文件从 CDN 返回并缓存一年。固定 CDN 节点连续请求命中 `TCP_MEM_HIT`，TLS 1.0/1.1 握手失败而 TLS 1.2/1.3 成功。部署前 IP 版 JAR 保存在 `/data/talent-platform/releases/history/cdn-activation-*`，更早的部署前 JAR 与数据库备份仍分别保存在 `/data/talent-platform/releases/history/pre-d0fde6c2-20260817-154341/` 和 `/data/talent-platform/backups/mysql/talent-platform-20260817-154341.sql.gz`。
+
+### 2026-08-17 正式域名与 CDN 上线记录
+
+- DNS：阿里公共 DNS 与 1.1.1.1 均确认 `yryhx.cn`、`www.yryhx.cn` 和 `static.yryhx.cn` 生效；HTTP 主站及 CDN 静态域名均以 301 跳转 HTTPS。
+- CDN：同账号私有 OSS 回源已授权，仅从 `yryhx-talent-public-cn-shanghai` 分发公共静态资源；私有课件与附件 Bucket 未接入 CDN。
+- TLS：`static.yryhx.cn` 使用 DigiCert RSA 2048 证书 `cert-70iod6`，有效期至 2026-11-10；仅启用 TLS 1.2/1.3，HSTS 暂未启用以保留回退能力。
+- 缓存：探针 `https://static.yryhx.cn/assets/index-nISaq9DD.js` 返回 200、`text/javascript`、`Cache-Control: public, max-age=31536000, immutable`，固定节点连续命中内存缓存。
+- 应用：正式登录页真实浏览器渲染成功并展示 `湘ICP备2026035229号-1`；健康接口返回 `UP`，未登录受保护接口返回 401。`/favicon.ico` 暂返回 401，已作为非阻塞 UX 待办记录。
+- 观察：从 2026-08-17 16:33 起执行 24 小时观察；ECS 已启用 `talent-platform-go-live-observer.timer`，每 5 分钟由 `go-live-observer.sh` 自动检查正式域名、HTTPS、CDN 静态资源、健康接口、未登录权限边界、容器和数据盘，结果写入 `/data/talent-platform/monitoring/go-live-20260817.tsv`，到 2026-08-18 16:33 后自动停用定时器。2026-08-17 16:39 首轮结果为 `PASS`；观察期内不提高 DNS TTL，登录后的考试、课件和附件流程仍需使用真实账号复核。
 
 ### 2026-08-13 任务优先评分人范围配置部署记录
 

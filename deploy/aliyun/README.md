@@ -22,6 +22,8 @@
 | `sync-public-assets.sh` | 使用 ECS RAM Role 把内容哈希静态资源上传到公共资源 Bucket。 |
 | `prepare-cdn-release.sh` | 在 `/data` 已挂载时同步内容哈希静态资源到 OSS，在数据盘生成带 JAR/资源哈希与发布元数据的候选，并原子更新 `staging/cdn-ready`。 |
 | `activate-cdn-release.sh` | CDN 域名和 HTTPS 可访问后校验数据盘中 `staging/cdn-ready` 指向的候选资源、把当前版本备份到数据盘发布历史、启用 CDN 专用 JAR；也可显式传入候选目录，失败自动回滚。 |
+| `go-live-observer.sh` | 正式域名切换后的24小时观察探针；检查主站/CDN跳转、静态资源、健康接口、未登录边界、容器与数据盘，并把结果写入数据盘。 |
+| `talent-platform-go-live-observer.service/.timer` | 每5分钟运行一次上线观察探针；到达配置的截止时间后由探针自动停用定时器。 |
 | `migrate-local-files.sh` | 把历史文件卷复制到私有 Bucket，并把头像复制到公共 Bucket；不删除源文件。 |
 | `ram-policy.json` | ECS RAM Role 的最小 OSS 对象读写权限模板；Bucket 名变更时必须同步修改。 |
 | `oss-private-cors.json` | 浏览器直传和签名读取所需的私有 Bucket CORS 模板。 |

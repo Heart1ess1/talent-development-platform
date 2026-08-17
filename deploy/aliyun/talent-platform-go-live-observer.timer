@@ -1,0 +1,11 @@
+[Unit]
+Description=Run talent platform go-live observation every five minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+AccuracySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

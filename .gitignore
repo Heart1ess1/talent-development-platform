@@ -18,6 +18,7 @@ outputs/
 *.log
 .tmp/
 .codex-tmp/
+.playwright-cli/
 *.xlsx.inspect.ndjson
 docs/ecs-purchase-cost-report.md
 docs/新员工培养管理平台-资源费用申请说明.docx
