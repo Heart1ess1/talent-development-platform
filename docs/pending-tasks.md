@@ -5,10 +5,10 @@
 ## 当前基线
 
 - 最后核对日期：2026-08-17
-- GitHub：ICP备案页脚 PR #19 已合并；远端 `main` 当前提交为 `d0fde6c2e53c9a5d6bf35d455d390bfc9ec27daf`。
-- 云服务器：已部署 `main@d0fde6c2` 对应的 IP 版生产 JAR，SHA-256 为 `2a181f6996a415dbf9d3aecef6067e0c59dc4c16c54fdbe23bfd5c4303c6f895`。
-- 线上验收：应用健康状态为 `UP`，Flyway V28 成功；MySQL、应用和 Nginx 容器均正常。此前公开 OSS、私有课件直传/水印预览/禁止原件下载、私有附件签名下载及删除清理验收继续有效。
-- 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、HTTPS 和每日本地备份已经投入使用；ICP备案已完成，正式 DNS 和 CDN 尚未完成。
+- GitHub：ICP备案页脚 PR #19 与上线证据 PR #20 已合并；远端 `main` 当前提交为 `bb118af2cf384eae6999941fa59ee9bd137955c1`。
+- 云服务器：已激活 `main@d0fde6c2` 的 CDN 专用生产 JAR，SHA-256 为 `bba246fc633a74829cd049645e876be1960ce1fb422304d65b6d51275edfcc3f`。
+- 线上验收：应用健康状态为 `UP`，Flyway V28 成功；MySQL、应用和 Nginx 容器均正常。正式登录页真实浏览器渲染成功，未登录受保护接口返回 401；此前私有课件直传/水印预览/禁止原件下载、私有附件签名下载及删除清理验收继续有效。
+- 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、主站及 CDN HTTPS、正式 DNS 和每日本地备份均已投入使用；`static.yryhx.cn` 已通过 CDN 同账号私有 OSS 回源提供公共静态资源。
 
 “代码已合并”不等于“云端已上线”。只有部署任务取得服务器端版本、健康检查、迁移记录和业务冒烟证据后，才能将状态改为 `Done`。
 
@@ -72,11 +72,11 @@ flyway_schema_history 当前版本
 | [x] | ICP-001 | Done | 备案系统提交管局 | 外部等待条件已经解除 | 2026-08-17 备案控制台显示管局审核通过 |
 | [x] | ICP-002 | Done | 完成管局审核和短信核验 | 外部等待条件已经解除 | 已取得主体备案号 `湘ICP备2026035229号`，网站备案号 `湘ICP备2026035229号-1`，域名为 `yryhx.cn` |
 | [x] | ICP-003 | Done | 在全站底部展示 ICP 备案号并链接工信部备案系统 | 外部条件与部署均已完成 | PR #19 已合并并部署 `main@d0fde6c2`；2026-08-17 生产浏览器验收确认登录页及登录后全局布局显示 `湘ICP备2026035229号-1`，链接为 `https://beian.miit.gov.cn/`，新窗口与安全属性正确 |
-| [ ] | CDN-001 | In Progress | 创建并配置 `static.yryhx.cn` CDN 域名 | 备案已完成；当前 CDN 控制台仍为 0 个域名 | OSS 私有回源鉴权、HTTPS 证书、TLS 1.2/1.3、缓存规则配置完成 |
-| [ ] | DNS-001 | Ready | 添加根域名、`www` 和 `static` 正式 DNS 记录 | 备案条件已满足；`static` 仍需 CDN 分配真实 CNAME | `@` 的 A 记录指向 `139.224.51.21`，`www` 的 CNAME 指向 `yryhx.cn`，`static` 指向 CDN 实际 CNAME；TTL 初始 600 秒，公共 DNS、HTTPS 和跳转实测通过 |
-| [ ] | CDN-002 | In Progress | 从最新 `main` 重建并激活 CDN 专用候选 | 已基于 `main@d0fde6c2` 生成候选 `/data/talent-platform/releases/staging/cdn-d0fde6c2-20260817-154555`，73 个静态对象已同步 OSS；仍需 CDN 域名、证书和 DNS 就绪后激活 | 候选 JAR SHA-256 `bba246fc633a74829cd049645e876be1960ce1fb422304d65b6d51275edfcc3f`；`activate-cdn-release.sh` 通过，静态资源 200、MIME 正确并命中缓存 |
-| [ ] | GO-LIVE-001 | Blocked | 完成正式域名全链路验收并观察 24 小时 | 依赖 DNS/CDN 正式切换 | HTTPS、API、登录、考试、课件、附件、OSS 权限和 CDN 缓存持续正常，之后再提高 TTL |
-| [ ] | MPS-001 | Blocked | 完成公安联网备案并在网站底部展示公安备案号 | 需先完成正式域名上线，并等待项目负责人提供公安机关审核通过的备案号 | 将真实公安备案号及 `https://beian.mps.gov.cn/` 链接加入同一合规页脚，更新本文档并验证公开页面可见；不得提前展示占位备案号 |
+| [x] | CDN-001 | Done | 创建并配置 `static.yryhx.cn` CDN 域名 | 外部条件与配置均已完成 | 同账号 OSS 私有 Bucket 回源、`cert-70iod6` HTTPS 证书、HTTP→HTTPS 301、TLS 1.2/1.3、Gzip 与 `/assets/` 一年缓存均已启用；TLS 1.0/1.1 已关闭 |
+| [x] | DNS-001 | Done | 添加根域名、`www` 和 `static` 正式 DNS 记录 | 外部条件与配置均已完成 | `@` A=`139.224.51.21`，`www` CNAME=`yryhx.cn`，`static` CNAME=`static.yryhx.cn.w.kunlunaq.com`；阿里公共 DNS 与 1.1.1.1 均解析成功，HTTP/HTTPS 跳转实测通过 |
+| [x] | CDN-002 | Done | 从最新业务代码构建并激活 CDN 专用候选 | CDN、证书、DNS 与私有回源均已就绪 | 已激活 `/data/talent-platform/releases/staging/cdn-d0fde6c2-20260817-154555`；JAR SHA-256 `bba246fc633a74829cd049645e876be1960ce1fb422304d65b6d51275edfcc3f`，静态 JS 返回 200、`text/javascript`、一年 immutable，固定节点连续命中 `TCP_MEM_HIT` |
+| [ ] | GO-LIVE-001 | In Progress | 完成正式域名全链路验收并观察 24 小时 | ECS 已启用 `talent-platform-go-live-observer.timer`，每 5 分钟自动执行，日志为 `/data/talent-platform/monitoring/go-live-20260817.tsv`，截止 2026-08-18 16:33 后自动停用；2026-08-17 16:39 首轮为 `PASS`。登录后的考试、课件和附件流程仍需使用真实账号复核 | 观察日志无 `FAIL` 且包含截止时间后的 `COMPLETE`；HTTPS、API、登录、考试、课件、附件、OSS 权限和 CDN 缓存持续正常，之后再评估提高 TTL |
+| [ ] | MPS-001 | Blocked | 完成公安联网备案并在网站底部展示公安备案号 | 正式域名已上线；等待项目负责人完成公安备案并提供公安机关审核通过的真实备案号 | 将真实公安备案号及 `https://beian.mps.gov.cn/` 链接加入同一合规页脚，更新本文档并验证公开页面可见；不得提前展示占位备案号 |
 
 ## 运行安全与可靠性
 
@@ -96,6 +96,7 @@ flyway_schema_history 当前版本
 | [ ] | QA-002 | P2 | Backlog | 核心流程 E2E 自动化 | 覆盖登录、人员、课程、任务、考试、评价和课件安全预览 |
 | [ ] | PERF-001 | P2 | Backlog | 前端大分块优化 | 降低首次加载体积，构建不再出现当前大分块警告，并记录加载指标 |
 | [ ] | UX-001 | P3 | Backlog | 页面文案与错误提示一致性整理 | 同类操作、按钮、状态和错误提示使用一致、可理解的中文文案 |
+| [ ] | UX-002 | P3 | Backlog | 增加正式站点 favicon 并放行公开访问 | 真实浏览器不再因 `/favicon.ico` 返回 401 产生控制台错误，图标可由主站正常缓存加载 |
 
 ## 维护规则
 

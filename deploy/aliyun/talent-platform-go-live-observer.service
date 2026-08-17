@@ -1,0 +1,8 @@
+[Unit]
+Description=Talent platform 24-hour go-live observation
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/talent-platform/go-live-observer.sh
