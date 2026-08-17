@@ -4,7 +4,7 @@
 
 ## 1. 当前状态与上线门槛
 
-截至 2026-08-13 的实机检查结果：
+截至 2026-08-17 的实机检查结果：
 
 | 项目 | 当前证据 |
 | --- | --- |
@@ -13,12 +13,12 @@
 | 网络 | 安全组已开放 80、443；ECS Nginx 已安装主站证书并启用 HTTPS，使用 `--resolve` 绕过尚未切换的 DNS 后，外网 TLS 1.3、健康接口和 301 跳转均已验证通过 |
 | 文件 | 线上应用已切换为 `STORAGE_TYPE=oss`；长期 AccessKey 留空，ECS 通过 IMDSv2 获取临时凭证 |
 | OSS | 上海 ZRS Bucket `yryhx-talent-private-cn-shanghai` 与 `yryhx-talent-public-cn-shanghai` 已创建且保持私有 ACL；CORS 已允许私有 Bucket 使用 `POST`，`TalentPlatformOssRole` 绑定和最小权限策略已生效；公共图片、私有课件和私有附件真实上传/读取/预览/删除验收通过 |
-| 域名 | `yryhx.cn` 使用阿里云 DNS，但根域名和 `www` 均没有 A/CNAME 记录 |
+| 域名 | `yryhx.cn` 使用阿里云 DNS；备案已完成，根域名、`www` 和 `static` 的正式业务记录仍待切换 |
 | 证书 | 三张 DigiCert RSA 2048 DV 证书均已签发；`yryhx.cn` 证书同时覆盖 `www.yryhx.cn` 并已安装到 ECS，有效期至 2026-11-10；`static.yryhx.cn` 证书已签发，待 CDN 域名创建后部署 |
-| 备案 | 备案控制台显示“待提交管局”和“暂无备案号”；域名注册/转入未满两天，等待系统自动提交，在备案号下发前不添加中国内地 CDN 域名、不切换正式业务 DNS |
-| CDN/ESA | CDN 已按流量计费方式开通，当前 0 个加速域名、0 流量；`static.yryhx.cn` 仍需等 ICP 备案号下发后添加 |
+| 备案 | 管局审核已通过；主体备案号为 `湘ICP备2026035229号`，`yryhx.cn` 的网站备案号为 `湘ICP备2026035229号-1` |
+| CDN/ESA | CDN 已按流量计费方式开通，当前仍为 0 个加速域名；备案阻塞已解除，正在添加 `static.yryhx.cn`，不启用 ESA 等非必要增值服务 |
 
-当前线上运行 IP 版应用代码基线为 PR #12 的 `main` 合并提交 `3a611a44c8d1fc79c4a953148d1afbfade4e535f`，JAR SHA-256 为 `7ef1009d48211b5ae386543bfa3399ffe3a3a39de8119f2ae2bbf9f229f15ce5`，Flyway 为 V27。历史 CDN 候选包 `/data/talent-platform/releases/staging/cdn-20260812-2032/` 早于本次上线，已视为过期，不能直接激活；备案、CDN 域名与 HTTPS 就绪后，必须从当时最新 `main` 重新构建并同步静态资源，再执行 `activate-cdn-release.sh`。
+当前线上运行 IP 版应用代码基线为 PR #17 的 `main` 合并提交 `c612f187907fba3646965e0531ebaed919836499`，JAR SHA-256 为 `f00929940a455a002f420b4173c6e96a42818d3ccf562454ae6e9ddefbf3f090`，Flyway 为 V28。历史 CDN 候选包 `/data/talent-platform/releases/staging/cdn-20260812-2032/` 早于本次上线，已视为过期，不能直接激活；CDN 域名与 HTTPS 就绪后，必须从当时最新 `main` 重新构建并同步静态资源，再执行 `prepare-cdn-release.sh` 和 `activate-cdn-release.sh`。
 
 ### 2026-08-13 任务优先评分人范围配置部署记录
 
@@ -203,17 +203,16 @@ powershell -ExecutionPolicy Bypass -File deploy/aliyun/build-production.ps1 `
 
 脚本依次执行冻结依赖安装、前端测试、前端生产构建、后端完整测试与打包，并输出 JAR、`frontend/dist/assets` 和 SHA-256。首次部署或 `deploy/aliyun/Dockerfile` 变更后，需在 ECS 执行 `docker compose build --pull app`，生成包含 LibreOffice Writer/Impress 与 Noto CJK 字体的运行镜像。
 
-将 JAR、静态资源和部署脚本上传到 ECS；在 ECS 已绑定 RAM Role 且安装 `ossutil` 后：
+将 JAR、`frontend/dist/assets/`、候选准备脚本和激活脚本上传到 ECS；在 ECS 执行：
 
 ```bash
-set -a
-source /opt/talent-platform/.env
-set +a
-sudo -E bash /opt/talent-platform/sync-public-assets.sh /tmp/talent-platform-assets
-sudo bash /opt/talent-platform/update-app.sh /tmp/talent-platform.jar
+sudo bash /opt/talent-platform/prepare-cdn-release.sh \
+  /tmp/talent-platform.jar \
+  /tmp/talent-platform-assets \
+  cdn-YYYYMMDD-HHMMSS
 ```
 
-只有静态资源上传成功后才能部署使用 CDN `AssetBase` 构建的 JAR，否则页面会因 JS/CSS 404 无法打开。
+准备脚本要求 `/data` 已真实挂载，使用 ECS RAM Role 上传静态资源，随后在 `/data/talent-platform/releases/staging/` 生成带 JAR、资源哈希和发布元数据的候选，并原子更新 `cdn-ready`；它不会切换运行中的应用。只有静态资源上传成功后才能激活使用 CDN `AssetBase` 构建的 JAR，否则页面会因 JS/CSS 404 无法打开。
 
 CDN 域名、证书和 CNAME 全部生效后，在 ECS 执行：
 
@@ -222,7 +221,7 @@ sudo bash /opt/talent-platform/activate-cdn-release.sh \
   /opt/talent-platform/staging/cdn-ready
 ```
 
-脚本会先验证候选包 SHA-256、CDN 主资源的 MIME 和长期缓存头，再备份 `.env` 与当前 JAR、写入 `CDN_BASE_URL` 并重建应用容器；健康检查失败会自动恢复原版本。
+脚本会先验证数据盘候选包 SHA-256、CDN 主资源的 MIME 和长期缓存头，再把 `.env` 与当前 JAR 备份到 `/data/talent-platform/releases/history/`、写入 `CDN_BASE_URL` 并重建应用容器；健康检查失败会自动恢复原版本。
 
 ## 6. 历史文件迁移与切换
 

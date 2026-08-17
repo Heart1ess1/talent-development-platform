@@ -20,7 +20,8 @@
 | `verify.sh` | 检查容器、健康接口、Flyway 迁移和用户数据；首次改密前可选择验证初始登录。 |
 | `build-production.ps1` | 用 CDN AssetBase 构建前端，执行前后端测试并输出生产 JAR 哈希。 |
 | `sync-public-assets.sh` | 使用 ECS RAM Role 把内容哈希静态资源上传到公共资源 Bucket。 |
-| `activate-cdn-release.sh` | CDN 域名和 HTTPS 可访问后校验 `staging/cdn-ready` 指向的候选资源、备份当前版本、启用 CDN 专用 JAR；也可显式传入候选目录，失败自动回滚。 |
+| `prepare-cdn-release.sh` | 在 `/data` 已挂载时同步内容哈希静态资源到 OSS，在数据盘生成带 JAR/资源哈希与发布元数据的候选，并原子更新 `staging/cdn-ready`。 |
+| `activate-cdn-release.sh` | CDN 域名和 HTTPS 可访问后校验数据盘中 `staging/cdn-ready` 指向的候选资源、把当前版本备份到数据盘发布历史、启用 CDN 专用 JAR；也可显式传入候选目录，失败自动回滚。 |
 | `migrate-local-files.sh` | 把历史文件卷复制到私有 Bucket，并把头像复制到公共 Bucket；不删除源文件。 |
 | `ram-policy.json` | ECS RAM Role 的最小 OSS 对象读写权限模板；Bucket 名变更时必须同步修改。 |
 | `oss-private-cors.json` | 浏览器直传和签名读取所需的私有 Bucket CORS 模板。 |

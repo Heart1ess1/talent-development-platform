@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 APP_DIR="${APP_DIR:-/opt/talent-platform}"
+RELEASE_ROOT="${RELEASE_ROOT:-/data/talent-platform/releases}"
 CANDIDATE_DIR="${1:-$APP_DIR/staging/cdn-ready}"
 EXPECTED_CDN="https://static.yryhx.cn"
 
@@ -9,16 +10,30 @@ if [[ "$(id -u)" -ne 0 ]]; then
   echo "请使用 sudo bash activate-cdn-release.sh [候选包目录] 执行"
   exit 1
 fi
+if ! mountpoint -q /data; then
+  echo "数据盘 /data 未挂载，拒绝从系统盘激活发布候选"
+  exit 1
+fi
+if [[ ! -d "$CANDIDATE_DIR" ]]; then
+  echo "候选目录不存在：$CANDIDATE_DIR"
+  exit 1
+fi
 
 resolved_app="$(readlink -f "$APP_DIR")"
+resolved_release_root="$(readlink -f "$RELEASE_ROOT")"
+resolved_staging="$(readlink -f "$RELEASE_ROOT/staging")"
 resolved_candidate="$(readlink -f "$CANDIDATE_DIR")"
 case "$resolved_app" in
   /opt/talent-platform) ;;
   *) echo "拒绝操作未核准应用目录：$resolved_app"; exit 1 ;;
 esac
+case "$resolved_release_root" in
+  /data/talent-platform/releases) ;;
+  *) echo "拒绝操作未核准发布目录：$resolved_release_root"; exit 1 ;;
+esac
 case "$resolved_candidate" in
-  "$resolved_app"/staging/*) ;;
-  *) echo "拒绝使用应用暂存目录之外的候选包：$resolved_candidate"; exit 1 ;;
+  "$resolved_staging"/*) ;;
+  *) echo "拒绝使用数据盘暂存目录之外的候选包：$resolved_candidate"; exit 1 ;;
 esac
 
 candidate_jar="$resolved_candidate/talent-platform.jar"
@@ -51,7 +66,7 @@ set +a
 : "${OSS_RAM_ROLE:?缺少 OSS_RAM_ROLE}"
 
 stamp="$(date +%Y%m%d%H%M%S)"
-backup_dir="$resolved_app/backups/cdn-activation-$stamp"
+backup_dir="$resolved_release_root/history/cdn-activation-$stamp-$$"
 mkdir -p "$backup_dir"
 cp -p .env "$backup_dir/.env"
 cp -p talent-platform.jar "$backup_dir/talent-platform.jar"
