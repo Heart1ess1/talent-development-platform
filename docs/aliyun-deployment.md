@@ -28,7 +28,7 @@
 - TLS：`static.yryhx.cn` 使用 DigiCert RSA 2048 证书 `cert-70iod6`，有效期至 2026-11-10；仅启用 TLS 1.2/1.3，HSTS 暂未启用以保留回退能力。
 - 缓存：探针 `https://static.yryhx.cn/assets/index-nISaq9DD.js` 返回 200、`text/javascript`、`Cache-Control: public, max-age=31536000, immutable`，固定节点连续命中内存缓存。
 - 应用：正式登录页真实浏览器渲染成功并展示 `湘ICP备2026035229号-1`；健康接口返回 `UP`，未登录受保护接口返回 401。`/favicon.ico` 暂返回 401，已作为非阻塞 UX 待办记录。
-- 观察：从 2026-08-17 16:33 起执行 24 小时观察；ECS 已启用 `talent-platform-go-live-observer.timer`，每 5 分钟由 `go-live-observer.sh` 自动检查正式域名、HTTPS、CDN 静态资源、健康接口、未登录权限边界、容器和数据盘，结果写入 `/data/talent-platform/monitoring/go-live-20260817.tsv`，到 2026-08-18 16:33 后自动停用定时器。2026-08-17 16:39 首轮结果为 `PASS`；观察期内不提高 DNS TTL，登录后的考试、课件和附件流程仍需使用真实账号复核。
+- 观察：2026-08-17 16:39 至 2026-08-18 16:35 的 24 小时观察已完成。`talent-platform-go-live-observer.timer` 每 5 分钟调用 `go-live-observer.sh` 检查正式域名、HTTPS、CDN 静态资源、健康接口、未登录权限边界、容器和数据盘；日志 `/data/talent-platform/monitoring/go-live-20260817.tsv` 共 279 行，其中 278 次 `PASS`、0 次 `FAIL`、0 条 `DETAIL`、1 次 `COMPLETE`，截止后定时器已自动停用。4 个采样窗口出现 `recent_errors=1`，追溯为 3 次被拒绝的异常外部请求（2 次不支持的 POST、1 次非法 Host），没有应用内部异常或可用性中断；临时公网 IP/未知 Host 默认入口加固已记录为 `SEC-002`。2026-08-18 19:21 再次复核应用为 `UP`、MySQL 为 `healthy`、CDN 为 `TCP_HIT`、数据盘使用率 2%。登录后的考试、课件和附件流程仍需使用真实账号在正式域名下复核，完成前暂不提高 DNS TTL。
 
 ### 2026-08-13 任务优先评分人范围配置部署记录
 

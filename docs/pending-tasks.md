@@ -4,10 +4,10 @@
 
 ## 当前基线
 
-- 最后核对日期：2026-08-17
-- GitHub：ICP备案页脚 PR #19 与上线证据 PR #20 已合并；远端 `main` 当前提交为 `bb118af2cf384eae6999941fa59ee9bd137955c1`。
+- 最后核对日期：2026-08-18
+- GitHub：ICP备案页脚 PR #19、上线证据 PR #20 与观察任务 PR #21 已合并；远端 `main` 当前提交为 `7c098b1683f9b9c8e9fa3703f5e72d07f7d778e3`。
 - 云服务器：已激活 `main@d0fde6c2` 的 CDN 专用生产 JAR，SHA-256 为 `bba246fc633a74829cd049645e876be1960ce1fb422304d65b6d51275edfcc3f`。
-- 线上验收：应用健康状态为 `UP`，Flyway V28 成功；MySQL、应用和 Nginx 容器均正常。正式登录页真实浏览器渲染成功，未登录受保护接口返回 401；此前私有课件直传/水印预览/禁止原件下载、私有附件签名下载及删除清理验收继续有效。
+- 线上验收：应用健康状态为 `UP`，Flyway V28 成功；MySQL、应用和 Nginx 容器均正常。正式登录页真实浏览器渲染成功，未登录受保护接口返回 401；2026-08-17 16:39 至 2026-08-18 16:35 的自动观察共产生 278 次 `PASS`、0 次 `FAIL`，并已写入 `COMPLETE` 后自动停用定时器。4 个采样窗口记录到 `recent_errors=1`，追溯为 3 次被应用拒绝的异常外部请求（2 次不支持的 POST、1 次非法 Host），未造成健康或业务中断；已据此新增未知 Host 入口加固任务。此前私有课件直传/水印预览/禁止原件下载、私有附件签名下载及删除清理验收继续有效。
 - 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、主站及 CDN HTTPS、正式 DNS 和每日本地备份均已投入使用；`static.yryhx.cn` 已通过 CDN 同账号私有 OSS 回源提供公共静态资源。
 
 “代码已合并”不等于“云端已上线”。只有部署任务取得服务器端版本、健康检查、迁移记录和业务冒烟证据后，才能将状态改为 `Done`。
@@ -75,7 +75,7 @@ flyway_schema_history 当前版本
 | [x] | CDN-001 | Done | 创建并配置 `static.yryhx.cn` CDN 域名 | 外部条件与配置均已完成 | 同账号 OSS 私有 Bucket 回源、`cert-70iod6` HTTPS 证书、HTTP→HTTPS 301、TLS 1.2/1.3、Gzip 与 `/assets/` 一年缓存均已启用；TLS 1.0/1.1 已关闭 |
 | [x] | DNS-001 | Done | 添加根域名、`www` 和 `static` 正式 DNS 记录 | 外部条件与配置均已完成 | `@` A=`139.224.51.21`，`www` CNAME=`yryhx.cn`，`static` CNAME=`static.yryhx.cn.w.kunlunaq.com`；阿里公共 DNS 与 1.1.1.1 均解析成功，HTTP/HTTPS 跳转实测通过 |
 | [x] | CDN-002 | Done | 从最新业务代码构建并激活 CDN 专用候选 | CDN、证书、DNS 与私有回源均已就绪 | 已激活 `/data/talent-platform/releases/staging/cdn-d0fde6c2-20260817-154555`；JAR SHA-256 `bba246fc633a74829cd049645e876be1960ce1fb422304d65b6d51275edfcc3f`，静态 JS 返回 200、`text/javascript`、一年 immutable，固定节点连续命中 `TCP_MEM_HIT` |
-| [ ] | GO-LIVE-001 | In Progress | 完成正式域名全链路验收并观察 24 小时 | ECS 已启用 `talent-platform-go-live-observer.timer`，每 5 分钟自动执行，日志为 `/data/talent-platform/monitoring/go-live-20260817.tsv`，截止 2026-08-18 16:33 后自动停用；2026-08-17 16:39 首轮为 `PASS`。登录后的考试、课件和附件流程仍需使用真实账号复核 | 观察日志无 `FAIL` 且包含截止时间后的 `COMPLETE`；HTTPS、API、登录、考试、课件、附件、OSS 权限和 CDN 缓存持续正常，之后再评估提高 TTL |
+| [ ] | GO-LIVE-001 | In Progress | 完成正式域名全链路验收并观察 24 小时 | 自动观察已完成：日志 `/data/talent-platform/monitoring/go-live-20260817.tsv` 共 279 行，其中 278 次 `PASS`、0 次 `FAIL`、1 次 `COMPLETE`；定时器已自动停用。2026-08-18 19:21 复核应用 `UP`、MySQL `healthy`、CDN `TCP_HIT`、数据盘使用率 2%。仅剩登录后的考试、课件和附件流程需要使用真实账号在正式域名下复核 | 使用真实员工/管理员账号完成考试、课件和附件冒烟测试且无异常后改为 `Done`；再评估是否提高 DNS TTL |
 | [ ] | MPS-001 | Blocked | 完成公安联网备案并在网站底部展示公安备案号 | 正式域名已上线；等待项目负责人完成公安备案并提供公安机关审核通过的真实备案号 | 将真实公安备案号及 `https://beian.mps.gov.cn/` 链接加入同一合规页脚，更新本文档并验证公开页面可见；不得提前展示占位备案号 |
 
 ## 运行安全与可靠性
@@ -83,6 +83,7 @@ flyway_schema_history 当前版本
 | 完成 | ID | 优先级 | 状态 | 任务 | 完成标准 |
 | --- | --- | --- | --- | --- | --- |
 | [ ] | SEC-001 | P1 | Ready | 重新执行后端完整依赖漏洞扫描 | OWASP Dependency-Check/NVD 或等效扫描成功完成，结果归档；高危漏洞为 0 或已有明确处置 |
+| [ ] | SEC-002 | P1 | Ready | 关闭临时公网 IP 与未知 Host 的反向代理入口 | HTTP 默认虚拟主机不再把未知 Host 转发给应用，HTTPS 未知 SNI/Host 被拒绝；`yryhx.cn` 和 `www.yryhx.cn` 的 HTTPS、301 跳转、健康接口及业务请求回归通过 |
 | [ ] | CI-001 | P1 | Ready | 为 PR 配置 GitHub Actions 门禁 | 后端测试、前端测试/构建、依赖审计和脚本语法检查在 PR 中自动执行 |
 | [ ] | BACKUP-001 | P1 | Ready | 执行一次隔离环境 MySQL 恢复演练 | 从最新 `.sql.gz` 在隔离数据库恢复成功，关键表数量和登录/核心查询通过 |
 | [ ] | BACKUP-002 | P1 | Ready | 建立与数据盘故障域隔离的备份 | 至少启用云盘快照或加密异地备份之一，并验证保留策略和恢复权限 |
