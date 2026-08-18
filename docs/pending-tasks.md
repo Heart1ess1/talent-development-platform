@@ -5,8 +5,8 @@
 ## 当前基线
 
 - 最后核对日期：2026-08-18
-- GitHub：PR #19～#22 已合并；远端 `main` 当前提交为 `0aa92812b8017a0edb802fda8bf1e3fd6bb2006b`。
-- 云服务器：已激活 `main@0aa92812` 的 CDN 专用生产 JAR，SHA-256 为 `42fcec6a06ce08c7d1ad0b77562fb137eec7eeb6de14463ca107bb62b725566f`；部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260818-235353.sql.gz`。
+- GitHub：PR #19～#24 已合并；远端 `main` 当前业务代码提交为 `f6d3799c24c47751fe6aad7c5e4c7dd2c46afc04`。
+- 云服务器：已激活 `main@f6d3799c` 的 CDN 专用生产 JAR，SHA-256 为 `b9c1061414546a5fda90db2b4bde67ce7d0a246516a197915afda2ff9742ab1d`；部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260819-000832.sql.gz`。
 - 线上验收：应用健康状态为 `UP`，Flyway V29/V30 成功；MySQL、应用和 Nginx 容器均正常，班级和备注字段已落库，CDN 新资源返回 200 与一年 immutable 缓存，未登录字典管理接口返回 401，部署后日志无 `ERROR` 或 `Exception`。2026-08-17 16:39 至 2026-08-18 16:35 的自动观察共产生 278 次 `PASS`、0 次 `FAIL`，并已写入 `COMPLETE` 后自动停用定时器。此前私有课件直传/水印预览/禁止原件下载、私有附件签名下载及删除清理验收继续有效。
 - 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、主站及 CDN HTTPS、正式 DNS 和每日本地备份均已投入使用；`static.yryhx.cn` 已通过 CDN 同账号私有 OSS 回源提供公共静态资源。
 
