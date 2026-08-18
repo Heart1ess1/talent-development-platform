@@ -4,7 +4,7 @@
 
 ## 1. 当前状态与上线门槛
 
-截至 2026-08-17 的实机检查结果：
+截至 2026-08-18 的实机检查结果：
 
 | 项目 | 当前证据 |
 | --- | --- |
@@ -19,7 +19,16 @@
 | 网站合规页脚 | 已随 `main@d0fde6c2` 部署；登录页及登录后所有业务页面统一展示 `湘ICP备2026035229号-1`，并链接工信部备案系统 `https://beian.miit.gov.cn/`；公安备案号待审核完成后再加入，不展示占位号 |
 | CDN/ESA | `static.yryhx.cn` 已启用中国内地“图片小文件”CDN；源站为私有 ACL 的公共静态资源 OSS Bucket，同账号私有回源、HTTPS、HTTP→HTTPS、TLS 1.2/1.3、Gzip 和一年 immutable 缓存均已验证；不启用 ESA 等非必要增值服务 |
 
-当前线上运行 CDN 版应用代码基线为 PR #19 的 `main` 合并提交 `d0fde6c2e53c9a5d6bf35d455d390bfc9ec27daf`，JAR SHA-256 为 `bba246fc633a74829cd049645e876be1960ce1fb422304d65b6d51275edfcc3f`，Flyway 为 V28。候选 `/data/talent-platform/releases/staging/cdn-d0fde6c2-20260817-154555` 已通过 `activate-cdn-release.sh` 激活，HTML 从 ECS 返回且不缓存，带内容哈希的 `/assets/` 文件从 CDN 返回并缓存一年。固定 CDN 节点连续请求命中 `TCP_MEM_HIT`，TLS 1.0/1.1 握手失败而 TLS 1.2/1.3 成功。部署前 IP 版 JAR 保存在 `/data/talent-platform/releases/history/cdn-activation-*`，更早的部署前 JAR 与数据库备份仍分别保存在 `/data/talent-platform/releases/history/pre-d0fde6c2-20260817-154341/` 和 `/data/talent-platform/backups/mysql/talent-platform-20260817-154341.sql.gz`。
+当前线上运行 CDN 版应用代码基线为 PR #22 的 `main` 合并提交 `0aa92812b8017a0edb802fda8bf1e3fd6bb2006b`，JAR SHA-256 为 `42fcec6a06ce08c7d1ad0b77562fb137eec7eeb6de14463ca107bb62b725566f`，Flyway 为 V30。候选 `/data/talent-platform/releases/staging/cdn-0aa92812-20260818-2352` 已通过 `activate-cdn-release.sh` 激活，HTML 从 ECS 返回且不缓存，带内容哈希的 `/assets/` 文件从 CDN 返回并缓存一年。本次部署前 JAR 和环境备份位于 `/data/talent-platform/releases/history/cdn-activation-20260818235414-1050477/`，数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260818-235353.sql.gz`。
+
+### 2026-08-18 字典值、员工班级与备注功能部署记录
+
+- GitHub：PR #22 已合并，部署 `main` 合并提交 `0aa92812b8017a0edb802fda8bf1e3fd6bb2006b`。
+- 构建校验：前端 22 项测试、类型检查和 CDN 生产构建通过；后端 107 项测试通过。生产 JAR SHA-256 为 `42fcec6a06ce08c7d1ad0b77562fb137eec7eeb6de14463ca107bb62b725566f`。
+- 数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20260818-235353.sql.gz`，SHA-256 `9d45d1932b1bb579626efbc288819009308bc990eaedd2cb4027f6782af73a06`。
+- 发布材料：75 个静态资源已同步到公共资源 OSS；候选目录为 `/data/talent-platform/releases/staging/cdn-0aa92812-20260818-2352`，激活前回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260818235414-1050477/`。
+- 数据库迁移：Flyway V29 `dictionary value management` 与 V30 `employee class and notes` 均成功；`employee.class_id` 为 `BIGINT`，`employee.notes` 为 `TEXT`。生产库不预置业务班级，由管理员通过字典值管理或人员台账“新增班级”录入真实班级。
+- 生产校验：应用健康状态为 `UP`，MySQL 为 `healthy`，数据盘已挂载且使用率 2%，部署后 10 分钟日志中无 `ERROR` 或 `Exception`。公网健康接口返回 200；CDN 探针 `https://static.yryhx.cn/assets/index-SeFFVyH1.js` 返回 200、`text/javascript` 和一年 immutable 缓存；未登录字典管理接口返回 401。
 
 ### 2026-08-17 正式域名与 CDN 上线记录
 
