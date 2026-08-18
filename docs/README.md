@@ -14,6 +14,7 @@
 | [codebase-guide.md](codebase-guide.md) | 梳理系统架构、核心业务链路，并说明每个源码、配置、迁移和测试文件的职责。 | 新加入或接手项目的开发者、维护者 |
 | [aliyun-deployment.md](aliyun-deployment.md) | 记录 ECS、私有 OSS 签名传输、公共 OSS＋CDN、`yryhx.cn`、迁移回退和费用边界。 | 项目维护者、部署运维人员 |
 | [business-flow-acceptance-2026-08-13.md](business-flow-acceptance-2026-08-13.md) | 记录全系统业务流程验收结果、问题分级、发布判定和优化实施顺序。 | 产品负责人、项目维护者、开发者、测试人员 |
+| [completed-work-summary-since-2026-07-29.md](completed-work-summary-since-2026-07-29.md) | 汇总指定范围内已经实现、合并、部署或验收完成的项目成果。 | 项目负责人、项目维护者、交接人员 |
 
 ## 维护规则
 
