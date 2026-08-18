@@ -21,7 +21,11 @@ import {ElMessage,ElMessageBox} from 'element-plus'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import {avatarUrl,nameInitial} from '@/utils/avatar'
-import {loadEnabledBusinessUnits} from '@/utils/masterData'
+import {
+  loadDictionaryValues,
+  loadEnabledBusinessUnits,
+  type DictionaryOption
+} from '@/utils/masterData'
 
 type DirectoryRow=Record<string,any>
 type StationChange=Record<string,any>
@@ -82,6 +86,9 @@ const batches=ref<any[]>([])
 const businessUnits=ref<any[]>([])
 const stations=ref<any[]>([])
 const mentors=ref<any[]>([])
+const educationOptions=ref<DictionaryOption[]>([])
+const politicalStatusOptions=ref<DictionaryOption[]>([])
+const classOptions=ref<DictionaryOption[]>([])
 
 const isNarrow=ref(false)
 let narrowMedia:MediaQueryList|undefined
@@ -89,6 +96,7 @@ let narrowMedia:MediaQueryList|undefined
 const filters=reactive({
   keyword:'',
   batchId:null as number|null,
+  classId:null as number|null,
   businessUnitId:null as number|null,
   stationId:null as number|null,
   mentorId:null as number|null,
@@ -101,6 +109,7 @@ const emptyEmployeeForm=()=>({
   employeeNo:'',
   name:'',
   batchId:null as number|null,
+  classId:null as number|null,
   businessUnitId:null as number|null,
   stationId:null as number|null,
   mentorUserId:null as number|null,
@@ -118,6 +127,7 @@ const emptyEmployeeForm=()=>({
   hobbies:'',
   speciality:'',
   idCard:'',
+  notes:'',
   status:'ACTIVE'
 })
 const employeeForm=reactive(emptyEmployeeForm())
@@ -128,6 +138,7 @@ const appliedFilterCount=computed(
 const summaryParams=computed(()=>({
   keyword:filters.keyword||undefined,
   batchId:filters.batchId||undefined,
+  classId:filters.classId||undefined,
   businessUnitId:filters.businessUnitId||undefined,
   stationId:filters.stationId||undefined,
   mentorId:filters.mentorId||undefined,
@@ -201,16 +212,30 @@ async function load(){
 }
 
 async function loadMasters(){
-  const [batchResponse,unitOptions,stationResponse,mentorResponse]=await Promise.all([
+  const [
+    batchResponse,
+    unitOptions,
+    stationResponse,
+    mentorResponse,
+    educationValues,
+    politicalStatusValues,
+    classValues
+  ]=await Promise.all([
     api.get<any,Envelope<any[]>>('/batches'),
     loadEnabledBusinessUnits(),
     api.get<any,Envelope<any[]>>('/stations'),
-    api.get<any,Envelope<any[]>>('/mentors')
+    api.get<any,Envelope<any[]>>('/mentors'),
+    loadDictionaryValues('EDUCATION'),
+    loadDictionaryValues('POLITICAL_STATUS'),
+    loadDictionaryValues('CLASS')
   ])
   batches.value=batchResponse.data
   businessUnits.value=unitOptions
   stations.value=stationResponse.data.filter(item=>item.enabled)
   mentors.value=mentorResponse.data
+  educationOptions.value=educationValues
+  politicalStatusOptions.value=politicalStatusValues
+  classOptions.value=classValues
 }
 
 async function loadPending(){
@@ -235,6 +260,7 @@ function reset(){
   Object.assign(filters,{
     keyword:'',
     batchId:null,
+    classId:null,
     businessUnitId:null,
     stationId:null,
     mentorId:null,
@@ -260,6 +286,7 @@ function fillEmployeeForm(row:DirectoryRow){
     employeeNo:row.employee_no||'',
     name:row.name||'',
     batchId:row.batch_id??null,
+    classId:row.class_id??null,
     businessUnitId:row.business_unit_id??null,
     stationId:row.station_id??null,
     mentorUserId:row.mentor_user_id??null,
@@ -277,6 +304,7 @@ function fillEmployeeForm(row:DirectoryRow){
     hobbies:row.hobbies||'',
     speciality:row.speciality||'',
     idCard:row.id_card||'',
+    notes:row.notes||'',
     status:row.status||'ACTIVE'
   })
 }
@@ -442,6 +470,27 @@ async function addMaster(type:'batches'|'business-units'|'stations'){
   }
 }
 
+async function addClass(){
+  try{
+    const {value}=await ElMessageBox.prompt('请输入班级名称','新增班级',{
+      inputPattern:/\S/,
+      inputErrorMessage:'班级名称不能为空'
+    })
+    const name=value.trim()
+    await api.post('/dictionaries/CLASS/values',{
+      value:name,
+      label:name,
+      sortOrder:classOptions.value.length*10+10,
+      enabled:true
+    })
+    ElMessage.success('新增班级成功')
+    dataToolsOpen.value=false
+    await loadMasters()
+  }catch(error){
+    if(error!=='cancel')throw error
+  }
+}
+
 function syncNarrow(event:MediaQueryList|MediaQueryListEvent){
   isNarrow.value=event.matches
 }
@@ -496,6 +545,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             <template v-if="canMaster">
               <el-divider/>
               <el-button text :icon="Plus" @click="addMaster('batches')">新增批次</el-button>
+              <el-button text :icon="Plus" @click="addClass">新增班级</el-button>
               <el-button text :icon="Plus" @click="addMaster('business-units')">
                 新增所属板块
               </el-button>
@@ -571,6 +621,9 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
         <el-select v-model="filters.batchId" placeholder="批次" clearable>
           <el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/>
         </el-select>
+        <el-select v-model="filters.classId" placeholder="班级" clearable filterable>
+          <el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/>
+        </el-select>
         <el-select v-model="filters.businessUnitId" placeholder="所属板块" clearable filterable>
           <el-option
             v-for="item in businessUnits"
@@ -617,10 +670,10 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
           </el-select>
           <el-select v-model="filters.education" placeholder="学历" clearable>
             <el-option
-              v-for="item in ['专科','本科','硕士','博士']"
-              :key="item"
-              :label="item"
-              :value="item"
+              v-for="item in educationOptions"
+              :key="item.id"
+              :label="item.label"
+              :value="item.value"
             />
           </el-select>
         </div>
@@ -678,6 +731,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
                   {{statusLabel(row.status)}}
                 </el-tag>
               </span>
+              <span class="employee-class">{{row.class_name||'未分班'}}</span>
             </button>
           </template>
         </el-table-column>
@@ -693,6 +747,9 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
         </el-table-column>
         <el-table-column v-if="!isNarrow" label="批次" width="88">
           <template #default="{row}">{{display(row.batch_name)}}</template>
+        </el-table-column>
+        <el-table-column v-if="!isNarrow" label="班级" min-width="110" show-overflow-tooltip>
+          <template #default="{row}">{{display(row.class_name)}}</template>
         </el-table-column>
         <el-table-column v-if="!isNarrow" label="所属板块" min-width="110">
           <template #default="{row}">{{display(row.business_unit_name)}}</template>
@@ -887,6 +944,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
           <h3>组织与培养关系</h3>
           <dl class="detail-grid">
             <div><dt>批次</dt><dd>{{display(selectedEmployee.batch_name)}}</dd></div>
+            <div><dt>班级</dt><dd>{{display(selectedEmployee.class_name)}}</dd></div>
             <div><dt>所属板块</dt><dd>{{display(selectedEmployee.business_unit_name)}}</dd></div>
             <div>
               <dt>服务站点</dt>
@@ -940,6 +998,10 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             <div><dt>状态</dt><dd>{{statusLabel(selectedEmployee.status)}}</dd></div>
           </dl>
         </section>
+        <section class="detail-section notes-detail-section">
+          <h3>备注</h3>
+          <p class="notes-content">{{selectedEmployee.notes||'暂无备注'}}</p>
+        </section>
       </template>
 
       <el-form v-else label-position="top" class="employee-form">
@@ -958,6 +1020,16 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
                   v-for="item in batches"
                   :key="item.id"
                   :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="班级">
+              <el-select v-model="employeeForm.classId" clearable filterable>
+                <el-option
+                  v-for="item in classOptions"
+                  :key="item.id"
+                  :label="item.label"
                   :value="item.id"
                 />
               </el-select>
@@ -1034,12 +1106,12 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
               <el-input v-model="employeeForm.major"/>
             </el-form-item>
             <el-form-item label="学历">
-              <el-select v-model="employeeForm.education" clearable allow-create filterable>
+              <el-select v-model="employeeForm.education" clearable filterable>
                 <el-option
-                  v-for="item in ['专科','本科','硕士','博士']"
-                  :key="item"
-                  :label="item"
-                  :value="item"
+                  v-for="item in educationOptions"
+                  :key="item.id"
+                  :label="item.label"
+                  :value="item.value"
                 />
               </el-select>
             </el-form-item>
@@ -1066,7 +1138,14 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
               <el-input v-model="employeeForm.nativePlace"/>
             </el-form-item>
             <el-form-item label="政治面貌">
-              <el-input v-model="employeeForm.politicalStatus"/>
+              <el-select v-model="employeeForm.politicalStatus" clearable filterable>
+                <el-option
+                  v-for="item in politicalStatusOptions"
+                  :key="item.id"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
             </el-form-item>
             <el-form-item label="住址（公司）">
               <el-input v-model="employeeForm.residence"/>
@@ -1087,6 +1166,20 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
               <el-input v-model="employeeForm.phone"/>
             </el-form-item>
           </div>
+        </section>
+        <section class="form-section notes-form-section">
+          <h3>备注</h3>
+          <el-form-item label="人员备注">
+            <el-input
+              v-model="employeeForm.notes"
+              type="textarea"
+              :rows="8"
+              maxlength="10000"
+              show-word-limit
+              resize="vertical"
+              placeholder="可记录需要长期保留的人员情况、培养补充说明等"
+            />
+          </el-form-item>
         </section>
       </el-form>
 
@@ -1217,7 +1310,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
 .directory-status-tabs button span{display:inline-grid;min-width:19px;height:19px;margin-left:4px;place-items:center;border-radius:10px;background:#f1f3f6;color:#7b8798;font-size:10px}
 .directory-status-tabs button.active{color:#1976c8;font-weight:700}.directory-status-tabs button.active:after{position:absolute;right:8px;bottom:-1px;left:8px;height:2px;background:#409eff;content:""}
 .filter-surface{padding:14px 18px;border-bottom:1px solid #edf0f4;background:#fff}
-.filter-grid{display:grid;grid-template-columns:minmax(250px,1.6fr) repeat(3,minmax(130px,1fr)) auto;gap:9px;align-items:center}
+.filter-grid{display:grid;grid-template-columns:minmax(250px,1.6fr) repeat(4,minmax(120px,1fr)) auto;gap:9px;align-items:center}
 .filter-actions{display:flex;gap:8px;white-space:nowrap}
 .filter-actions .el-button{margin:0}
 .advanced-filter-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,240px));gap:10px;padding-top:12px;border-top:1px solid #edf0f4;margin-top:12px}
@@ -1237,6 +1330,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
 .employee-number{font-size:12px;color:#8a94a3}
 .employee-number-line{display:flex;align-items:center;gap:6px}
 .employee-number-line .el-tag{height:18px;padding:0 5px}
+.employee-class{font-size:12px;color:#667085}
 .name-button:hover .employee-name{color:#1769aa}
 .station-button{max-width:100%;justify-content:flex-start}
 .change-count{margin-left:6px;color:#7b8794;font-size:12px}
@@ -1268,6 +1362,8 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
 .detail-grid div{min-width:0}
 .detail-grid dt{font-size:12px;color:#8a94a3;margin-bottom:5px}
 .detail-grid dd{margin:0;color:#344054;overflow-wrap:anywhere}
+.notes-content{min-height:72px;margin:0;padding:13px 14px;border-radius:7px;background:#f7f9fc;color:#475467;line-height:1.75;overflow-wrap:anywhere;white-space:pre-wrap}
+.notes-form-section :deep(.el-textarea__inner){line-height:1.7}
 .employee-form .form-grid{grid-template-columns:1fr 1fr;gap:0 16px}
 .employee-form :deep(.el-select),.employee-form :deep(.el-date-editor){width:100%}
 .drawer-footer{display:flex;justify-content:flex-end;gap:8px}

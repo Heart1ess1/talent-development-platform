@@ -56,7 +56,7 @@ class EmployeeSpreadsheetTest {
         db, permissions, mock(AuditService.class));
     var response = new MockHttpServletResponse();
 
-    controller.export(null, null, null, null, null, null, null, null, response);
+    controller.export(null, null, null, null, null, null, null, null, null, response);
 
     try (var workbook = WorkbookFactory.create(
         new ByteArrayInputStream(response.getContentAsByteArray()))) {

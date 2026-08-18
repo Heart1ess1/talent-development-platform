@@ -84,6 +84,7 @@ GitHub 仓库首页只会自动显示根目录的 `README.md`。`docs/` 下的 M
 - [docs/pending-tasks.md](docs/pending-tasks.md)：当前未完成任务、历次云端部署记录、外部阻塞条件和验收证据清单。
 - [docs/codebase-guide.md](docs/codebase-guide.md)：代码库结构、模块关系和每个源码/配置/迁移/测试文件的职责。
 - [docs/business-flow-acceptance-2026-08-13.md](docs/business-flow-acceptance-2026-08-13.md)：全系统业务流程验收结果、主要问题、发布判定和优化实施顺序。
+- [docs/completed-work-summary-since-2026-07-29.md](docs/completed-work-summary-since-2026-07-29.md)：汇总指定范围内已经实现、合并、部署或验收完成的项目成果。
 - [docs/aliyun-deployment.md](docs/aliyun-deployment.md)：当前云端证据、OSS/CDN 安全分层、域名备案、迁移、回退和上线验收。
 
 也可以从 [docs/README.md](docs/README.md) 进入文档目录。

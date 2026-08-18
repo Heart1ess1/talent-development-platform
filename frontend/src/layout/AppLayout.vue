@@ -51,6 +51,7 @@ const personnelChildren=computed<MenuItem[]>(()=>{
     {to:'/location-reports',label:'人员流动'}
   ]
   if(auth.can('master:manage'))children.push({to:'/station-change-review',label:'调站审批'})
+  if(auth.can('master:manage'))children.push({to:'/dictionaries',label:'字典值管理'})
   return children
 })
 const evaluationChildren=computed<MenuItem[]>(()=>{

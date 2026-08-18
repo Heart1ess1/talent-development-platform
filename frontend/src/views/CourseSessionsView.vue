@@ -5,12 +5,15 @@ import {Calendar,Clock,Collection,Delete,EditPen,Location,Plus,Refresh,Search,Us
 import {ElMessage,ElMessageBox} from 'element-plus'
 import {api,type Envelope} from '@/api'
 import {formatCourseDate,isCourseEnabled,sessionStatus,type Course,type CourseSession} from '@/utils/course'
+import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData'
 
 const route=useRoute()
 const router=useRouter()
 const courses=ref<Course[]>([])
 const sessions=ref<CourseSession[]>([])
 const employees=ref<any[]>([])
+const classOptions=ref<DictionaryOption[]>([])
+const enrollmentClassId=ref<number|null>(null)
 const enrollments=ref<any[]>([])
 const loading=ref(false)
 const saving=ref(false)
@@ -39,7 +42,7 @@ const tabs=computed(()=>[
   {label:'已结束',value:'FINISHED',count:sessions.value.filter(row=>sessionStatus(row).key==='FINISHED').length}
 ])
 const enrolledIds=computed(()=>new Set(enrollments.value.map(item=>item.employee_id)))
-const availableEmployees=computed(()=>employees.value.filter(item=>!enrolledIds.value.has(item.id)))
+const availableEmployees=computed(()=>employees.value.filter(item=>(!enrollmentClassId.value||item.class_id===enrollmentClassId.value)&&!enrolledIds.value.has(item.id)))
 const totalEnrollments=computed(()=>sessions.value.reduce((total,row)=>total+row.enrollment_count,0))
 const totalAttendance=computed(()=>sessions.value.reduce((total,row)=>total+row.attendance_count,0))
 
@@ -142,17 +145,20 @@ async function remove(row:CourseSession){
 async function openEnrollment(row:CourseSession){
   selectedSession.value=row
   selectedEmployees.value=[]
+  enrollmentClassId.value=null
   enrollmentOpen.value=true
   enrollLoading.value=true
   try{
-    const [enrollResponse,employeeResponse]=await Promise.all([
+    const [enrollResponse,employeeResponse,classValues]=await Promise.all([
       api.get<any,Envelope<any[]>>(`/sessions/${row.id}/enrollments`),
       employees.value.length
         ?Promise.resolve({data:employees.value} as Envelope<any[]>)
-        :api.get<any,Envelope<any>>('/employees',{params:{size:100}})
+        :api.get<any,Envelope<any>>('/employees',{params:{size:100}}),
+      classOptions.value.length?Promise.resolve(classOptions.value):loadDictionaryValues('CLASS')
     ])
     enrollments.value=enrollResponse.data
     if(!employees.value.length)employees.value=(employeeResponse.data.records||employeeResponse.data).filter((item:any)=>item.status==='ACTIVE')
+    classOptions.value=classValues
   }finally{
     enrollLoading.value=false
   }
@@ -257,6 +263,7 @@ onMounted(async()=>{
       <template v-if="selectedSession">
         <div class="enrollment-drawer-head"><div><strong>{{selectedSession.course_name}}</strong><span>场次：{{selectedSession.title}} · {{formatCourseDate(selectedSession.starts_at)}}</span></div><el-tag>{{enrollments.length}} 人</el-tag></div>
         <div class="enroll-form">
+          <el-select v-model="enrollmentClassId" clearable filterable placeholder="按班级筛选员工"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
           <el-select v-model="selectedEmployees" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择需要参加的员工"><el-option v-for="person in availableEmployees" :key="person.id" :label="`${person.name} · ${person.employeeNo||person.employee_no}`" :value="person.id"/></el-select>
           <el-button type="primary" :disabled="!selectedEmployees.length" @click="addEnrollments">加入场次</el-button>
         </div>

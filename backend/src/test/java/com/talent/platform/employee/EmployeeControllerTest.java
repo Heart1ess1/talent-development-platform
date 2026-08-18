@@ -53,6 +53,7 @@ class EmployeeControllerTest {
         "employee",
         "新员工",
         1L,
+        5L,
         2L,
         20L,
         3L,
@@ -70,6 +71,7 @@ class EmployeeControllerTest {
         "阅读",
         "沟通",
         "110101200001010000",
+        "这是一条较长的人员备注",
         "ACTIVE");
 
     controller.update(1L, request);

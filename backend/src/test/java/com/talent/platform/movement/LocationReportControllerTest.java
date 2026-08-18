@@ -91,7 +91,7 @@ class LocationReportControllerTest {
         mock(JdbcTemplate.class), mock(PermissionService.class), mock(AuditService.class));
     authenticate("EMPLOYEE", "SELF");
 
-    assertThatThrownBy(() -> controller.list(1, 20, null, null, true, null, null))
+    assertThatThrownBy(() -> controller.list(1, 20, null, null, null, true, null, null))
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining("只能查看本人");
   }
@@ -108,7 +108,7 @@ class LocationReportControllerTest {
         .thenReturn(0L);
     when(db.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
 
-    controller.list(1, 20, null, null, true, null, null);
+    controller.list(1, 20, null, null, null, true, null, null);
 
     verify(permissions).require(Permissions.EMPLOYEE_READ);
     var sql = ArgumentCaptor.forClass(String.class);
