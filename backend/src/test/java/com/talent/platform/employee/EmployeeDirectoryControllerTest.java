@@ -12,7 +12,7 @@ class EmployeeDirectoryControllerTest {
     when(db.queryForList(anyString(),any(Object[].class))).thenReturn(List.of());
     var controller=new EmployeeDirectoryController(db,permissions,mock(AuditService.class));
 
-    controller.list(1,20,null,null,null,null,null,null,null,null);
+    controller.list(1,20,null,null,null,null,null,null,null,null,null);
 
     var sql=ArgumentCaptor.forClass(String.class);verify(db).queryForObject(sql.capture(),eq(Long.class),any(Object[].class));
     assertThat(sql.getValue()).contains("e.mentor_user_id=?");
@@ -20,6 +20,8 @@ class EmployeeDirectoryControllerTest {
     assertThat(listSql.getValue())
       .contains(
         "e.political_status",
+        "class_name",
+        "e.notes",
         "business_unit_name",
         "skill_mentor_name",
         "station_change_count",
@@ -38,7 +40,7 @@ class EmployeeDirectoryControllerTest {
       "mentorReady",2L));
     var controller=new EmployeeDirectoryController(db,permissions,mock(AuditService.class));
 
-    var result=controller.summary(null,null,null,null,null,null,null);
+    var result=controller.summary(null,null,null,null,null,null,null,null);
 
     var sql=ArgumentCaptor.forClass(String.class);
     verify(db).queryForMap(sql.capture(),any(Object[].class));

@@ -5,6 +5,7 @@ import {ElMessage} from 'element-plus'
 import {ArrowRight,Calendar,CircleCheck,Download,Histogram,Search,Timer} from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
+import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData'
 import {dateTimeParts,resultStatusLabels,scoreMonth} from './examUi'
 import '@/styles/exam-center.css'
 
@@ -12,6 +13,7 @@ const auth=useAuthStore(),route=useRoute(),canManage=computed(()=>auth.can('exam
 const plans=ref<any[]>([]),results=ref<any[]>([]),planResults=ref<any[]>([])
 const reviewQueue=ref<any[]>([]),reviewVisible=ref(false),reviewLoading=ref(false),reviewAttempt=ref<any>(),grades=reactive<Record<number,{score:number;comment:string}>>({})
 const keyword=ref(''),phase=ref(''),detailKeyword=ref(''),detailStatus=ref('')
+const detailClassId=ref<number|null>(null),classOptions=ref<DictionaryOption[]>([])
 const detailVisible=ref(false),detailLoading=ref(false),exporting=ref(false),selectedPlan=ref<any>(null)
 const pendingReviews=computed(()=>reviewQueue.value.filter(x=>x.status==='PENDING_REVIEW'))
 
@@ -27,7 +29,7 @@ const overview=computed(()=>({
 }))
 const filteredPlanResults=computed(()=>planResults.value.filter(row=>{
   const matchesKeyword=!detailKeyword.value||`${row.employee_name} ${row.employee_no}`.toLowerCase().includes(detailKeyword.value.trim().toLowerCase())
-  return matchesKeyword&&(!detailStatus.value||row.participation_status===detailStatus.value)
+  return matchesKeyword&&(!detailClassId.value||row.class_id===detailClassId.value)&&(!detailStatus.value||row.participation_status===detailStatus.value)
 }))
 const detailOverview=computed(()=>({
   assigned:planResults.value.length,
@@ -44,7 +46,7 @@ async function openReview(row:any){reviewVisible.value=true;reviewLoading.value=
 function answerText(value:any){if(value===null||value===undefined)return '未作答';if(typeof value==='string')return value;return Array.isArray(value)?value.join('、'):JSON.stringify(value)}
 async function gradeQuestion(question:any){const grade=grades[question.id];await api.put(`/exams/attempts/${reviewAttempt.value.id}/questions/${question.id}/grade`,grade);ElMessage.success('本题评分已保存');const refreshed=(await api.get<any,Envelope<any>>(`/exams/attempts/${reviewAttempt.value.id}`)).data;reviewAttempt.value=refreshed;await load();if(refreshed.status==='GRADED')ElMessage.success('该答卷已完成阅卷，将在整场考试结束后自动下发')}
 async function openPlan(row:any){
-  selectedPlan.value=row;detailKeyword.value='';detailStatus.value='';detailVisible.value=true;detailLoading.value=true
+  selectedPlan.value=row;detailKeyword.value='';detailClassId.value=null;detailStatus.value='';detailVisible.value=true;detailLoading.value=true
   try{planResults.value=(await api.get<any,Envelope<any[]>>(`/exams/results/manage/plans/${row.id}`)).data}
   finally{detailLoading.value=false}
 }
@@ -67,7 +69,7 @@ function planPhase(row:any){
 function participation(row:any){
   return ({COMPLETED:{label:'已完成',type:'success'},ABSENT:{label:'缺考',type:'danger'},IN_PROGRESS:{label:'考试中',type:'primary'},NOT_STARTED:{label:'未开始',type:'info'},INCOMPLETE:{label:'未完成',type:'warning'}} as any)[row.participation_status]??{label:'--',type:'info'}
 }
-onMounted(async()=>{await load();if(String(route.query.focus)==='review'){await nextTick();document.getElementById('exam-review-queue')?.scrollIntoView({behavior:'smooth',block:'start'})}})
+onMounted(async()=>{if(canManage.value)classOptions.value=await loadDictionaryValues('CLASS');await load();if(String(route.query.focus)==='review'){await nextTick();document.getElementById('exam-review-queue')?.scrollIntoView({behavior:'smooth',block:'start'})}})
 </script>
 
 <template>
@@ -150,13 +152,14 @@ onMounted(async()=>{await load();if(String(route.query.focus)==='review'){await 
         <div><strong>员工成绩单</strong><span class="header-tip">系统按客观题标准答案自动评分</span></div>
         <div class="filters">
           <el-input v-model="detailKeyword" clearable placeholder="搜索姓名或工号" :prefix-icon="Search"/>
+          <el-select v-model="detailClassId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
           <el-select v-model="detailStatus" clearable placeholder="完成状态">
             <el-option label="已完成" value="COMPLETED"/><el-option label="考试中" value="IN_PROGRESS"/><el-option label="未开始" value="NOT_STARTED"/><el-option label="未完成" value="INCOMPLETE"/><el-option label="缺考" value="ABSENT"/>
           </el-select>
         </div>
       </div>
       <el-table :data="filteredPlanResults" v-loading="detailLoading" empty-text="暂无应考员工">
-        <el-table-column prop="employee_no" label="工号" width="110"/><el-table-column prop="employee_name" label="员工" min-width="100"/>
+        <el-table-column prop="employee_no" label="工号" width="110"/><el-table-column prop="employee_name" label="员工" min-width="100"/><el-table-column prop="class_name" label="班级" min-width="100"><template #default="s">{{s.row.class_name||'未设置'}}</template></el-table-column>
         <el-table-column label="完成状态" width="92"><template #default="s"><el-tag :type="participation(s.row).type" effect="plain">{{participation(s.row).label}}</el-tag></template></el-table-column>
         <el-table-column prop="attempt_no" label="考试次数" width="82" align="center"><template #default="s">{{s.row.attempt_no??'--'}}</template></el-table-column>
         <el-table-column prop="total_score" label="成绩" width="74" align="center"><template #default="s"><strong v-if="s.row.total_score!==null&&s.row.total_score!==undefined">{{s.row.total_score}}</strong><span v-else>--</span></template></el-table-column>

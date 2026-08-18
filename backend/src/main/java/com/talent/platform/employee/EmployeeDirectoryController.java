@@ -25,12 +25,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RequestMapping("/api/v1/employee-directory")
 public class EmployeeDirectoryController {
   private static final String SELECT = """
-      select e.id,e.employee_no,e.name,e.batch_id,e.business_unit_id,e.station_id,
+      select e.id,e.employee_no,e.name,e.batch_id,e.class_id,e.business_unit_id,e.station_id,
              e.mentor_user_id,e.skill_mentor_user_id,e.school,e.major,e.education,
              e.birth_date,e.native_place,e.residence,e.phone,e.email,e.onboard_date,
-             e.status,e.political_status,e.hobbies,e.speciality,e.id_card,
+             e.status,e.political_status,e.hobbies,e.speciality,e.id_card,e.notes,
              u.avatar_token,
-             b.name batch_name,bu.name business_unit_name,s.name station_name,
+             b.name batch_name,cls.label class_name,bu.name business_unit_name,s.name station_name,
              tm.display_name technical_mentor_name,tm.display_name mentor_name,
              sm.display_name skill_mentor_name,
              (select count(*) from station_change_request scr
@@ -42,6 +42,7 @@ public class EmployeeDirectoryController {
        from employee e
        left join sys_user u on u.id=e.user_id
        left join talent_batch b on b.id=e.batch_id
+       left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS'
        left join business_unit bu on bu.id=e.business_unit_id
        left join service_station s on s.id=e.station_id
        left join sys_user tm on tm.id=e.mentor_user_id
@@ -67,6 +68,7 @@ public class EmployeeDirectoryController {
       @RequestParam(defaultValue = "20") int size,
       @RequestParam(required = false) String keyword,
       @RequestParam(required = false) Long batchId,
+      @RequestParam(required = false) Long classId,
       @RequestParam(required = false) Long businessUnitId,
       @RequestParam(required = false) Long stationId,
       @RequestParam(required = false) Long mentorId,
@@ -75,7 +77,7 @@ public class EmployeeDirectoryController {
       @RequestParam(required = false) String status) {
     permissions.require(Permissions.EMPLOYEE_READ);
     var query = filters(
-        keyword, batchId, businessUnitId, stationId, mentorId, skillMentorId, education, status);
+        keyword, batchId, classId, businessUnitId, stationId, mentorId, skillMentorId, education, status);
     long total = db.queryForObject(
         "select count(*)" + FROM + query.sql(),
         Long.class,
@@ -94,6 +96,7 @@ public class EmployeeDirectoryController {
   public ApiResponse<Map<String, Object>> summary(
       @RequestParam(required = false) String keyword,
       @RequestParam(required = false) Long batchId,
+      @RequestParam(required = false) Long classId,
       @RequestParam(required = false) Long businessUnitId,
       @RequestParam(required = false) Long stationId,
       @RequestParam(required = false) Long mentorId,
@@ -101,7 +104,7 @@ public class EmployeeDirectoryController {
       @RequestParam(required = false) String education) {
     permissions.require(Permissions.EMPLOYEE_READ);
     var query = filters(
-        keyword, batchId, businessUnitId, stationId, mentorId, skillMentorId, education, null);
+        keyword, batchId, classId, businessUnitId, stationId, mentorId, skillMentorId, education, null);
     return ApiResponse.ok(db.queryForMap("""
         select
           count(*) totalEmployees,
@@ -117,6 +120,7 @@ public class EmployeeDirectoryController {
   public void export(
       @RequestParam(required = false) String keyword,
       @RequestParam(required = false) Long batchId,
+      @RequestParam(required = false) Long classId,
       @RequestParam(required = false) Long businessUnitId,
       @RequestParam(required = false) Long stationId,
       @RequestParam(required = false) Long mentorId,
@@ -126,7 +130,7 @@ public class EmployeeDirectoryController {
       HttpServletResponse response) throws Exception {
     permissions.require(Permissions.EMPLOYEE_EXPORT);
     var query = filters(
-        keyword, batchId, businessUnitId, stationId, mentorId, skillMentorId, education, status);
+        keyword, batchId, classId, businessUnitId, stationId, mentorId, skillMentorId, education, status);
     var rows = db.queryForList(
         SELECT + FROM + query.sql() + " order by e.id desc",
         query.args().toArray());
@@ -149,6 +153,7 @@ public class EmployeeDirectoryController {
   private FilterQuery filters(
       String keyword,
       Long batchId,
+      Long classId,
       Long businessUnitId,
       Long stationId,
       Long mentorId,
@@ -173,6 +178,10 @@ public class EmployeeDirectoryController {
     if (batchId != null) {
       where.append(" and e.batch_id=?");
       args.add(batchId);
+    }
+    if (classId != null) {
+      where.append(" and e.class_id=?");
+      args.add(classId);
     }
     if (businessUnitId != null) {
       where.append(" and e.business_unit_id=?");

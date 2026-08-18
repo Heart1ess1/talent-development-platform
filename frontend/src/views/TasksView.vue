@@ -21,7 +21,7 @@ import {api, type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import TaskAttachmentsPanel from '@/components/TaskAttachmentsPanel.vue'
 import {createUploadTicket,storageCapabilities,uploadWithStorageFallback} from '@/storageTransfer'
-import {loadEnabledBusinessUnits} from '@/utils/masterData'
+import {loadDictionaryValues, loadEnabledBusinessUnits, type DictionaryOption} from '@/utils/masterData'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -37,6 +37,7 @@ const pendingReviews = ref<any[]>([])
 const batches = ref<any[]>([])
 const businessUnits = ref<any[]>([])
 const stations = ref<any[]>([])
+const classOptions = ref<DictionaryOption[]>([])
 const plans = ref<any[]>([])
 const planTasks = ref<any[]>([])
 const selectedPlanId = ref<number | null>(null)
@@ -61,7 +62,7 @@ const detailDialog = ref(false)
 const selectedTask = ref<any>()
 const detailTaskId = ref<number | null>(null)
 const taskProgress = ref<any[]>([])
-const progressFilters = reactive({keyword: '', status: ''})
+const progressFilters = reactive({keyword: '', classId: null as number | null, status: ''})
 const dispatchMode = ref<'PLAN' | 'MANUAL'>('PLAN')
 const dispatching = ref(false)
 const previewOpen = ref(false)
@@ -75,16 +76,16 @@ const dispatchPreview = reactive<any>({
   taskTitles: []
 })
 
-const manualDispatch = reactive<any>({title: '', description: '', requirements: '', deadline: '', batchId: null, businessUnitId: null, stationId: null})
-const dispatch = reactive<any>({planTaskIds: [], taskTitle: '', deadlineMode: 'OFFSET', baseDate: new Date().toISOString().slice(0, 10), offsetDays: 7, deadlineDate: '', batchId: null, businessUnitId: null, stationId: null})
+const manualDispatch = reactive<any>({title: '', description: '', requirements: '', deadline: '', batchId: null, classId: null, businessUnitId: null, stationId: null})
+const dispatch = reactive<any>({planTaskIds: [], taskTitle: '', deadlineMode: 'OFFSET', baseDate: new Date().toISOString().slice(0, 10), offsetDays: 7, deadlineDate: '', batchId: null, classId: null, businessUnitId: null, stationId: null})
 const submit = reactive({content: ''})
 const review = reactive<any>({decision: 'APPROVE', comment: '', score: null})
 const taskDetail = reactive<any>({title: '', description: '', requirements: '', deadline: '', attachments: []})
 
 const selectedPlan = computed(() => plans.value.find(item => item.id === selectedPlanId.value))
 const selectedPlanTasks = computed(() => planTasks.value.filter(item => dispatch.planTaskIds.includes(item.id)))
-const hasDispatchTarget = computed(() => Boolean(dispatch.batchId || dispatch.businessUnitId || dispatch.stationId))
-const hasManualTarget = computed(() => Boolean(manualDispatch.batchId || manualDispatch.businessUnitId || manualDispatch.stationId))
+const hasDispatchTarget = computed(() => Boolean(dispatch.batchId || dispatch.classId || dispatch.businessUnitId || dispatch.stationId))
+const hasManualTarget = computed(() => Boolean(manualDispatch.batchId || manualDispatch.classId || manualDispatch.businessUnitId || manualDispatch.stationId))
 const planDispatchReady = computed(() => Boolean(
   selectedPlanId.value
   && dispatch.planTaskIds.length
@@ -136,6 +137,8 @@ const targetDescription = computed(() => {
   const parts: string[] = []
   const batch = batches.value.find(item => item.id === dispatch.batchId)
   if (batch) parts.push(`批次：${batch.name}`)
+  const employeeClass = classOptions.value.find(item => item.id === dispatch.classId)
+  if (employeeClass) parts.push(`班级：${employeeClass.label}`)
   const businessUnit = businessUnits.value.find(item => item.id === dispatch.businessUnitId)
   if (businessUnit) parts.push(`板块：${businessUnitLabel(businessUnit.name)}`)
   const station = stations.value.find(item => item.id === dispatch.stationId)
@@ -148,10 +151,12 @@ const filteredTaskProgress = computed(() => {
     const matchesKeyword = !keyword
       || String(row.employee_name || '').toLowerCase().includes(keyword)
       || String(row.employee_no || '').toLowerCase().includes(keyword)
-    return matchesKeyword && (!progressFilters.status || row.status === progressFilters.status)
+    return matchesKeyword
+      && (!progressFilters.classId || row.class_id === progressFilters.classId)
+      && (!progressFilters.status || row.status === progressFilters.status)
   })
 })
-const hasProgressFilters = computed(() => Boolean(progressFilters.keyword.trim() || progressFilters.status))
+const hasProgressFilters = computed(() => Boolean(progressFilters.keyword.trim() || progressFilters.classId || progressFilters.status))
 const progressMetrics = computed(() => ({
   total: taskProgress.value.length,
   submitted: taskProgress.value.filter(row => row.submission_id).length,
@@ -167,13 +172,15 @@ async function load() {
     ? (await api.get<any, Envelope<any[]>>('/assignments/pending-review')).data
     : []
   if (!canManage.value) return
-  const [batchResponse, businessUnitOptions, stationResponse, planResponse] = await Promise.all([
+  const [batchResponse, classValues, businessUnitOptions, stationResponse, planResponse] = await Promise.all([
     api.get<any, Envelope<any[]>>('/batches'),
+    loadDictionaryValues('CLASS'),
     loadEnabledBusinessUnits(),
     api.get<any, Envelope<any[]>>('/stations'),
     api.get<any, Envelope<any[]>>('/training-plans')
   ])
   batches.value = batchResponse.data
+  classOptions.value = classValues
   businessUnits.value = businessUnitOptions
   stations.value = stationResponse.data
   plans.value = planResponse.data.filter(item => item.enabled === true || item.enabled === 1)
@@ -195,7 +202,7 @@ async function loadPlanTasks() {
 async function dispatchManualTask() {
   if (!manualDispatchReady.value) return ElMessage.warning('请完整填写任务、截止时间和下发对象')
   await ElMessageBox.confirm(
-    `确认下发临时任务“${manualDispatch.title}”？系统将按所选批次、板块和服务站组合筛选在职员工。`,
+    `确认下发临时任务“${manualDispatch.title}”？系统将按所选批次、班级、板块和服务站组合筛选在职员工。`,
     '确认下发任务',
     {confirmButtonText: '确认下发', cancelButtonText: '返回检查', type: 'warning'}
   )
@@ -212,7 +219,7 @@ async function dispatchManualTask() {
       })
     }
     ElMessage.success(`任务已下发给 ${response.data.assignedEmployees} 人${manualFiles.value.length?`，并上传 ${manualFiles.value.length} 个附件`:''}`)
-    Object.assign(manualDispatch, {title: '', description: '', requirements: '', deadline: '', batchId: null, businessUnitId: null, stationId: null})
+    Object.assign(manualDispatch, {title: '', description: '', requirements: '', deadline: '', batchId: null, classId: null, businessUnitId: null, stationId: null})
     manualFiles.value=[]
     await load()
     router.push('/training-plans/tracking')
@@ -330,6 +337,7 @@ function managerTaskStateType(task: any) {
 
 function resetProgressFilters() {
   progressFilters.keyword = ''
+  progressFilters.classId = null
   progressFilters.status = ''
 }
 
@@ -616,10 +624,13 @@ onMounted(async () => {
           </article>
 
           <article class="dispatch-step">
-            <div class="step-heading"><span>3</span><div><h3>选择下发对象</h3><p>按批次、所属板块和服务站组合筛选在职员工</p></div></div>
+            <div class="step-heading"><span>3</span><div><h3>选择下发对象</h3><p>按批次、班级、所属板块和服务站组合筛选在职员工</p></div></div>
             <div class="target-grid">
               <el-select v-model="dispatch.batchId" clearable placeholder="按批次">
                 <el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/>
+              </el-select>
+              <el-select v-model="dispatch.classId" clearable filterable placeholder="按班级">
+                <el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/>
               </el-select>
               <el-select v-model="dispatch.businessUnitId" clearable placeholder="按板块">
                 <el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/>
@@ -661,8 +672,9 @@ onMounted(async () => {
           </div>
         </div>
         <div class="manual-target">
-          <div class="step-heading"><span>2</span><div><h3>下发对象</h3><p>按批次、所属板块和服务站组合筛选，至少选择一项</p></div></div>
+          <div class="step-heading"><span>2</span><div><h3>下发对象</h3><p>按批次、班级、所属板块和服务站组合筛选，至少选择一项</p></div></div>
           <el-select v-model="manualDispatch.batchId" clearable placeholder="按批次"><el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.classId" clearable filterable placeholder="按班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
           <el-select v-model="manualDispatch.businessUnitId" clearable placeholder="按板块"><el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/></el-select>
           <el-select v-model="manualDispatch.stationId" clearable placeholder="按服务站"><el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/></el-select>
           <el-button type="primary" size="large" :loading="dispatching" :disabled="!manualDispatchReady" @click="dispatchManualTask">确认下发临时任务</el-button>
@@ -799,6 +811,7 @@ onMounted(async () => {
       <div class="progress-toolbar">
         <div class="progress-filters">
           <el-input v-model="progressFilters.keyword" :prefix-icon="Search" clearable placeholder="搜索员工姓名或工号" />
+          <el-select v-model="progressFilters.classId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id" /></el-select>
           <el-select v-model="progressFilters.status" clearable placeholder="全部状态">
             <el-option label="未提交" value="NOT_SUBMITTED" />
             <el-option label="待审核" value="PENDING_REVIEW" />
@@ -819,6 +832,7 @@ onMounted(async () => {
         <el-table :data="filteredTaskProgress" max-height="520" empty-text="未找到符合条件的员工">
           <el-table-column prop="employee_name" label="员工" min-width="120" />
           <el-table-column prop="employee_no" label="工号" min-width="110" />
+          <el-table-column prop="class_name" label="班级" min-width="100"><template #default="scope">{{scope.row.class_name||'未设置'}}</template></el-table-column>
           <el-table-column prop="assigned_at" label="下发时间" min-width="160"><template #default="scope">{{formatDate(scope.row.assigned_at)}}</template></el-table-column>
           <el-table-column prop="submitted_at" label="最近提交" min-width="160"><template #default="scope">{{formatDate(scope.row.submitted_at)}}</template></el-table-column>
           <el-table-column prop="status" label="完成状态" width="110"><template #default="scope"><el-tag :type="statusTagType(scope.row.status)">{{statusLabel(scope.row.status)}}</el-tag></template></el-table-column>

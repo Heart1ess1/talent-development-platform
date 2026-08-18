@@ -36,6 +36,7 @@ const routes=[
     {path:'exams/plans',component:()=>import('@/views/exams/ExamPlansView.vue'),meta:{permission:'exam:manage'}},
     {path:'exams/results',component:()=>import('@/views/exams/ExamResultsView.vue')},
     {path:'station-change-review',component:()=>import('@/views/StationChangeReviewView.vue'),meta:{permission:'master:manage'}},
+    {path:'dictionaries',component:()=>import('@/views/DictionaryManagementView.vue'),meta:{permission:'master:manage'}},
     {path:'users',component:()=>import('@/views/UsersView.vue'),meta:{permission:'user:employee:manage'}},
     {path:'profile',component:()=>import('@/views/ProfileView.vue')}
   ]}

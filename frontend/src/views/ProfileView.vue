@@ -6,10 +6,12 @@ import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import {avatarUrl,nameInitial} from '@/utils/avatar'
 import {roleLabel} from '@/utils/role'
+import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData'
 
 const auth=useAuthStore()
 const isEmployee=computed(()=>auth.user?.role==='EMPLOYEE')
 const stations=ref<any[]>([])
+const educationOptions=ref<DictionaryOption[]>([])
 const stationDialog=ref(false)
 const selectedStationId=ref<number|null>(null)
 const submitting=ref(false)
@@ -17,7 +19,7 @@ const myRequests=ref<any[]>([])
 const form=reactive({oldPassword:'',newPassword:'',confirm:''})
 const loading=ref(false),profileLoading=ref(false),avatarUploading=ref(false)
 const profile=reactive<any>({
-  employeeNo:'',name:'',batchName:'',businessUnitName:'',stationId:null,stationName:'',
+  employeeNo:'',name:'',batchName:'',className:'',businessUnitName:'',stationId:null,stationName:'',
   technicalMentorName:'',skillMentorName:'',
   onboardDate:null,status:'',phone:'',email:'',birthDate:null,nativePlace:'',
   residence:'',school:'',major:'',education:''
@@ -30,7 +32,7 @@ async function loadProfile(){
   if(!isEmployee.value)return
   const r=await api.get<any,Envelope<any>>('/profile/employee')
   Object.assign(profile,{
-    employeeNo:r.data.employee_no||'',name:r.data.name||'',batchName:r.data.batch_name||'',
+    employeeNo:r.data.employee_no||'',name:r.data.name||'',batchName:r.data.batch_name||'',className:r.data.class_name||'',
     businessUnitName:r.data.business_unit_name||'',
     stationId:r.data.station_id??null,stationName:r.data.station_name||'',
     technicalMentorName:r.data.technical_mentor_name||'',
@@ -103,6 +105,9 @@ async function loadMyRequests(){
   const r=await api.get<any,Envelope<any[]>>('/station-change-requests',{params:{mine:true}})
   myRequests.value=r.data
 }
+async function loadEducationOptions(){
+  educationOptions.value=await loadDictionaryValues('EDUCATION')
+}
 async function submitStationChange(){
   if(!selectedStationId.value)return ElMessage.warning('请选择目标服务站')
   submitting.value=true
@@ -126,7 +131,9 @@ function openStationDialog(){
   stationDialog.value=true
 }
 onMounted(async()=>{
-  if(isEmployee.value)await Promise.all([loadProfile(),loadStations(),loadMyRequests()])
+  if(isEmployee.value)await Promise.all([
+    loadProfile(),loadStations(),loadMyRequests(),loadEducationOptions()
+  ])
 })
 </script>
 
@@ -205,6 +212,7 @@ onMounted(async()=>{
             <el-descriptions-item label="工号">{{profile.employeeNo||'-'}}</el-descriptions-item>
             <el-descriptions-item label="姓名">{{profile.name||'-'}}</el-descriptions-item>
             <el-descriptions-item label="批次">{{profile.batchName||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="班级">{{profile.className||'-'}}</el-descriptions-item>
             <el-descriptions-item label="所属板块">{{profile.businessUnitName||'-'}}</el-descriptions-item>
             <el-descriptions-item label="服务站点">{{profile.stationName||'-'}}</el-descriptions-item>
             <el-descriptions-item label="指导老师（技术）">{{profile.technicalMentorName||'-'}}</el-descriptions-item>
@@ -230,7 +238,7 @@ onMounted(async()=>{
               <el-form-item label="联系方式"><el-input v-model="profile.phone"/></el-form-item>
               <el-form-item label="私人邮箱"><el-input v-model="profile.email"/></el-form-item>
               <el-form-item label="出生日期"><el-date-picker v-model="profile.birthDate" type="date" value-format="YYYY-MM-DD"/></el-form-item>
-              <el-form-item label="学历"><el-input v-model="profile.education"/></el-form-item>
+              <el-form-item label="学历"><el-select v-model="profile.education" clearable filterable><el-option v-for="item in educationOptions" :key="item.id" :label="item.label" :value="item.value"/></el-select></el-form-item>
               <el-form-item label="毕业学校"><el-input v-model="profile.school"/></el-form-item>
               <el-form-item label="所学专业"><el-input v-model="profile.major"/></el-form-item>
               <el-form-item label="籍贯"><el-input v-model="profile.nativePlace"/></el-form-item>

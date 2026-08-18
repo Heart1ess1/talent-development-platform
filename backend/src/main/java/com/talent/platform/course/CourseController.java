@@ -506,6 +506,7 @@ public class CourseController {
   @GetMapping("/attendance")
   public ApiResponse<List<Map<String, Object>>> attendance(
       @RequestParam(required = false) Long employeeId,
+      @RequestParam(required = false) Long classId,
       @RequestParam(required = false) Long courseId,
       @RequestParam(required = false) Long sessionId,
       @RequestParam(required = false, defaultValue = "") String keyword,
@@ -520,6 +521,10 @@ public class CourseController {
     if (employeeId != null) {
       where.append(" and e.id=?");
       args.add(employeeId);
+    }
+    if (classId != null) {
+      where.append(" and e.class_id=?");
+      args.add(classId);
     }
     if (courseId != null) {
       where.append(" and c.id=?");
@@ -550,10 +555,12 @@ public class CourseController {
     }
     return ApiResponse.ok(db.queryForList("""
         select a.id,a.session_id,a.employee_id,a.status,a.source,a.checked_at,a.remark,
-          e.employee_no,e.name employee_name,s.title session_title,s.location,
+          e.employee_no,e.name employee_name,e.class_id,cls.label class_name,
+          s.title session_title,s.location,
           c.id course_id,c.name course_name
         from attendance a
         join employee e on e.id=a.employee_id
+        left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS'
         join course_session s on s.id=a.session_id
         join course c on c.id=s.course_id
         """ + where + " order by a.checked_at desc limit 1000", args.toArray()));

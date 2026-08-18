@@ -4,6 +4,7 @@ import {ArrowRight,CircleCheck,CircleClose,Clock,Document,Refresh,Search,User} f
 import {ElMessage} from 'element-plus';
 import {api,type Envelope} from '@/api';
 import {avatarUrl,nameInitial} from '@/utils/avatar';
+import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData';
 
 type ReviewStatus='PENDING'|'APPROVED'|'REJECTED';
 type ReviewAction='APPROVE'|'REJECT';
@@ -14,6 +15,8 @@ interface ReviewRow {
   employee_no:string;
   employee_name:string;
   employee_status:string;
+  class_id?:number|null;
+  class_name?:string|null;
   avatar_token?:string|null;
   current_station_id?:number|null;
   current_station_name?:string|null;
@@ -42,6 +45,7 @@ interface ReviewSummary {
 
 const rows=ref<ReviewRow[]>([]);
 const stations=ref<any[]>([]);
+const classOptions=ref<DictionaryOption[]>([]);
 const loading=ref(false);
 const summaryLoading=ref(false);
 const detailOpen=ref(false);
@@ -53,7 +57,7 @@ const submitting=ref(false);
 const reviewAction=ref<ReviewAction>('APPROVE');
 const reviewComment=ref('');
 const dateRange=ref<[string,string]|[]>([]);
-const filters=reactive({status:'PENDING',keyword:'',stationId:undefined as number|undefined});
+const filters=reactive({status:'PENDING',keyword:'',classId:undefined as number|undefined,stationId:undefined as number|undefined});
 const summary=reactive<ReviewSummary>({
   total:0,
   pending:0,
@@ -149,6 +153,7 @@ async function loadList(){
     const params:any={};
     if(filters.status)params.status=filters.status;
     if(filters.keyword.trim())params.keyword=filters.keyword.trim();
+    if(filters.classId)params.classId=filters.classId;
     if(filters.stationId)params.stationId=filters.stationId;
     if(dateRange.value.length===2){
       params.dateFrom=dateRange.value[0];
@@ -158,6 +163,7 @@ async function loadList(){
     rows.value=response.data.map(normalizeRow).filter(row=>{
       const keyword=filters.keyword.trim().toLowerCase();
       if(keyword&&!`${row.employee_name} ${row.employee_no}`.toLowerCase().includes(keyword))return false;
+      if(filters.classId&&row.class_id!==filters.classId)return false;
       if(filters.stationId&&row.current_station_id!==filters.stationId&&row.requested_station_id!==filters.stationId)return false;
       const requestDate=String(row.created_at).slice(0,10);
       if(dateRange.value.length===2&&(requestDate<dateRange.value[0]||requestDate>dateRange.value[1]))return false;
@@ -169,8 +175,9 @@ async function loadList(){
 }
 
 async function loadStations(){
-  const response=await api.get<any,Envelope<any[]>>('/stations');
+  const [response,classValues]=await Promise.all([api.get<any,Envelope<any[]>>('/stations'),loadDictionaryValues('CLASS')]);
   stations.value=response.data;
+  classOptions.value=classValues;
 }
 
 async function refresh(){
@@ -179,6 +186,7 @@ async function refresh(){
 
 function resetFilters(){
   filters.keyword='';
+  filters.classId=undefined;
   filters.stationId=undefined;
   dateRange.value=[];
   filters.status='PENDING';
@@ -290,6 +298,7 @@ onMounted(()=>Promise.all([loadStations(),refresh()]));
         <el-select v-model="filters.stationId" clearable filterable placeholder="当前或目标服务站">
           <el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/>
         </el-select>
+        <el-select v-model="filters.classId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
         <el-date-picker
           v-model="dateRange"
           type="daterange"
@@ -500,7 +509,7 @@ onMounted(()=>Promise.all([loadStations(),refresh()]));
 .status-tabs button{position:relative;padding:11px 13px;border:0;background:transparent;color:#667085;cursor:pointer;font-size:14px}
 .status-tabs button span{display:inline-grid;min-width:20px;height:20px;margin-left:4px;place-items:center;border-radius:10px;background:#fff1df;color:#b66a00;font-size:11px}
 .status-tabs button.active{color:#2077c9;font-weight:700}.status-tabs button.active:after{position:absolute;right:8px;bottom:-1px;left:8px;height:2px;border-radius:2px;background:#409eff;content:""}
-.filter-bar{display:grid;grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) minmax(300px,1.35fr) auto auto;gap:9px;padding:16px 20px;background:#fff}
+.filter-bar{display:grid;grid-template-columns:minmax(170px,1fr) minmax(150px,.8fr) minmax(180px,1fr) minmax(280px,1.35fr) auto auto;gap:9px;padding:16px 20px;background:#fff}
 .person-cell{display:flex;align-items:center;gap:11px}.person-cell>div{display:flex;min-width:0;flex-direction:column}.person-cell strong{font-size:14px}.person-cell span{margin-top:4px;color:#8a94a5;font-size:12px}
 .route-cell{display:flex;align-items:center;gap:9px}.route-cell span{color:#687386}.route-cell .el-icon{color:#aab2bf}.route-cell strong{color:#1677c8}
 .meta-lines{display:flex;flex-direction:column;gap:5px}.meta-lines span{color:#3f4b5f}.meta-lines small{color:#8b95a6}
