@@ -772,19 +772,19 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             <span v-else>{{row.station_name||'未分配'}}</span>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isNarrow" label="指导老师（技术）" min-width="160">
+        <el-table-column v-if="!isNarrow" label="指导老师（技术）" min-width="140">
           <template #default="{row}">{{display(row.technical_mentor_name)}}</template>
         </el-table-column>
-        <el-table-column v-if="!isNarrow" label="指导老师（技能）" min-width="160">
+        <el-table-column v-if="!isNarrow" label="指导老师（技能）" min-width="140">
           <template #default="{row}">{{display(row.skill_mentor_name)}}</template>
         </el-table-column>
-        <el-table-column v-if="!isNarrow" label="毕业学校" width="140" show-overflow-tooltip>
+        <el-table-column v-if="!isNarrow" label="毕业学校" width="160" show-overflow-tooltip>
           <template #default="{row}">{{display(row.school)}}</template>
         </el-table-column>
-        <el-table-column v-if="!isNarrow" label="所学专业" width="130" show-overflow-tooltip>
+        <el-table-column v-if="!isNarrow" label="所学专业" width="150" show-overflow-tooltip>
           <template #default="{row}">{{display(row.major)}}</template>
         </el-table-column>
-        <el-table-column v-if="!isNarrow" label="学历" width="76" show-overflow-tooltip>
+        <el-table-column v-if="!isNarrow" label="学历" width="100" show-overflow-tooltip>
           <template #default="{row}">{{display(row.education)}}</template>
         </el-table-column>
         <el-table-column v-if="!isNarrow" label="联系方式" min-width="130" show-overflow-tooltip>
