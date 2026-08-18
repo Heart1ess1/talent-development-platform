@@ -19,7 +19,16 @@
 | 网站合规页脚 | 已随 `main@d0fde6c2` 部署；登录页及登录后所有业务页面统一展示 `湘ICP备2026035229号-1`，并链接工信部备案系统 `https://beian.miit.gov.cn/`；公安备案号待审核完成后再加入，不展示占位号 |
 | CDN/ESA | `static.yryhx.cn` 已启用中国内地“图片小文件”CDN；源站为私有 ACL 的公共静态资源 OSS Bucket，同账号私有回源、HTTPS、HTTP→HTTPS、TLS 1.2/1.3、Gzip 和一年 immutable 缓存均已验证；不启用 ESA 等非必要增值服务 |
 
-当前线上运行 CDN 版应用代码基线为 PR #22 的 `main` 合并提交 `0aa92812b8017a0edb802fda8bf1e3fd6bb2006b`，JAR SHA-256 为 `42fcec6a06ce08c7d1ad0b77562fb137eec7eeb6de14463ca107bb62b725566f`，Flyway 为 V30。候选 `/data/talent-platform/releases/staging/cdn-0aa92812-20260818-2352` 已通过 `activate-cdn-release.sh` 激活，HTML 从 ECS 返回且不缓存，带内容哈希的 `/assets/` 文件从 CDN 返回并缓存一年。本次部署前 JAR 和环境备份位于 `/data/talent-platform/releases/history/cdn-activation-20260818235414-1050477/`，数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260818-235353.sql.gz`。
+当前线上运行 CDN 版应用代码基线为 PR #24 的 `main` 合并提交 `f6d3799c24c47751fe6aad7c5e4c7dd2c46afc04`，JAR SHA-256 为 `b9c1061414546a5fda90db2b4bde67ce7d0a246516a197915afda2ff9742ab1d`，Flyway 为 V30。候选 `/data/talent-platform/releases/staging/cdn-f6d3799c-20260819-0006` 已通过 `activate-cdn-release.sh` 激活，HTML 从 ECS 返回且不缓存，带内容哈希的 `/assets/` 文件从 CDN 返回并缓存一年。本次部署前 JAR 和环境备份位于 `/data/talent-platform/releases/history/cdn-activation-20260819000840-1053093/`，数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260819-000832.sql.gz`。
+
+### 2026-08-19 人员台账列宽调整部署记录
+
+- GitHub：PR #24 已合并，部署 `main` 合并提交 `f6d3799c24c47751fe6aad7c5e4c7dd2c46afc04`。
+- 界面调整：技术、技能指导老师列各由 160 px 收窄到 140 px；毕业学校由 140 px 调整到 160 px，所学专业由 130 px 调整到 150 px，学历由 76 px 调整到 100 px。
+- 构建校验：前端 22 项测试、类型检查和 CDN 生产构建通过；后端 107 项测试通过。生产 JAR SHA-256 为 `b9c1061414546a5fda90db2b4bde67ce7d0a246516a197915afda2ff9742ab1d`。
+- 数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20260819-000832.sql.gz`，SHA-256 `2e631eae8db60a611fd1c0629fa70ca32ba742970ab9488ea0577cc3132bb4d5`。
+- 发布材料：75 个静态资源已同步到公共资源 OSS；候选目录为 `/data/talent-platform/releases/staging/cdn-f6d3799c-20260819-0006`，激活前回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260819000840-1053093/`。
+- 生产校验：应用和 MySQL 容器正常，应用健康状态为 `UP`，Flyway 保持 V30，部署后日志无 `ERROR` 或 `Exception`。公网首页已引用 `index-DrZyoLLJ.js`，健康接口返回 200；CDN 主资源返回 200、`text/javascript` 和一年 immutable 缓存。
 
 ### 2026-08-18 字典值、员工班级与备注功能部署记录
 
