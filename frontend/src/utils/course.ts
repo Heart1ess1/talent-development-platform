@@ -14,8 +14,12 @@ export type CourseSession = {
   id:number
   course_id:number
   course_name:string
+  session_title_id?:number|null
   title:string
+  delivery_mode?:'ONLINE'|'OFFLINE'
+  training_location_id?:number|null
   location?:string|null
+  meeting_url?:string|null
   hours?:number|null
   starts_at:string
   ends_at:string

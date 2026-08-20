@@ -14,9 +14,33 @@ class ExamProctorPolicyTest {
     assertFalse(ExamProctorPolicy.isViolation("RECONNECT"));
   }
 
-  @Test void fourthViolationTriggersAutomaticSubmission() {
-    assertFalse(ExamProctorPolicy.shouldAutoSubmit(3));
-    assertTrue(ExamProctorPolicy.shouldAutoSubmit(4));
+  @Test void mobileCompatibleModeOnlyCountsLeavingThePage() {
+    assertTrue(ExamProctorPolicy.isViolation(ExamProctorPolicy.MOBILE_COMPATIBLE, "HIDDEN"));
+    assertFalse(ExamProctorPolicy.isViolation(ExamProctorPolicy.MOBILE_COMPATIBLE, "BLUR"));
+    assertFalse(ExamProctorPolicy.isViolation(ExamProctorPolicy.MOBILE_COMPATIBLE, "EXIT_FULLSCREEN"));
+  }
+
+  @Test void anAttemptThatDowngradesToCompatibleModeStaysCompatibleWhenResumed() {
+    assertEquals(ExamProctorPolicy.MOBILE_COMPATIBLE,
+        ExamProctorPolicy.resolveAttemptMode(ExamProctorPolicy.FULLSCREEN_STRICT, ExamProctorPolicy.MOBILE_COMPATIBLE));
+    assertEquals(ExamProctorPolicy.MOBILE_COMPATIBLE,
+        ExamProctorPolicy.resolveAttemptMode(ExamProctorPolicy.MOBILE_COMPATIBLE, ExamProctorPolicy.FULLSCREEN_STRICT));
+    assertEquals(ExamProctorPolicy.FULLSCREEN_STRICT,
+        ExamProctorPolicy.resolveAttemptMode(ExamProctorPolicy.FULLSCREEN_STRICT, ExamProctorPolicy.FULLSCREEN_STRICT));
+  }
+
+  @Test void configuredViolationLimitTriggersAutomaticSubmission() {
+    assertFalse(ExamProctorPolicy.shouldAutoSubmit(2, 3));
+    assertTrue(ExamProctorPolicy.shouldAutoSubmit(3, 3));
+    assertTrue(ExamProctorPolicy.shouldAutoSubmit(4, 3));
+  }
+
+  @Test void violationGraceUsesServerTimeAndExpiresAtTheDeadline() {
+    var now = LocalDateTime.of(2026, 8, 20, 15, 0);
+    var deadline = ExamProctorPolicy.violationDeadline(now, 15);
+    assertEquals(now.plusSeconds(15), deadline);
+    assertFalse(ExamProctorPolicy.violationGraceExpired(deadline, deadline.minusNanos(1)));
+    assertTrue(ExamProctorPolicy.violationGraceExpired(deadline, deadline));
   }
 
   @Test void timeoutCanOnlyBeSettledAtOrAfterTheServerDeadline() {

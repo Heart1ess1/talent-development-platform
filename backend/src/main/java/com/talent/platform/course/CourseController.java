@@ -37,6 +37,7 @@ import java.math.BigDecimal;
 import javax.imageio.ImageIO;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -50,6 +51,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -95,13 +97,26 @@ public class CourseController {
 
   public record SessionRequest(
       @NotNull Long courseId,
-      @NotBlank @Size(max = 128) String title,
+      Long sessionTitleId,
+      @Size(max = 128) String title,
+      @Pattern(regexp = "ONLINE|OFFLINE") String deliveryMode,
+      Long trainingLocationId,
+      @Size(max = 512) String meetingUrl,
       @Size(max = 128) String location,
       BigDecimal hours,
       @NotNull LocalDateTime startsAt,
       @NotNull LocalDateTime endsAt,
       @NotNull LocalDateTime checkinStartsAt,
       @NotNull LocalDateTime checkinEndsAt
+  ) {}
+
+  private record SessionDetails(
+      Long sessionTitleId,
+      String title,
+      String deliveryMode,
+      Long trainingLocationId,
+      String location,
+      String meetingUrl
   ) {}
 
   public record CheckinRequest(@NotBlank @Pattern(regexp = "\\d{6}") String code) {}
@@ -321,19 +336,31 @@ public class CourseController {
       args.add(courseId);
     }
     if (!keyword.isBlank()) {
-      where.append(" and (lower(s.title) like ? or lower(c.name) like ? or lower(coalesce(s.location,'')) like ?)");
+      where.append("""
+           and (lower(coalesce(session_title.label,s.title)) like ?
+             or lower(c.name) like ?
+             or lower(coalesce(training_location.label,s.location,s.meeting_url,'')) like ?)
+          """);
       String pattern = "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%";
       args.add(pattern);
       args.add(pattern);
       args.add(pattern);
     }
     String select = """
-        select distinct s.id,s.course_id,s.title,s.location,s.hours,s.starts_at,s.ends_at,
+        select distinct s.id,s.course_id,s.session_title_id,
+          coalesce(session_title.label,s.title) title,
+          s.delivery_mode,s.training_location_id,
+          case when s.delivery_mode='ONLINE' then null else coalesce(training_location.label,s.location) end location,
+          s.meeting_url,s.hours,s.starts_at,s.ends_at,
           s.checkin_starts_at,s.checkin_ends_at,%s c.name course_name,
           (select count(*) from course_enrollment x where x.session_id=s.id) enrollment_count,
           (select count(*) from attendance a where a.session_id=s.id) attendance_count
         from course_session s
         join course c on c.id=s.course_id
+        left join dictionary_item session_title
+          on session_title.id=s.session_title_id and session_title.type_code='SESSION_NAME'
+        left join dictionary_item training_location
+          on training_location.id=s.training_location_id and training_location.type_code='TRAINING_LOCATION'
         """;
     if ("ALL".equals(user.dataScope())) {
       return ApiResponse.ok(db.queryForList(
@@ -364,19 +391,20 @@ public class CourseController {
   @PostMapping("/sessions")
   public ApiResponse<Map<String, Object>> createSession(@Valid @RequestBody SessionRequest request) {
     permissions.require(Permissions.COURSE_MANAGE);
-    validateSession(request);
+    var details = validateSession(request);
     String code;
     do {
       code = String.format("%06d", random.nextInt(1_000_000));
     } while (!db.queryForList("select id from course_session where checkin_code=?", code).isEmpty());
     db.update("""
         insert into course_session(
-          course_id,title,location,hours,starts_at,ends_at,checkin_starts_at,checkin_ends_at,
-          checkin_code,created_by
-        ) values(?,?,?,?,?,?,?,?,?,?)
-        """, request.courseId(), request.title().trim(), trimToNull(request.location()),
-        request.hours(), request.startsAt(), request.endsAt(), request.checkinStartsAt(),
-        request.checkinEndsAt(), code, SecurityUtils.current().id());
+          course_id,session_title_id,title,location,delivery_mode,training_location_id,meeting_url,
+          hours,starts_at,ends_at,checkin_starts_at,checkin_ends_at,checkin_code,created_by
+        ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, request.courseId(), details.sessionTitleId(), details.title(), details.location(),
+        details.deliveryMode(), details.trainingLocationId(), details.meetingUrl(), request.hours(),
+        request.startsAt(), request.endsAt(), request.checkinStartsAt(), request.checkinEndsAt(),
+        code, SecurityUtils.current().id());
     Long id = lastId();
     audit.log("CREATE_SESSION", "SESSION", id, null, request);
     return ApiResponse.ok(Map.of("id", id, "checkinCode", code));
@@ -385,15 +413,17 @@ public class CourseController {
   @PutMapping("/sessions/{id}")
   public ApiResponse<Void> updateSession(@PathVariable Long id, @Valid @RequestBody SessionRequest request) {
     permissions.require(Permissions.COURSE_MANAGE);
-    validateSession(request);
+    var details = validateSession(request);
     var before = one("select * from course_session where id=?", id);
     db.update("""
         update course_session
-        set course_id=?,title=?,location=?,hours=?,starts_at=?,ends_at=?,checkin_starts_at=?,checkin_ends_at=?
+        set course_id=?,session_title_id=?,title=?,location=?,delivery_mode=?,
+          training_location_id=?,meeting_url=?,hours=?,starts_at=?,ends_at=?,
+          checkin_starts_at=?,checkin_ends_at=?
         where id=?
-        """, request.courseId(), request.title().trim(), trimToNull(request.location()),
-        request.hours(), request.startsAt(), request.endsAt(), request.checkinStartsAt(),
-        request.checkinEndsAt(), id);
+        """, request.courseId(), details.sessionTitleId(), details.title(), details.location(),
+        details.deliveryMode(), details.trainingLocationId(), details.meetingUrl(), request.hours(),
+        request.startsAt(), request.endsAt(), request.checkinStartsAt(), request.checkinEndsAt(), id);
     audit.log("UPDATE_SESSION", "SESSION", id, before, request);
     return ApiResponse.ok(null);
   }
@@ -581,7 +611,7 @@ public class CourseController {
     ));
   }
 
-  private void validateSession(SessionRequest request) {
+  private SessionDetails validateSession(SessionRequest request) {
     var course = one("select id,enabled from course where id=?", request.courseId());
     if (!asBoolean(course.get("enabled"))) throw new BusinessException(400, "已停用课程不能创建或调整场次");
     if (!request.endsAt().isAfter(request.startsAt())) {
@@ -592,6 +622,51 @@ public class CourseController {
     }
     if (request.hours() != null && (request.hours().signum() <= 0 || request.hours().compareTo(new BigDecimal("999.9")) > 0)) {
       throw new BusinessException(400, "课程学时必须大于 0");
+    }
+    Long sessionTitleId = request.sessionTitleId();
+    String title = trimToNull(request.title());
+    if (sessionTitleId != null) {
+      title = enabledDictionaryLabel(sessionTitleId, "SESSION_NAME", "场次名称");
+    }
+    if (title == null) throw new BusinessException(400, "请选择场次名称");
+
+    String deliveryMode = trimToNull(request.deliveryMode());
+    deliveryMode = deliveryMode == null ? "OFFLINE" : deliveryMode.toUpperCase(Locale.ROOT);
+    if (!Set.of("ONLINE", "OFFLINE").contains(deliveryMode)) {
+      throw new BusinessException(400, "授课方式仅支持线上或线下");
+    }
+
+    if ("ONLINE".equals(deliveryMode)) {
+      String meetingUrl = trimToNull(request.meetingUrl());
+      if (!isHttpUrl(meetingUrl)) throw new BusinessException(400, "请输入有效的 HTTP(S) 会议链接");
+      return new SessionDetails(sessionTitleId, title, deliveryMode, null, null, meetingUrl);
+    }
+
+    Long trainingLocationId = request.trainingLocationId();
+    String location = trimToNull(request.location());
+    if (trainingLocationId != null) {
+      location = enabledDictionaryLabel(trainingLocationId, "TRAINING_LOCATION", "培训地点");
+    }
+    return new SessionDetails(sessionTitleId, title, deliveryMode, trainingLocationId, location, null);
+  }
+
+  private String enabledDictionaryLabel(Long id, String typeCode, String displayName) {
+    var rows = db.queryForList("""
+        select label from dictionary_item
+        where id=? and type_code=? and enabled=true
+        """, id, typeCode);
+    if (rows.isEmpty()) throw new BusinessException(400, "所选" + displayName + "不存在或已停用");
+    return String.valueOf(rows.get(0).get("label"));
+  }
+
+  private boolean isHttpUrl(String value) {
+    if (value == null) return false;
+    try {
+      URI uri = URI.create(value);
+      return ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+          && uri.getHost() != null;
+    } catch (IllegalArgumentException exception) {
+      return false;
     }
   }
 

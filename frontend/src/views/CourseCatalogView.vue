@@ -125,6 +125,8 @@ function openMaterials(row:Course){
 function openSessions(row?:Course){
   router.push({path:'/courses/sessions',query:row?{courseId:String(row.id)}:undefined})
 }
+
+onMounted(load)
 </script>
 
 <template>

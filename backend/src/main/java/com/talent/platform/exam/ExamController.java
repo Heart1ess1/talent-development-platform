@@ -29,13 +29,14 @@ public class ExamController {
   private static final Set<String> QUESTION_TYPES=Set.of("SINGLE","MULTIPLE","TRUE_FALSE");
   private static final ZoneId EXAM_ZONE=ZoneId.of("Asia/Shanghai");
   public record QuestionBankRequest(@NotBlank @Size(max=128) String name,@Size(max=500) String description,Boolean enabled){}
-  public record QuestionRequest(@NotNull Long bankId,@Pattern(regexp="SINGLE|MULTIPLE|TRUE_FALSE") String type,@NotBlank String stem,JsonNode options,@NotNull JsonNode answer,String explanation,@NotNull @DecimalMin(value="0",inclusive=false) BigDecimal score,List<@NotBlank @Size(max=32) String> tags){}
+  public record QuestionRequest(@NotNull Long bankId,@Pattern(regexp="SINGLE|MULTIPLE|TRUE_FALSE") String type,@NotBlank String stem,JsonNode options,@NotNull JsonNode answer,String explanation,@DecimalMin(value="0",inclusive=false) BigDecimal score,List<@NotBlank @Size(max=32) String> tags){}
   public record PaperQuestion(@NotNull Long questionId,@NotNull @DecimalMin(value="0",inclusive=false) BigDecimal score,@NotNull Integer sortOrder){}
   public record RandomRule(@Pattern(regexp="SINGLE|MULTIPLE|TRUE_FALSE") String type,@Min(0) int count,@NotNull @DecimalMin(value="0",inclusive=false) BigDecimal score,List<@NotBlank @Size(max=32) String> tags,List<Long> bankIds){}
   public record PaperRequest(@NotBlank String name,String description,boolean randomAssembly,boolean dynamicAssembly,boolean randomizeQuestions,boolean randomizeOptions,List<@Valid PaperQuestion> questions,List<@Valid RandomRule> randomRules){}
   public record RowError(int row,String field,String message){} public record ImportResult(int imported,List<RowError> errors){}
-  public record PlanRequest(@NotNull Long paperId,@NotBlank String name,List<Long> batchIds,List<Long> businessUnitIds,@NotNull LocalDateTime startsAt,@NotNull LocalDateTime endsAt,@Min(1) int durationMinutes,@Min(1) int maxAttempts,@NotEmpty List<Long> employeeIds){}
-  public record AnswerRequest(@NotNull Long questionId,JsonNode answer){} public record GradeRequest(@NotNull @DecimalMin("0") BigDecimal score,@Size(max=500) String comment){} public record EventRequest(@NotBlank @Pattern(regexp="BLUR|HIDDEN|EXIT_FULLSCREEN|RECONNECT") String type,@NotBlank @Size(max=64) String eventId,@Size(max=500) String detail){} public record EventResult(int violationCount,int allowedViolations,boolean autoSubmitted,String status){} public record AttemptStatusResult(String status,int violationCount,int allowedViolations,long serverNowEpochMillis,long deadlineEpochMillis){}
+  public record PlanRequest(@NotNull Long paperId,@NotBlank String name,List<Long> batchIds,List<Long> businessUnitIds,@NotNull LocalDateTime startsAt,@NotNull LocalDateTime endsAt,@Min(1) int durationMinutes,@Min(1) int maxAttempts,@Min(1) @Max(20) Integer violationLimit,@Min(5) @Max(300) Integer violationGraceSeconds,@NotEmpty List<Long> employeeIds){}
+  public record StartAttemptRequest(@Pattern(regexp="FULLSCREEN_STRICT|MOBILE_COMPATIBLE") String proctorMode,Boolean fullscreenCapable,@Size(max=255) String clientContext){}
+  public record AnswerRequest(@NotNull Long questionId,JsonNode answer){} public record GradeRequest(@NotNull @DecimalMin("0") BigDecimal score,@Size(max=500) String comment){} public record EventRequest(@NotBlank @Pattern(regexp="BLUR|HIDDEN|EXIT_FULLSCREEN|RECONNECT") String type,@NotBlank @Size(max=64) String eventId,@Size(max=500) String detail){} public record RecoverViolationRequest(@NotBlank @Size(max=64) String eventId){} public record EventResult(int violationCount,int violationLimit,int violationGraceSeconds,Long violationDeadlineEpochMillis,boolean autoSubmitted,String status){} public record AttemptStatusResult(String status,int violationCount,int violationLimit,int violationGraceSeconds,Long violationDeadlineEpochMillis,long serverNowEpochMillis,long deadlineEpochMillis){}
 
   @GetMapping("/question-banks") public ApiResponse<List<Map<String,Object>>> questionBanks(){permissions.require(Permissions.EXAM_MANAGE);return ApiResponse.ok(db.queryForList("""
       select b.id,b.name,b.description,b.enabled,b.created_at,
@@ -135,7 +136,9 @@ public class ExamController {
     if(active==null||active!=ids.size())throw new BusinessException(400,"参考人员中包含不存在或已停用的员工，请重新筛选");
     LocalDate scoreMonth=YearMonth.from(q.startsAt()).atDay(1);
     Long legacyBatchId=batchIds.size()==1?batchIds.iterator().next():null;
-    db.update("insert into exam_plan(paper_id,name,batch_id,starts_at,ends_at,duration_minutes,max_attempts,score_month,created_by) values(?,?,?,?,?,?,?,?,?)",q.paperId(),q.name().trim(),legacyBatchId,q.startsAt(),q.endsAt(),q.durationMinutes(),q.maxAttempts(),scoreMonth,SecurityUtils.current().id());
+    int violationLimit=q.violationLimit()==null?ExamProctorPolicy.DEFAULT_VIOLATION_LIMIT:q.violationLimit();
+    int violationGraceSeconds=q.violationGraceSeconds()==null?ExamProctorPolicy.DEFAULT_VIOLATION_GRACE_SECONDS:q.violationGraceSeconds();
+    db.update("insert into exam_plan(paper_id,name,batch_id,starts_at,ends_at,duration_minutes,max_attempts,violation_limit,violation_grace_seconds,score_month,created_by) values(?,?,?,?,?,?,?,?,?,?,?)",q.paperId(),q.name().trim(),legacyBatchId,q.startsAt(),q.endsAt(),q.durationMinutes(),q.maxAttempts(),violationLimit,violationGraceSeconds,scoreMonth,SecurityUtils.current().id());
     Long id=lastId();
     for(Long batchId:batchIds)db.update("insert into exam_plan_target_batch(plan_id,batch_id) values(?,?)",id,batchId);
     for(Long businessUnitId:businessUnitIds)db.update("insert into exam_plan_target_business_unit(plan_id,business_unit_id) values(?,?)",id,businessUnitId);
@@ -161,12 +164,15 @@ public class ExamController {
   @PostMapping("/plans/{id}/publish") public ApiResponse<Void> publishPlan(@PathVariable Long id){permissions.require(Permissions.EXAM_MANAGE);db.update("update exam_plan set status='PUBLISHED' where id=? and status='DRAFT'",id);audit.log("PUBLISH_EXAM_PLAN","EXAM_PLAN",id,null,null);return ApiResponse.ok(null);}
   @DeleteMapping("/plans/{id}") @Transactional public ApiResponse<Void> deleteDraftPlan(@PathVariable Long id){permissions.require(Permissions.EXAM_MANAGE);Integer draft=db.queryForObject("select count(*) from exam_plan where id=? and status='DRAFT'",Integer.class,id);if(draft==null||draft==0)throw new BusinessException(400,"仅草稿状态的考试计划可以删除");db.update("delete from exam_assignment where plan_id=?",id);db.update("delete from exam_plan_target_batch where plan_id=?",id);db.update("delete from exam_plan_target_business_unit where plan_id=?",id);db.update("delete from exam_plan_target_station where plan_id=?",id);db.update("delete from exam_plan where id=?",id);audit.log("DELETE_EXAM_PLAN","EXAM_PLAN",id,null,null);return ApiResponse.ok(null);}
   @PostMapping("/plans/{id}/assign") public ApiResponse<Integer> assign(@PathVariable Long id,@RequestBody Map<String,List<Long>> body){permissions.require(Permissions.EXAM_MANAGE);int n=0;for(Long eid:new LinkedHashSet<>(body.getOrDefault("employeeIds",List.of())))n+=db.update("insert ignore into exam_assignment(plan_id,employee_id,assigned_by) values(?,?,?)",id,eid,SecurityUtils.current().id());audit.log("ASSIGN_EXAM","EXAM_PLAN",id,null,Map.of("count",n));return ApiResponse.ok(n);}
-  @GetMapping("/plans") public ApiResponse<List<Map<String,Object>>> plans(){var u=SecurityUtils.current();if("ALL".equals(u.dataScope()))return ApiResponse.ok(db.queryForList("select p.*,ep.name paper_name,(select count(*) from exam_assignment a where a.plan_id=p.id) assigned_count,coalesce((select group_concat(b.name order by b.name separator '、') from exam_plan_target_batch x join talent_batch b on b.id=x.batch_id where x.plan_id=p.id),'全部') target_batch_names,coalesce((select group_concat(bu.name order by bu.name separator '、') from exam_plan_target_business_unit x join business_unit bu on bu.id=x.business_unit_id where x.plan_id=p.id),'全部') target_business_unit_names,case when p.status='DRAFT' then 'DRAFT' when p.ends_at<now() then 'ENDED' when p.starts_at>now() then 'UPCOMING' else 'OPEN' end plan_phase from exam_plan p join exam_paper ep on ep.id=p.paper_id order by p.starts_at desc"));var f=permissions.employeeFilter("e");String latest="(select x.status from exam_attempt x where x.plan_id=p.id and x.employee_id=e.id order by x.attempt_no desc limit 1)";String sql="select p.id,p.name,p.starts_at,p.ends_at,p.duration_minutes,p.max_attempts,p.status,ep.name paper_name,case when p.ends_at<now() then 'ENDED' when p.starts_at>now() then 'UPCOMING' else 'OPEN' end plan_phase,(select count(*) from exam_attempt x where x.plan_id=p.id and x.employee_id=e.id) attempt_count,case when exists(select 1 from exam_attempt x where x.plan_id=p.id and x.employee_id=e.id and x.status='IN_PROGRESS' and x.deadline_at>=now()) then 'IN_PROGRESS' when "+latest+"='PENDING_REVIEW' then 'PENDING_REVIEW' when "+latest+"='GRADED' then 'COMPLETED' when p.ends_at<now() and not exists(select 1 from exam_attempt x where x.plan_id=p.id and x.employee_id=e.id) then 'ABSENT' when p.starts_at>now() then 'NOT_STARTED' else 'READY' end participation_status from exam_plan p join exam_paper ep on ep.id=p.paper_id join exam_assignment a on a.plan_id=p.id join employee e on e.id=a.employee_id where p.status='PUBLISHED'"+f.sql()+" order by p.starts_at desc";return ApiResponse.ok(db.queryForList(sql,f.args().toArray()));}
+  @GetMapping("/plans") public ApiResponse<List<Map<String,Object>>> plans(){var u=SecurityUtils.current();if("ALL".equals(u.dataScope()))return ApiResponse.ok(db.queryForList("select p.*,ep.name paper_name,(select count(*) from exam_assignment a where a.plan_id=p.id) assigned_count,coalesce((select group_concat(b.name order by b.name separator '、') from exam_plan_target_batch x join talent_batch b on b.id=x.batch_id where x.plan_id=p.id),'全部') target_batch_names,coalesce((select group_concat(bu.name order by bu.name separator '、') from exam_plan_target_business_unit x join business_unit bu on bu.id=x.business_unit_id where x.plan_id=p.id),'全部') target_business_unit_names,case when p.status='DRAFT' then 'DRAFT' when p.ends_at<now() then 'ENDED' when p.starts_at>now() then 'UPCOMING' else 'OPEN' end plan_phase from exam_plan p join exam_paper ep on ep.id=p.paper_id order by p.starts_at desc"));var f=permissions.employeeFilter("e");String latest="(select x.status from exam_attempt x where x.plan_id=p.id and x.employee_id=e.id order by x.attempt_no desc limit 1)";String sql="select p.id,p.name,p.starts_at,p.ends_at,p.duration_minutes,p.max_attempts,p.violation_limit,p.violation_grace_seconds,p.status,ep.name paper_name,case when p.ends_at<now() then 'ENDED' when p.starts_at>now() then 'UPCOMING' else 'OPEN' end plan_phase,(select count(*) from exam_attempt x where x.plan_id=p.id and x.employee_id=e.id) attempt_count,case when exists(select 1 from exam_attempt x where x.plan_id=p.id and x.employee_id=e.id and x.status='IN_PROGRESS' and x.deadline_at>=now()) then 'IN_PROGRESS' when "+latest+"='PENDING_REVIEW' then 'PENDING_REVIEW' when "+latest+"='GRADED' then 'COMPLETED' when p.ends_at<now() and not exists(select 1 from exam_attempt x where x.plan_id=p.id and x.employee_id=e.id) then 'ABSENT' when p.starts_at>now() then 'NOT_STARTED' else 'READY' end participation_status from exam_plan p join exam_paper ep on ep.id=p.paper_id join exam_assignment a on a.plan_id=p.id join employee e on e.id=a.employee_id where p.status='PUBLISHED'"+f.sql()+" order by p.starts_at desc";return ApiResponse.ok(db.queryForList(sql,f.args().toArray()));}
   @PostMapping("/plans/{id}/attempts")
   @Transactional
-  public ApiResponse<Map<String,Object>> start(@PathVariable Long id) throws Exception {
+  public ApiResponse<Map<String,Object>> start(@PathVariable Long id,@Valid @RequestBody(required=false) StartAttemptRequest request) throws Exception {
     var user = SecurityUtils.current();
     if (!"EMPLOYEE".equals(user.role())) throw new BusinessException(403, "仅员工可参加考试");
+    String requestedMode = ExamProctorPolicy.normalizeMode(request == null ? null : request.proctorMode());
+    boolean fullscreenCapable = request == null || !Boolean.FALSE.equals(request.fullscreenCapable());
+    String clientContext = request == null ? null : trim(request.clientContext());
     Long employeeId = db.queryForObject("select id from employee where user_id=?", Long.class, user.id());
     var plans = db.queryForList("""
         select p.*,ep.id paper_id,ep.dynamic_assembly
@@ -180,10 +186,16 @@ public class ExamController {
     if (db.queryForObject("select count(*) from exam_assignment where plan_id=? and employee_id=?",
             Integer.class, id, employeeId) == 0)
       throw new BusinessException(403, "未被安排参加该考试");
-    var active = db.queryForList("select id from exam_attempt where plan_id=? and employee_id=? and status='IN_PROGRESS' and deadline_at>now() order by attempt_no desc limit 1",
+    var active = db.queryForList("select id,proctor_mode from exam_attempt where plan_id=? and employee_id=? and status='IN_PROGRESS' and deadline_at>now() order by attempt_no desc limit 1",
             id, employeeId);
-    if (!active.isEmpty())
-      return ApiResponse.ok(attemptPayload(((Number)active.get(0).get("id")).longValue(), true));
+    if (!active.isEmpty()) {
+      var current = active.get(0);
+      Long attemptId = ((Number)current.get("id")).longValue();
+      String resolvedMode = ExamProctorPolicy.resolveAttemptMode(String.valueOf(current.get("proctor_mode")), requestedMode);
+      db.update("update exam_attempt set proctor_mode=?,fullscreen_capable=?,client_context=? where id=?",
+          resolvedMode, fullscreenCapable, clientContext, attemptId);
+      return ApiResponse.ok(attemptPayload(attemptId, true));
+    }
 
     Integer attemptNo = db.queryForObject("select count(*)+1 from exam_attempt where plan_id=? and employee_id=?",
             Integer.class, id, employeeId);
@@ -191,20 +203,62 @@ public class ExamController {
       throw new BusinessException(400, "考试次数已用完");
     LocalDateTime deadline = now.plusMinutes(((Number)plan.get("duration_minutes")).longValue());
     if (deadline.isAfter(to)) deadline = to;
-    db.update("insert into exam_attempt(plan_id,employee_id,attempt_no,deadline_at) values(?,?,?,?)",
-            id, employeeId, attemptNo, deadline);
+    db.update("insert into exam_attempt(plan_id,employee_id,attempt_no,deadline_at,proctor_mode,fullscreen_capable,client_context) values(?,?,?,?,?,?,?)",
+            id, employeeId, attemptNo, deadline, requestedMode, fullscreenCapable, clientContext);
     Long attemptId = lastId();
     if (truthy(plan.get("dynamic_assembly")))
       assembleDynamicAttempt(attemptId, ((Number)plan.get("paper_id")).longValue(), employeeId);
     return ApiResponse.ok(attemptPayload(attemptId, true));
   }
   @GetMapping("/attempts/{id}") public ApiResponse<Map<String,Object>> attempt(@PathVariable Long id){assertAttempt(id);return ApiResponse.ok(attemptPayload(id,true));}
-  @GetMapping("/attempts/{id}/status") public ApiResponse<AttemptStatusResult> attemptStatus(@PathVariable Long id){assertOwnAttempt(id);return ApiResponse.ok(attemptStatusPayload(id));}
+  @GetMapping("/attempts/{id}/status")
+  @Transactional
+  public ApiResponse<AttemptStatusResult> attemptStatus(@PathVariable Long id)throws Exception{
+    assertOwnAttempt(id);
+    var attempt=db.queryForMap("select a.status,a.deadline_at,a.violation_deadline_at,p.violation_limit,p.violation_grace_seconds from exam_attempt a join exam_plan p on p.id=a.plan_id where a.id=? for update",id);
+    String status=String.valueOf(attempt.get("status"));LocalDateTime now=LocalDateTime.now(),violationDeadline=nullableTime(attempt,"violation_deadline_at");
+    if("IN_PROGRESS".equals(status)&&ExamProctorPolicy.deadlineReached(time(attempt,"deadline_at"),now)){var result=scoring.score(id,"TIMEOUT");status=String.valueOf(result.get("status"));violationDeadline=null;audit.log("AUTO_SUBMIT_EXAM_TIMEOUT","EXAM_ATTEMPT",id,null,result);}
+    else if("IN_PROGRESS".equals(status)&&ExamProctorPolicy.violationGraceExpired(violationDeadline,now)){var result=scoring.score(id,"ANTI_CHEAT_TIMEOUT");status=String.valueOf(result.get("status"));violationDeadline=null;audit.log("AUTO_SUBMIT_EXAM_VIOLATION_TIMEOUT","EXAM_ATTEMPT",id,null,result);}
+    return ApiResponse.ok(attemptStatusResult(id,status,violationDeadline,attempt));
+  }
   @PutMapping("/attempts/{id}/answers") public ApiResponse<Void> save(@PathVariable Long id,@RequestBody AnswerRequest q)throws Exception{assertOwnActiveAttempt(id);if(attemptQuestionScore(id,q.questionId())==null)throw new BusinessException(400,"题目不属于该试卷");db.update("insert into exam_answer(attempt_id,question_id,answer_json) values(?,?,?) on duplicate key update answer_json=values(answer_json),saved_at=now()",id,q.questionId(),json(q.answer()));return ApiResponse.ok(null);}
-  @PostMapping("/attempts/{id}/events") @Transactional public ApiResponse<EventResult> event(@PathVariable Long id,@Valid @RequestBody EventRequest q)throws Exception{assertOwnAttempt(id);var attempt=db.queryForMap("select status,deadline_at from exam_attempt where id=? for update",id);String status=String.valueOf(attempt.get("status"));int count=violationCount(id);if(!"IN_PROGRESS".equals(status))return ApiResponse.ok(new EventResult(count,ExamProctorPolicy.ALLOWED_VIOLATIONS,true,status));if(ExamProctorPolicy.deadlineReached(time(attempt,"deadline_at"),LocalDateTime.now())){var result=scoring.score(id,"TIMEOUT");status=String.valueOf(result.get("status"));audit.log("AUTO_SUBMIT_EXAM_TIMEOUT","EXAM_ATTEMPT",id,null,result);return ApiResponse.ok(new EventResult(count,ExamProctorPolicy.ALLOWED_VIOLATIONS,true,status));}db.update("insert ignore into exam_proctor_event(attempt_id,event_type,detail,violation_key) values(?,?,?,?)",id,q.type(),q.detail(),q.eventId());count=violationCount(id);boolean autoSubmitted=ExamProctorPolicy.shouldAutoSubmit(count);if(autoSubmitted){var result=scoring.score(id,"ANTI_CHEAT");status=String.valueOf(result.get("status"));audit.log("AUTO_SUBMIT_EXAM_ANTI_CHEAT","EXAM_ATTEMPT",id,null,Map.of("violationCount",count,"lastEvent",q));}return ApiResponse.ok(new EventResult(count,ExamProctorPolicy.ALLOWED_VIOLATIONS,autoSubmitted,status));}
+  @PostMapping("/attempts/{id}/events")
+  @Transactional
+  public ApiResponse<EventResult> event(@PathVariable Long id,@Valid @RequestBody EventRequest q)throws Exception{
+    assertOwnAttempt(id);
+    var attempt=db.queryForMap("select a.status,a.deadline_at,a.proctor_mode,a.active_violation_key,a.violation_deadline_at,p.violation_limit,p.violation_grace_seconds from exam_attempt a join exam_plan p on p.id=a.plan_id where a.id=? for update",id);
+    String status=String.valueOf(attempt.get("status"));
+    int count=violationCount(id),limit=intValue(attempt,"violation_limit",ExamProctorPolicy.DEFAULT_VIOLATION_LIMIT),graceSeconds=intValue(attempt,"violation_grace_seconds",ExamProctorPolicy.DEFAULT_VIOLATION_GRACE_SECONDS);
+    LocalDateTime now=LocalDateTime.now(),violationDeadline=nullableTime(attempt,"violation_deadline_at");
+    if(!"IN_PROGRESS".equals(status))return ApiResponse.ok(eventResult(count,limit,graceSeconds,violationDeadline,true,status));
+    if(ExamProctorPolicy.deadlineReached(time(attempt,"deadline_at"),now))return ApiResponse.ok(autoSubmitEvent(id,count,limit,graceSeconds,"TIMEOUT","AUTO_SUBMIT_EXAM_TIMEOUT",null));
+    if(ExamProctorPolicy.violationGraceExpired(violationDeadline,now))return ApiResponse.ok(autoSubmitEvent(id,count,limit,graceSeconds,"ANTI_CHEAT_TIMEOUT","AUTO_SUBMIT_EXAM_VIOLATION_TIMEOUT",null));
+    int inserted=db.update("insert ignore into exam_proctor_event(attempt_id,event_type,detail,violation_key) values(?,?,?,?)",id,q.type(),q.detail(),q.eventId());
+    count=violationCount(id);
+    if(ExamProctorPolicy.shouldAutoSubmit(count,limit))return ApiResponse.ok(autoSubmitEvent(id,count,limit,graceSeconds,"ANTI_CHEAT","AUTO_SUBMIT_EXAM_ANTI_CHEAT",Map.of("violationCount",count,"lastEvent",q)));
+    if(inserted>0&&ExamProctorPolicy.isViolation(String.valueOf(attempt.get("proctor_mode")),q.type())&&attempt.get("active_violation_key")==null){
+      violationDeadline=ExamProctorPolicy.violationDeadline(now,graceSeconds);
+      db.update("update exam_attempt set active_violation_key=?,violation_deadline_at=? where id=? and active_violation_key is null",q.eventId(),violationDeadline,id);
+    }
+    return ApiResponse.ok(eventResult(count,limit,graceSeconds,violationDeadline,false,status));
+  }
+  @PostMapping("/attempts/{id}/violations/recover")
+  @Transactional
+  public ApiResponse<AttemptStatusResult> recoverViolation(@PathVariable Long id,@Valid @RequestBody RecoverViolationRequest q)throws Exception{
+    assertOwnAttempt(id);
+    var attempt=db.queryForMap("select a.status,a.deadline_at,a.active_violation_key,a.violation_deadline_at,p.violation_limit,p.violation_grace_seconds from exam_attempt a join exam_plan p on p.id=a.plan_id where a.id=? for update",id);
+    String status=String.valueOf(attempt.get("status"));
+    LocalDateTime deadline=nullableTime(attempt,"violation_deadline_at"),now=LocalDateTime.now();
+    if("IN_PROGRESS".equals(status)&&ExamProctorPolicy.violationGraceExpired(deadline,now)){
+      var result=scoring.score(id,"ANTI_CHEAT_TIMEOUT");status=String.valueOf(result.get("status"));audit.log("AUTO_SUBMIT_EXAM_VIOLATION_TIMEOUT","EXAM_ATTEMPT",id,null,result);
+    }else if("IN_PROGRESS".equals(status)&&Objects.equals(String.valueOf(attempt.get("active_violation_key")),q.eventId())){
+      db.update("update exam_attempt set active_violation_key=null,violation_deadline_at=null where id=?",id);deadline=null;
+    }
+    return ApiResponse.ok(attemptStatusResult(id,status,deadline));
+  }
   @PostMapping("/attempts/{id}/timeout") @Transactional public ApiResponse<Map<String,Object>> timeout(@PathVariable Long id)throws Exception{assertOwnAttempt(id);var attempt=db.queryForMap("select status,deadline_at from exam_attempt where id=? for update",id);String status=String.valueOf(attempt.get("status"));if(!"IN_PROGRESS".equals(status))return ApiResponse.ok(Map.of("status",status));if(!ExamProctorPolicy.deadlineReached(time(attempt,"deadline_at"),LocalDateTime.now()))throw new BusinessException(400,"考试尚未到达截止时间");var result=scoring.score(id,"TIMEOUT");audit.log("AUTO_SUBMIT_EXAM_TIMEOUT","EXAM_ATTEMPT",id,null,result);return ApiResponse.ok(result);}
   @PostMapping("/attempts/{id}/submit") @Transactional public ApiResponse<Map<String,Object>> submit(@PathVariable Long id)throws Exception{assertOwnAttempt(id);var attempt=db.queryForMap("select a.status,a.deadline_at,p.ends_at from exam_attempt a join exam_plan p on p.id=a.plan_id where a.id=? for update",id);String status=String.valueOf(attempt.get("status"));LocalDateTime availableAt=time(attempt,"ends_at");var response=new LinkedHashMap<String,Object>();if(!"IN_PROGRESS".equals(status)){response.put("status",status);response.put("scoreAvailableAt",availableAt);response.put("alreadySubmitted",true);return ApiResponse.ok(response);}boolean timedOut=ExamProctorPolicy.deadlineReached(time(attempt,"deadline_at"),LocalDateTime.now());var result=scoring.score(id,timedOut?"TIMEOUT":"MANUAL");audit.log(timedOut?"AUTO_SUBMIT_EXAM_TIMEOUT":"SUBMIT_EXAM","EXAM_ATTEMPT",id,null,result);response.put("status",result.get("status"));response.put("scoreAvailableAt",availableAt);response.put("autoSubmitted",timedOut);return ApiResponse.ok(response);}
-  @GetMapping("/review") public ApiResponse<List<Map<String,Object>>> reviewQueue(){permissions.require(Permissions.EXAM_MANAGE);var f=permissions.employeeFilter("e");return ApiResponse.ok(db.queryForList("select a.id,a.plan_id,a.status,a.objective_score,a.total_score,a.published,a.started_at,a.submitted_at,e.name employee_name,p.name exam_name,(select count(*) from exam_proctor_event x where x.attempt_id=a.id) event_count from exam_attempt a join employee e on e.id=a.employee_id join exam_plan p on p.id=a.plan_id where a.status in ('PENDING_REVIEW','GRADED')"+f.sql()+" order by a.submitted_at",f.args().toArray()));}
+  @GetMapping("/review") public ApiResponse<List<Map<String,Object>>> reviewQueue(){permissions.require(Permissions.EXAM_MANAGE);var f=permissions.employeeFilter("e");return ApiResponse.ok(db.queryForList("select a.id,a.plan_id,a.status,a.objective_score,a.total_score,a.published,a.proctor_mode,a.started_at,a.submitted_at,e.name employee_name,p.name exam_name,(select count(*) from exam_proctor_event x where x.attempt_id=a.id and (x.event_type='HIDDEN' or (a.proctor_mode='FULLSCREEN_STRICT' and x.event_type in ('BLUR','EXIT_FULLSCREEN')))) event_count from exam_attempt a join employee e on e.id=a.employee_id join exam_plan p on p.id=a.plan_id where a.status in ('PENDING_REVIEW','GRADED')"+f.sql()+" order by a.submitted_at",f.args().toArray()));}
   @PutMapping("/attempts/{attemptId}/questions/{questionId}/grade")
   public ApiResponse<Void> grade(@PathVariable Long attemptId,@PathVariable Long questionId,@Valid @RequestBody GradeRequest q){
     permissions.require(Permissions.EXAM_MANAGE);
@@ -236,9 +290,9 @@ public class ExamController {
   }
   @PostMapping("/attempts/{id}/publish") public ApiResponse<Void> publishResult(@PathVariable Long id){permissions.require(Permissions.EXAM_MANAGE);throw new BusinessException(400,"成绩将在整场考试结束后由系统自动发布，无需人工审批");}
   @PostMapping("/results/manage/plans/{planId}/publish") public ApiResponse<Integer> publishPlanResults(@PathVariable Long planId){permissions.require(Permissions.EXAM_MANAGE);throw new BusinessException(400,"成绩将在整场考试结束后由系统自动发布，无需人工审批");}
-  @GetMapping("/results/manage") public ApiResponse<List<Map<String,Object>>> managedResults(){permissions.require(Permissions.EXAM_MANAGE);return ApiResponse.ok(db.queryForList("select a.id,a.attempt_no,a.total_score,a.submitted_at,a.published,e.id employee_id,e.name employee_name,p.name exam_name,p.score_month,(select count(*) from exam_proctor_event x where x.attempt_id=a.id and x.event_type in ('BLUR','HIDDEN','EXIT_FULLSCREEN')) event_count from exam_attempt a join employee e on e.id=a.employee_id join exam_plan p on p.id=a.plan_id where a.status='GRADED' order by a.submitted_at desc"));}
+  @GetMapping("/results/manage") public ApiResponse<List<Map<String,Object>>> managedResults(){permissions.require(Permissions.EXAM_MANAGE);return ApiResponse.ok(db.queryForList("select a.id,a.attempt_no,a.total_score,a.submitted_at,a.published,a.proctor_mode,e.id employee_id,e.name employee_name,p.name exam_name,p.score_month,(select count(*) from exam_proctor_event x where x.attempt_id=a.id and (x.event_type='HIDDEN' or (a.proctor_mode='FULLSCREEN_STRICT' and x.event_type in ('BLUR','EXIT_FULLSCREEN')))) event_count from exam_attempt a join employee e on e.id=a.employee_id join exam_plan p on p.id=a.plan_id where a.status='GRADED' order by a.submitted_at desc"));}
   @GetMapping("/results/manage/plans") public ApiResponse<List<Map<String,Object>>> managedResultPlans(){permissions.require(Permissions.EXAM_MANAGE);String base="select p.id,p.name,ep.name paper_name,p.starts_at,p.ends_at,p.status,p.score_month,(select count(*) from exam_assignment ea where ea.plan_id=p.id) assigned_count,(select count(distinct a.employee_id) from exam_attempt a where a.plan_id=p.id) participant_count,(select count(*) from exam_assignment ea where ea.plan_id=p.id and exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id and a.status='GRADED')) completed_count,(select count(*) from exam_assignment ea where ea.plan_id=p.id and p.ends_at<now() and not exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id)) absent_count,(select count(*) from exam_assignment ea where ea.plan_id=p.id and exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id and a.status='GRADED' and a.published=true)) published_count,case when p.ends_at<now() then 'ENDED' when p.starts_at>now() then 'UPCOMING' else 'OPEN' end plan_phase from exam_plan p join exam_paper ep on ep.id=p.paper_id where p.status='PUBLISHED'";String sql="select x.*,(x.assigned_count-x.completed_count-x.absent_count) incomplete_count,case when x.completed_count=0 then 'NOT_READY' when x.published_count=0 then 'UNPUBLISHED' when x.published_count<x.completed_count then 'PARTIAL' else 'PUBLISHED' end publication_status from ("+base+") x order by x.starts_at desc";return ApiResponse.ok(db.queryForList(sql));}
-  @GetMapping("/results/manage/plans/{planId}") public ApiResponse<List<Map<String,Object>>> managedPlanResults(@PathVariable Long planId){permissions.require(Permissions.EXAM_MANAGE);Integer exists=db.queryForObject("select count(*) from exam_plan where id=?",Integer.class,planId);if(exists==0)throw new BusinessException(404,"考试计划不存在");String sql="select e.id employee_id,e.employee_no,e.name employee_name,e.class_id,cls.label class_name,a.id,a.attempt_no,a.status attempt_status,a.started_at,a.submitted_at,a.total_score,a.published,(select count(*) from exam_proctor_event x where x.attempt_id=a.id and x.event_type in ('BLUR','HIDDEN','EXIT_FULLSCREEN')) event_count,case when a.status='GRADED' then 'COMPLETED' when p.ends_at<now() and a.id is null then 'ABSENT' when a.status='IN_PROGRESS' then 'IN_PROGRESS' when a.id is null then 'NOT_STARTED' else 'INCOMPLETE' end participation_status from exam_assignment ea join employee e on e.id=ea.employee_id left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS' join exam_plan p on p.id=ea.plan_id left join exam_attempt a on a.id=(select aa.id from exam_attempt aa where aa.plan_id=ea.plan_id and aa.employee_id=ea.employee_id order by (aa.status='GRADED') desc,aa.attempt_no desc limit 1) where ea.plan_id=? order by e.employee_no,e.id";return ApiResponse.ok(db.queryForList(sql,planId));}
+  @GetMapping("/results/manage/plans/{planId}") public ApiResponse<List<Map<String,Object>>> managedPlanResults(@PathVariable Long planId){permissions.require(Permissions.EXAM_MANAGE);Integer exists=db.queryForObject("select count(*) from exam_plan where id=?",Integer.class,planId);if(exists==0)throw new BusinessException(404,"考试计划不存在");String sql="select e.id employee_id,e.employee_no,e.name employee_name,e.class_id,cls.label class_name,a.id,a.attempt_no,a.status attempt_status,a.proctor_mode,a.started_at,a.submitted_at,a.total_score,a.published,(select count(*) from exam_proctor_event x where x.attempt_id=a.id and (x.event_type='HIDDEN' or (a.proctor_mode='FULLSCREEN_STRICT' and x.event_type in ('BLUR','EXIT_FULLSCREEN')))) event_count,case when a.status='GRADED' then 'COMPLETED' when p.ends_at<now() and a.id is null then 'ABSENT' when a.status='IN_PROGRESS' then 'IN_PROGRESS' when a.id is null then 'NOT_STARTED' else 'INCOMPLETE' end participation_status from exam_assignment ea join employee e on e.id=ea.employee_id left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS' join exam_plan p on p.id=ea.plan_id left join exam_attempt a on a.id=(select aa.id from exam_attempt aa where aa.plan_id=ea.plan_id and aa.employee_id=ea.employee_id order by (aa.status='GRADED') desc,aa.attempt_no desc limit 1) where ea.plan_id=? order by e.employee_no,e.id";return ApiResponse.ok(db.queryForList(sql,planId));}
   @GetMapping("/results") public ApiResponse<List<Map<String,Object>>> results(@RequestParam(required=false)Long employeeId){if(employeeId!=null)permissions.requireEmployee(employeeId);var f=permissions.employeeFilter("e");String employeeWhere=employeeId==null?"":" and e.id=?";String published="select a.id,a.attempt_no,a.total_score,a.submitted_at,e.id employee_id,e.name employee_name,p.name exam_name,p.score_month,'COMPLETED' result_status from exam_attempt a join employee e on e.id=a.employee_id join exam_plan p on p.id=a.plan_id where a.published=true"+f.sql()+employeeWhere;String absent="select null id,0 attempt_no,cast(0 as decimal(5,2)) total_score,null submitted_at,e.id employee_id,e.name employee_name,p.name exam_name,p.score_month,'ABSENT' result_status from exam_assignment ea join employee e on e.id=ea.employee_id join exam_plan p on p.id=ea.plan_id where p.status='PUBLISHED' and p.ends_at<now() and not exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=e.id)"+f.sql()+employeeWhere;var args=new ArrayList<Object>();args.addAll(f.args());if(employeeId!=null)args.add(employeeId);args.addAll(f.args());if(employeeId!=null)args.add(employeeId);return ApiResponse.ok(db.queryForList("select * from ("+published+" union all "+absent+") exam_result order by score_month desc,exam_name",args.toArray()));}
 
   @GetMapping("/results/export")
@@ -250,7 +304,7 @@ public class ExamController {
     var scope = permissions.employeeFilter("e");
     StringBuilder sql = new StringBuilder("""
         select e.name employee_name,coalesce(e.major,'') major,p.name exam_name,p.score_month,
-               a.attempt_no,a.objective_score,a.subjective_score,a.total_score,a.status,a.submitted_at
+               a.attempt_no,a.objective_score,a.subjective_score,a.total_score,a.status,a.proctor_mode,a.submitted_at
         from exam_attempt a
         join employee e on e.id=a.employee_id
         join exam_plan p on p.id=a.plan_id
@@ -289,6 +343,7 @@ public class ExamController {
       row.setSubjectiveScore(defaultScore(rs.getBigDecimal("subjective_score")));
       row.setTotalScore(defaultScore(rs.getBigDecimal("total_score")));
       row.setStatus("GRADED".equals(rs.getString("status")) ? "已阅卷" : rs.getString("status"));
+      row.setProctorMode(ExamProctorPolicy.MOBILE_COMPATIBLE.equals(rs.getString("proctor_mode")) ? "移动端兼容" : "严格全屏");
       var submitted = rs.getTimestamp("submitted_at");
       row.setSubmittedAt(submitted == null ? "" : submitted.toLocalDateTime().toString());
       return row;
@@ -302,7 +357,8 @@ public class ExamController {
   private Map<String,Object> attemptPayload(Long id,boolean includeQuestions){
     var attempt = new LinkedHashMap<>(db.queryForMap("""
         select a.id,a.plan_id,a.attempt_no,a.status,a.started_at,a.deadline_at,
-               a.objective_score,a.total_score,a.published,p.name exam_name,
+               a.proctor_mode,a.fullscreen_capable,a.client_context,a.active_violation_key,a.violation_deadline_at,
+               a.objective_score,a.total_score,a.published,p.name exam_name,p.violation_limit,p.violation_grace_seconds,
                ep.randomize_questions,ep.randomize_options,ep.dynamic_assembly
         from exam_attempt a
         join exam_plan p on p.id=a.plan_id
@@ -310,7 +366,9 @@ public class ExamController {
         where a.id=?
         """,id));
     attempt.put("violation_count",violationCount(id));
-    attempt.put("allowed_violations",ExamProctorPolicy.ALLOWED_VIOLATIONS);
+    attempt.put("violation_limit",intValue(attempt,"violation_limit",ExamProctorPolicy.DEFAULT_VIOLATION_LIMIT));
+    attempt.put("violation_grace_seconds",intValue(attempt,"violation_grace_seconds",ExamProctorPolicy.DEFAULT_VIOLATION_GRACE_SECONDS));
+    attempt.put("violation_deadline_epoch_ms",epochMillis(nullableTime(attempt,"violation_deadline_at")));
     attempt.put("server_now_epoch_ms",Instant.now().toEpochMilli());
     attempt.put("deadline_epoch_ms",time(attempt,"deadline_at").atZone(EXAM_ZONE).toInstant().toEpochMilli());
     if(!includeQuestions)return attempt;
@@ -371,8 +429,14 @@ public class ExamController {
   static boolean shouldHideScores(boolean canManage,Object published){
     return !canManage&&!truthy(published);
   }
-  private int violationCount(Long attemptId){return db.queryForObject("select count(*) from exam_proctor_event where attempt_id=? and event_type in ('BLUR','HIDDEN','EXIT_FULLSCREEN')",Integer.class,attemptId);}
-  private AttemptStatusResult attemptStatusPayload(Long id){var attempt=db.queryForMap("select status,deadline_at from exam_attempt where id=?",id);return new AttemptStatusResult(String.valueOf(attempt.get("status")),violationCount(id),ExamProctorPolicy.ALLOWED_VIOLATIONS,Instant.now().toEpochMilli(),time(attempt,"deadline_at").atZone(EXAM_ZONE).toInstant().toEpochMilli());}
+  private int violationCount(Long attemptId){return db.queryForObject("select count(*) from exam_proctor_event x join exam_attempt a on a.id=x.attempt_id where x.attempt_id=? and (x.event_type='HIDDEN' or (a.proctor_mode='FULLSCREEN_STRICT' and x.event_type in ('BLUR','EXIT_FULLSCREEN')))",Integer.class,attemptId);}
+  private AttemptStatusResult attemptStatusResult(Long id,String status,LocalDateTime violationDeadline){var attempt=db.queryForMap("select a.deadline_at,p.violation_limit,p.violation_grace_seconds from exam_attempt a join exam_plan p on p.id=a.plan_id where a.id=?",id);return attemptStatusResult(id,status,violationDeadline,attempt);}
+  private AttemptStatusResult attemptStatusResult(Long id,String status,LocalDateTime violationDeadline,Map<String,Object> attempt){return new AttemptStatusResult(status,violationCount(id),intValue(attempt,"violation_limit",ExamProctorPolicy.DEFAULT_VIOLATION_LIMIT),intValue(attempt,"violation_grace_seconds",ExamProctorPolicy.DEFAULT_VIOLATION_GRACE_SECONDS),epochMillis(violationDeadline),Instant.now().toEpochMilli(),time(attempt,"deadline_at").atZone(EXAM_ZONE).toInstant().toEpochMilli());}
+  private EventResult eventResult(int count,int limit,int graceSeconds,LocalDateTime deadline,boolean autoSubmitted,String status){return new EventResult(count,limit,graceSeconds,epochMillis(deadline),autoSubmitted,status);}
+  private EventResult autoSubmitEvent(Long id,int count,int limit,int graceSeconds,String reason,String action,Map<String,Object> details)throws Exception{var result=scoring.score(id,reason);audit.log(action,"EXAM_ATTEMPT",id,null,details==null?result:details);return eventResult(count,limit,graceSeconds,null,true,String.valueOf(result.get("status")));}
+  private int intValue(Map<String,Object> values,String key,int fallback){Object raw=values.get(key);return raw instanceof Number number?number.intValue():fallback;}
+  private LocalDateTime nullableTime(Map<String,Object> values,String key){Object raw=values.get(key);return raw==null?null:time(values,key);}
+  private Long epochMillis(LocalDateTime value){return value==null?null:value.atZone(EXAM_ZONE).toInstant().toEpochMilli();}
   private List<Long> parseIds(String raw,String field){if(raw==null||raw.isBlank())return List.of();try{return Arrays.stream(raw.split(",")).map(String::trim).filter(x->!x.isEmpty()).map(Long::valueOf).distinct().toList();}catch(NumberFormatException e){throw new BusinessException(400,field+"筛选条件无效");}}
   private void validateEnabledIds(String table,Set<Long> ids,String field){if(ids.isEmpty())return;String marks=String.join(",",Collections.nCopies(ids.size(),"?"));Integer count=db.queryForObject("select count(*) from "+table+" where enabled=true and id in ("+marks+")",Integer.class,ids.toArray());if(count==null||count!=ids.size())throw new BusinessException(400,field+"中包含不存在或已停用的选项");}
   private void assertAttempt(Long id){if(SecurityUtils.current().can(Permissions.EXAM_MANAGE))return;if(!"EMPLOYEE".equals(SecurityUtils.current().role()))throw new BusinessException(403,"仅考试管理员或考生本人可查看答卷");var row=db.queryForMap("select employee_id from exam_attempt where id=?",id);permissions.requireEmployee(((Number)row.get("employee_id")).longValue());}
@@ -504,7 +568,7 @@ public class ExamController {
     String type=normalizeType(row.getType());
     String stem=trim(row.getStem());
     if(stem==null)throw new IllegalArgumentException("题干不能为空");
-    if(row.getScore()==null||row.getScore().compareTo(BigDecimal.ZERO)<=0)throw new IllegalArgumentException("默认分值必须大于0");
+    if(row.getScore()!=null&&row.getScore().compareTo(BigDecimal.ZERO)<=0)throw new IllegalArgumentException("默认分值必须大于0");
     JsonNode options,answer;
     if("TRUE_FALSE".equals(type)){
       options=mapper.valueToTree(List.of(true,false));

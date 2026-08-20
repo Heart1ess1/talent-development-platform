@@ -57,7 +57,7 @@ async function saveBank(){
 function questionTypeChanged(type:string){resetQuestionForType(question,type)}
 function openQuestion(row?:any){
   if(row){
-    Object.assign(question,{id:row.id,bankId:row.bank_id,type:row.question_type,stem:row.stem,options:parseJson(row.options_json)||[],answer:parseJson(row.answer_json),score:Number(row.default_score),explanation:row.explanation||'',tags:tagsOf(row)})
+    Object.assign(question,{id:row.id,bankId:row.bank_id,type:row.question_type,stem:row.stem,options:parseJson(row.options_json)||[],answer:parseJson(row.answer_json),score:row.default_score==null?null:Number(row.default_score),explanation:row.explanation||'',tags:tagsOf(row)})
   }else Object.assign(question,{...createEmptyQuestion(),bankId:activeBankId.value||enabledBanks.value[0]?.id})
   questionDialog.value=true
 }
@@ -143,7 +143,7 @@ onMounted(load)
           <span class="exam-result-count">显示 {{filteredQuestions.length}} / {{questions.length}} 道</span>
         </div>
         <el-table :data="filteredQuestions" class="exam-table" empty-text="当前题库暂无题目">
-          <el-table-column label="题目" min-width="240"><template #default="s"><div class="question-title"><el-tag size="small" effect="plain">{{typeLabels[s.row.question_type]}}</el-tag><div><strong>{{s.row.stem}}</strong><span>{{s.row.bank_name}} · 默认 {{s.row.default_score}} 分</span></div></div></template></el-table-column>
+          <el-table-column label="题目" min-width="240"><template #default="s"><div class="question-title"><el-tag size="small" effect="plain">{{typeLabels[s.row.question_type]}}</el-tag><div><strong>{{s.row.stem}}</strong><span>{{s.row.bank_name}} · {{s.row.default_score==null?'默认分值未设置':`默认 ${s.row.default_score} 分`}}</span></div></div></template></el-table-column>
           <el-table-column label="专业标签" min-width="110"><template #default="s"><div class="tag-list"><el-tag v-for="tag in tagsOf(s.row)" :key="tag" size="small" effect="plain">{{tag}}</el-tag><span v-if="!tagsOf(s.row).length" class="muted">公共题</span></div></template></el-table-column>
           <el-table-column label="正确答案" min-width="96" show-overflow-tooltip><template #default="s">{{displayAnswer(s.row)}}</template></el-table-column>
           <el-table-column label="状态" width="72"><template #default="s"><el-switch v-model="s.row.enabled" @change="toggleQuestion(s.row)"/></template></el-table-column>
@@ -165,7 +165,7 @@ onMounted(load)
         <el-form-item label="题干" required><el-input v-model="question.stem" type="textarea" :rows="4" maxlength="1000" show-word-limit placeholder="请输入清晰、无歧义的题目描述"/></el-form-item>
         <el-form-item v-if="['SINGLE','MULTIPLE'].includes(question.type)" label="选项" required><el-select v-model="question.options" multiple allow-create filterable default-first-option placeholder="输入选项后按回车"/></el-form-item>
         <el-form-item label="正确答案" required><el-radio-group v-if="question.type==='TRUE_FALSE'" v-model="question.answer"><el-radio :value="true">正确</el-radio><el-radio :value="false">错误</el-radio></el-radio-group><el-select v-else v-model="question.answer" :multiple="question.type==='MULTIPLE'" placeholder="请先填写选项，再选择正确答案"><el-option v-for="item in question.options" :key="item" :label="item" :value="item"/></el-select></el-form-item>
-        <div class="exam-form-grid"><el-form-item label="默认分值"><el-input-number v-model="question.score" :min="0.01" :precision="2" controls-position="right"/></el-form-item><el-form-item label="专业标签"><el-select v-model="question.tags" multiple allow-create filterable default-first-option placeholder="空白表示公共题"><el-option v-for="tag in tagOptions" :key="tag" :label="tag" :value="tag"/></el-select></el-form-item></div>
+        <div class="exam-form-grid"><el-form-item label="默认分值（选填）"><el-input-number v-model="question.score" :min="0.01" :precision="2" controls-position="right" placeholder="组卷时再设置"/></el-form-item><el-form-item label="专业标签"><el-select v-model="question.tags" multiple allow-create filterable default-first-option placeholder="空白表示公共题"><el-option v-for="tag in tagOptions" :key="tag" :label="tag" :value="tag"/></el-select></el-form-item></div>
         <el-form-item label="答案解析"><el-input v-model="question.explanation" type="textarea" :rows="3" placeholder="用于阅卷复核和员工学习反馈"/></el-form-item>
       </el-form>
       <template #footer><el-button @click="questionDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveQuestion">保存题目</el-button></template>

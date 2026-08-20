@@ -51,6 +51,9 @@ class QuestionBankTemplateTest {
 
       var guide = workbook.getSheetAt(1);
       assertThat(guide.getRow(0).getCell(0).getStringCellValue()).contains("题库导入模板");
+      assertThat(guide.getRow(19).getCell(0).getStringCellValue()).isEqualTo("默认分值");
+      assertThat(guide.getRow(19).getCell(1).getStringCellValue()).isEqualTo("选填");
+      assertThat(guide.getRow(19).getCell(2).getStringCellValue()).contains("留空");
       assertThat(guide.getRow(28).getCell(0).getStringCellValue()).isEqualTo("单选题");
       assertThat(guide.getRow(29).getCell(0).getStringCellValue()).isEqualTo("多选题");
       assertThat(guide.getRow(30).getCell(0).getStringCellValue()).isEqualTo("判断题");

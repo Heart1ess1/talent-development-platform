@@ -50,6 +50,7 @@ public class ImportController {
         sample.setBusinessUnit(firstEnabledName("business_unit"));
         sample.setStation(firstEnabledName("service_station"));
         sample.setTechnicalMentor(firstEnabledMentor());
+        sample.setIdCard("11010120020101000X");
         sample.setSchool("示例大学");
         sample.setMajor("示例专业");
         sample.setEducation("本科");
@@ -98,6 +99,10 @@ public class ImportController {
                 errors.add(new RowError(line, "工号", "重复"));
             if (r.getName() == null || r.getName().isBlank())
                 errors.add(new RowError(line, "姓名", "不能为空"));
+            if (r.getIdCard() == null || r.getIdCard().isBlank())
+                errors.add(new RowError(line, "身份证号码", "不能为空；用于生成首次登录密码"));
+            else if (!EmployeeInitialPassword.supports(r.getIdCard()))
+                errors.add(new RowError(line, "身份证号码", "必须为18位，末位仅支持数字或X/x"));
             if (r.getBatch() == null || r.getBatch().isBlank())
                 errors.add(new RowError(line, "批次", "不能为空"));
             else if (id("talent_batch", r.getBatch()) == null)
@@ -120,10 +125,13 @@ public class ImportController {
             return ApiResponse.ok(new ImportResult(0, errors));
 
         for (var r : rows) {
+            String status = normalizeStatus(r.getStatus());
+            String initialPassword = EmployeeInitialPassword.fromIdCard(r.getIdCard());
             db.update("""
                 insert into sys_user(username, password_hash, display_name, role, enabled, must_change_password)
-                values(?,?,?,'EMPLOYEE',false,true)
-                """, r.getEmployeeNo(), encoder.encode(UUID.randomUUID().toString()), r.getName());
+                values(?,?,?,'EMPLOYEE',?,true)
+                """, r.getEmployeeNo(), encoder.encode(initialPassword), r.getName(),
+                    "ACTIVE".equals(status));
             Long uid = db.queryForObject("select last_insert_id()", Long.class);
 
             db.update("""
@@ -149,7 +157,7 @@ public class ImportController {
                     date(r.getBirthDate()), r.getNativePlace(), r.getPoliticalStatus(), r.getResidence(),
                     r.getHobbies(), r.getSpeciality(),
                     r.getEmail(), r.getIdCard(), r.getPhone(), date(r.getOnboardDate()),
-                    normalizeStatus(r.getStatus()));
+                    status);
         }
 
         audit.log("IMPORT_EMPLOYEES", "EMPLOYEE", null, null, Map.of("count", rows.size()));
@@ -247,7 +255,7 @@ public class ImportController {
                 instruction("服务站点", "否", "必须与系统中已启用的服务站点名称完全一致。", "示例服务站"),
                 instruction("指导老师（技术）", "否", "填写已启用导师的用户名；也可填写不重名的导师姓名。", "mentor"),
                 instruction("指导老师（技能）", "否", "填写已启用导师的用户名；也可填写不重名的导师姓名。", "mentor2"),
-                instruction("身份证号码", "否", "建议将单元格设为文本，防止长号码被科学计数法处理。", "110101200201010000"),
+                instruction("身份证号码", "是", "必须为18位并按文本填写；初始密码为后六位，末位X/x登录时统一输入大写X。", "11010120020101000X"),
                 instruction("毕业学校", "否", "填写毕业院校全称。", "示例大学"),
                 instruction("所学专业", "否", "填写专业名称。", "车辆工程"),
                 instruction("学历", "否", "建议使用高中、大专、本科、硕士、博士等统一名称。", "本科"),

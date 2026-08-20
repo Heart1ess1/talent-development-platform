@@ -33,6 +33,9 @@ public class ResultExportRow {
     @ExcelProperty("状态")
     private String status;
 
+    @ExcelProperty("监考模式")
+    private String proctorMode;
+
     @ExcelProperty("提交时间")
     private String submittedAt;
 }

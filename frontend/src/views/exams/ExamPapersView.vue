@@ -38,7 +38,7 @@ async function load(){
 }
 function openCreate(){
   Object.assign(paper,emptyPaper());questionKeyword.value='';questionType.value='';questionBankId.value=undefined
-  questions.value.forEach(q=>paper.scores[q.id]=Number(q.default_score));drawerVisible.value=true
+  questions.value.forEach(q=>paper.scores[q.id]=q.default_score==null?null:Number(q.default_score));drawerVisible.value=true
 }
 function availableCount(type:string){
   return enabledQuestions.value.filter(q=>q.question_type===type&&(!paper.bankIds.length||paper.bankIds.includes(q.bank_id))).length
@@ -46,6 +46,7 @@ function availableCount(type:string){
 async function createPaper(){
   if(!paper.name.trim())return ElMessage.warning('请输入试卷名称')
   if(paperCount.value===0)return ElMessage.warning('试卷至少需要一道题')
+  if(paper.mode==='MANUAL'&&paper.selected.some((id:number)=>!Number(paper.scores[id])||Number(paper.scores[id])<=0))return ElMessage.warning('请为已选题目设置试卷分值')
   if(Math.abs(paperTotal.value-100)>0.0001)return ElMessage.warning(`试卷总分必须为 100 分，当前 ${paperTotal.value} 分`)
   const manualQuestions=paper.mode==='MANUAL'?paper.selected.map((id:number,i:number)=>({questionId:id,score:Number(paper.scores[id]),sortOrder:i+1})):[]
   const randomRules=Object.entries(paper.rules).map(([type,x]:any)=>({type,count:Number(x.count),score:Number(x.score),tags:x.tags,bankIds:paper.bankIds}))

@@ -191,7 +191,7 @@ async function resetPassword(row:UserRow){
   showTemporaryPassword(
     '密码重置成功',
     response.data.temporaryPassword,
-    `请将新密码安全地发送给 ${row.display_name}。此密码关闭后将不再显示。`
+    `请将新密码安全地发送给 ${row.display_name}。首次登录后必须修改密码，此密码关闭后将不再显示。`
   )
   await load()
 }

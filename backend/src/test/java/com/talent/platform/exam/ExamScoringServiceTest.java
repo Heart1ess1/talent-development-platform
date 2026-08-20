@@ -45,6 +45,15 @@ class ExamScoringServiceTest {
             eq(new BigDecimal("50")),eq(42L));
   }
 
+  @Test void scheduledSettlementIncludesViolationCountdownDeadlines(){
+    JdbcTemplate db=mock(JdbcTemplate.class);
+    when(db.queryForList(contains("violation_deadline_at<=now()"))).thenReturn(List.of());
+
+    assertEquals(0,new ExamScoringService(db,mapper).scoreExpired());
+
+    verify(db).queryForList(contains("deadline_at<=now() or violation_deadline_at<=now()"));
+  }
+
   @Test void endedObjectiveResultsArePublishedInOneServerSideUpdate(){
     JdbcTemplate db=mock(JdbcTemplate.class);
     when(db.update(contains("p.ends_at<=now()"))).thenReturn(3);

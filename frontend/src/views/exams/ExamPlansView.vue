@@ -12,7 +12,7 @@ const candidates=ref<any[]>([]),selectedCandidates=ref<any[]>([]),candidateTable
 const drawerVisible=ref(false),candidateLoading=ref(false),saving=ref(false)
 const keyword=ref(''),statusFilter=ref('')
 const scope=reactive<any>({batchIds:[] as number[],businessUnitIds:[] as number[],classId:null,keyword:''})
-const emptyPlan=()=>({paperId:null,name:'',startsAt:'',endsAt:'',durationMinutes:60,maxAttempts:1,employeeIds:[] as number[]})
+const emptyPlan=()=>({paperId:null,name:'',startsAt:'',endsAt:'',durationMinutes:60,maxAttempts:1,violationLimit:4,violationGraceSeconds:15,employeeIds:[] as number[]})
 const plan=reactive<any>(emptyPlan())
 
 const filteredPlans=computed(()=>plans.value.filter(row=>{
@@ -75,6 +75,8 @@ function validatePlan(){
   if(!plan.startsAt||!plan.endsAt)return '请设置考试开始和结束时间'
   if(new Date(plan.endsAt)<=new Date(plan.startsAt))return '结束时间必须晚于开始时间'
   if(windowMinutes.value<plan.durationMinutes)return '考试开放时段不能短于考试时长'
+  if(!Number.isInteger(plan.violationLimit)||plan.violationLimit<1||plan.violationLimit>20)return '异常行为自动交卷次数应为 1 至 20 次'
+  if(!Number.isInteger(plan.violationGraceSeconds)||plan.violationGraceSeconds<5||plan.violationGraceSeconds>300)return '异常离场限时应为 5 至 300 秒'
   if(!selectedCandidates.value.length)return '请匹配并选择至少一名参考人员'
   return ''
 }
@@ -135,7 +137,7 @@ onMounted(load)
           <template #default="s"><div class="time-range"><span>开始 {{dateTimeParts(s.row.starts_at).date}} {{dateTimeParts(s.row.starts_at).time}}</span><span>结束 {{dateTimeParts(s.row.ends_at).date}} {{dateTimeParts(s.row.ends_at).time}}</span></div></template>
         </el-table-column>
         <el-table-column label="考试规则" width="125">
-          <template #default="s"><div class="rule-cell"><span>{{s.row.duration_minutes}} 分钟</span><span>最多 {{s.row.max_attempts}} 次</span></div></template>
+          <template #default="s"><div class="rule-cell"><span>{{s.row.duration_minutes}} 分钟 / 最多 {{s.row.max_attempts}} 次</span><span>异常达 {{s.row.violation_limit??4}} 次自动交卷</span><span>离场限时 {{s.row.violation_grace_seconds??15}} 秒</span></div></template>
         </el-table-column>
         <el-table-column label="计分月份" width="100"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column>
         <el-table-column label="批次" width="112" class-name="batch-column" label-class-name="batch-column" show-overflow-tooltip><template #default="s">{{planBatchNames(s.row)}}</template></el-table-column>
@@ -169,6 +171,8 @@ onMounted(load)
             <el-form-item label="结束时间" required><el-date-picker v-model="plan.endsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择结束时间" :disabled-date="disabledPast"/></el-form-item>
             <el-form-item label="考试时长（分钟）" required><el-input-number v-model="plan.durationMinutes" :min="1" :max="600" controls-position="right"/></el-form-item>
             <el-form-item label="最大考试次数" required><el-input-number v-model="plan.maxAttempts" :min="1" :max="10" controls-position="right"/></el-form-item>
+            <el-form-item label="异常行为自动交卷次数" required><el-input-number v-model="plan.violationLimit" :min="1" :max="20" controls-position="right"/><div class="field-help">累计异常行为达到该次数时立即自动交卷。</div></el-form-item>
+            <el-form-item label="异常离场限时（秒）" required><el-input-number v-model="plan.violationGraceSeconds" :min="5" :max="300" controls-position="right"/><div class="field-help">切屏、退出全屏后须在此时间内返回并确认，否则自动交卷。</div></el-form-item>
           </div>
           <div class="schedule-summary">
             <div><span>自动计分月份</span><strong>{{scoreMonthLabel}}</strong></div>
@@ -204,4 +208,5 @@ onMounted(load)
 
 <style scoped>
 .page-head p{margin:6px 0 0}.overview-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}.overview-item{padding:18px 20px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 2px 8px rgba(31,41,55,.04)}.overview-item span{display:block;color:#7b8799;font-size:13px;margin-bottom:7px}.overview-item strong{font-size:25px;color:#253044}.overview-item.warning{border-left:3px solid #e6a23c}.overview-item.success{border-left:3px solid #67c23a}.card-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.card-title{font-weight:600}.header-tip{color:#8a96a8;font-size:12px;margin-left:12px}.filters{display:flex;gap:10px}.filters .el-input{width:190px}.filters .el-select{width:130px}.plan-table :deep(.el-table__cell){padding:11px 0}.plan-table :deep(th.el-table__cell .cell){white-space:nowrap}.plan-table :deep(.batch-column .cell){padding-left:18px}.exam-name{font-weight:600;color:#303846}.sub-text{color:#8a96a8;font-size:12px;margin-top:4px}.time-range,.rule-cell{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#596579;white-space:nowrap}.drawer-title h3{font-size:20px;margin:0;color:#253044}.drawer-title p{font-size:13px;color:#7b8799;margin:7px 0 0}.form-section{padding:2px 0 24px;margin-bottom:22px;border-bottom:1px solid #edf0f4}.form-section:last-child{border-bottom:0;margin-bottom:0}.section-title{display:flex;align-items:flex-start;gap:10px;margin-bottom:17px}.section-title>span{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#ecf5ff;color:#409eff;font-weight:700}.section-title strong,.section-title small{display:block}.section-title strong{color:#253044}.section-title small{font-size:12px;color:#8a96a8;margin-top:4px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 16px}.form-grid :deep(.el-input-number),.form-grid :deep(.el-date-editor),.form-grid :deep(.el-select){width:100%}.paper-summary{background:#f5f9ff;color:#4e6685;border-radius:6px;padding:10px 13px;font-size:13px}.schedule-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px}.schedule-summary>div{background:#f7f9fc;border-radius:6px;padding:11px 14px}.schedule-summary span{display:block;color:#8a96a8;font-size:12px}.schedule-summary strong{display:block;color:#303846;margin-top:4px}.schedule-summary .danger{color:#f56c6c}.scope-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}.scope-summary{display:flex;gap:20px;padding:9px 12px;margin-bottom:13px;border-radius:6px;background:#f7f9fc;color:#7b8799;font-size:12px}.scope-summary strong{color:#4e6685}.candidate-head{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin-bottom:10px;color:#596579}.candidate-head .el-icon{vertical-align:-2px}.drawer-footer{display:flex;align-items:center;justify-content:space-between;width:100%}.drawer-footer>span{color:#7b8799;font-size:13px}.drawer-footer strong,.candidate-head strong{color:#409eff}@media(max-width:900px){.overview-grid{grid-template-columns:repeat(2,1fr)}.card-head{align-items:flex-start;flex-direction:column}.form-grid,.scope-grid{grid-template-columns:1fr}.candidate-head{align-items:flex-start;flex-direction:column;gap:5px}}
+.field-help{margin-top:6px;color:#8a96a8;font-size:12px;line-height:1.5}
 </style>

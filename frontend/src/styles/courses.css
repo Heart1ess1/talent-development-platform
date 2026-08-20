@@ -35,6 +35,7 @@
 .course-mobile-list{display:none}.course-dialog-intro{display:flex;align-items:center;gap:12px;margin-bottom:18px;padding:13px;border-radius:8px;background:#f4f8fd}
 .course-dialog-intro>span{display:grid;flex:0 0 38px;height:38px;place-items:center;border-radius:8px;color:#2678c9;background:#dfedfc;font-size:19px}
 .course-dialog-intro div{display:flex;flex-direction:column;gap:3px}.course-dialog-intro strong{font-size:13px}.course-dialog-intro p{margin:0;color:#7f8a9b;font-size:11px;line-height:1.5}
+.course-dialog-intro~.el-form .el-select,.course-dialog-intro~.el-form .el-date-editor,.course-dialog-intro~.el-form .el-input-number{width:100%}
 .session-route{display:flex;align-items:center;gap:7px}.session-route .el-icon{color:#a1aab8}.session-route strong{color:#2678c9}
 .session-progress{display:flex;min-width:130px;flex-direction:column;gap:6px}.session-progress>div{display:flex;justify-content:space-between;color:#8290a3;font-size:11px}.session-progress strong{color:#344054}
 .checkin-code{display:inline-flex;align-items:center;gap:7px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:15px;font-weight:700;letter-spacing:.12em;color:#1769aa}
@@ -49,6 +50,7 @@
 .my-session-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.my-session-head>div{display:flex;min-width:0;flex-direction:column;gap:4px}.my-session-head strong{font-size:15px}.my-session-head span{color:#7f8a9b;font-size:11px}
 .my-session-time{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0;padding:12px;border-radius:8px;background:#f6f8fb}.my-session-time div{display:flex;flex-direction:column;gap:4px}
 .my-session-time small{color:#8994a5}.my-session-time strong{font-size:12px}.my-session-actions{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.session-location{display:flex;min-width:0;align-items:center;gap:2px}.session-location .el-link{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.session-location>span{flex:none}
 .sign-panel{display:flex;align-items:center;gap:12px;padding:15px;border:1px solid #dfe7f3;border-radius:9px;background:linear-gradient(135deg,#fff,#f5f9ff)}
 .sign-panel>span{display:grid;flex:0 0 44px;height:44px;place-items:center;border-radius:10px;color:#fff;background:#347fd1;font-size:22px}
 .sign-copy{flex:1}.sign-copy strong{font-size:14px}.sign-copy p{margin:4px 0 0;color:#7e8a9c;font-size:11px}.sign-input{display:flex;gap:8px;width:min(420px,100%)}.sign-input .el-input{flex:1}

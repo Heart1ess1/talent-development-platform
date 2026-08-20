@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed,onBeforeUnmount,onMounted,reactive,ref} from 'vue'
+import {computed,nextTick,onBeforeUnmount,onMounted,reactive,ref} from 'vue'
 import {useRouter} from 'vue-router'
 import {
   CircleCheck,
@@ -26,6 +26,13 @@ import {
   loadEnabledBusinessUnits,
   type DictionaryOption
 } from '@/utils/masterData'
+import {
+  defaultDirectoryColumns,
+  normalizeDirectoryColumns,
+  reorderDirectoryColumns,
+  type DirectoryColumnKey,
+  type DirectoryColumnLayout
+} from './employeeDirectoryLayout'
 
 type DirectoryRow=Record<string,any>
 type StationChange=Record<string,any>
@@ -55,8 +62,6 @@ const summary=reactive<DirectorySummary>({
   stationAssigned:0,
   mentorReady:0
 })
-const page=ref(1)
-const pageSize=ref(20)
 const loading=ref(false)
 const exporting=ref(false)
 const importing=ref(false)
@@ -64,6 +69,9 @@ const saving=ref(false)
 const pendingCount=ref(0)
 const selectedRows=ref<DirectoryRow[]>([])
 const tableRef=ref<any>()
+const directoryColumns=ref<DirectoryColumnLayout[]>(normalizeDirectoryColumns(undefined))
+const draggedColumnKey=ref<DirectoryColumnKey|null>(null)
+const dragOverColumnKey=ref<DirectoryColumnKey|null>(null)
 const advancedFilters=ref(false)
 const dataToolsOpen=ref(false)
 
@@ -165,9 +173,14 @@ const drawerSize=computed(()=>profileMode.value==='view'?'560px':'760px')
 const drawerTitle=computed(
   ()=>profileMode.value==='create'?'新增人员':profileMode.value==='edit'?'编辑人员':'人员档案'
 )
+const nameColumn=computed(()=>directoryColumns.value.find(column=>column.key==='name')!)
+const businessColumns=computed(()=>directoryColumns.value.filter(column=>!column.locked))
+const tableMaxHeight=computed(()=>isNarrow.value?'62vh':'calc(100vh - 280px)')
+const layoutStorageKey=computed(()=>`employee-directory-layout:v1:${auth.user?.id??'anonymous'}`)
+const loadedLabel=computed(()=>`共 ${total.value} 人，已全部加载`)
 
 function requestParams(){
-  return {...filters,page:page.value,size:pageSize.value}
+  return {...filters,all:true}
 }
 
 function display(value:any){
@@ -196,16 +209,16 @@ function statusLabel(status:string){
 async function load(){
   loading.value=true
   try{
-    const [listResponse,summaryResponse]=await Promise.all([
-      api.get<any,Envelope<any>>('/employee-directory',{params:requestParams()}),
-      api.get<any,Envelope<DirectorySummary>>('/employee-directory/summary',{
-        params:summaryParams.value
-      })
-    ])
-    rows.value=listResponse.data.records
+    const listPromise=api.get<any,Envelope<any>>('/employee-directory',{params:requestParams()})
+    const summaryPromise=api.get<any,Envelope<DirectorySummary>>('/employee-directory/summary',{params:summaryParams.value})
+    const [listResponse,summaryResponse]=await Promise.all([listPromise,summaryPromise])
+    rows.value=listResponse.data.records as DirectoryRow[]
     total.value=listResponse.data.total
     Object.assign(summary,summaryResponse.data)
     selectedRows.value=[]
+    await nextTick()
+    tableRef.value?.clearSelection?.()
+    tableRef.value?.setScrollTop?.(0)
   }finally{
     loading.value=false
   }
@@ -252,7 +265,6 @@ async function loadPending(){
 }
 
 function search(){
-  page.value=1
   load()
 }
 
@@ -271,9 +283,42 @@ function reset(){
   search()
 }
 
-function changePageSize(){
-  page.value=1
-  load()
+function loadColumnLayout(){
+  try{directoryColumns.value=normalizeDirectoryColumns(JSON.parse(localStorage.getItem(layoutStorageKey.value)||'null'))}
+  catch{directoryColumns.value=normalizeDirectoryColumns(undefined)}
+}
+
+function saveColumnLayout(){
+  localStorage.setItem(layoutStorageKey.value,JSON.stringify(directoryColumns.value.map(({key,width})=>({key,width}))))
+}
+
+function resetColumnLayout(){
+  directoryColumns.value=normalizeDirectoryColumns(defaultDirectoryColumns)
+  saveColumnLayout()
+  nextTick(()=>tableRef.value?.doLayout?.())
+  ElMessage.success('列顺序和列宽已恢复默认设置')
+}
+
+function startColumnDrag(key:DirectoryColumnKey,event:DragEvent){
+  draggedColumnKey.value=key
+  dragOverColumnKey.value=null
+  if(event.dataTransfer){event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',key)}
+}
+
+function dropColumn(targetKey:DirectoryColumnKey){
+  const sourceKey=draggedColumnKey.value
+  if(sourceKey)directoryColumns.value=reorderDirectoryColumns(directoryColumns.value,sourceKey,targetKey)
+  draggedColumnKey.value=null;dragOverColumnKey.value=null;saveColumnLayout()
+  nextTick(()=>tableRef.value?.doLayout?.())
+}
+
+function finishColumnDrag(){draggedColumnKey.value=null;dragOverColumnKey.value=null}
+
+function resizeColumn(newWidth:number,_oldWidth:number,column:any){
+  const item=directoryColumns.value.find(current=>current.key===column.columnKey)
+  if(!item)return
+  item.width=Math.min(item.maxWidth,Math.max(item.minWidth,Math.round(newWidth)))
+  saveColumnLayout()
 }
 
 function changeStatus(value:string){
@@ -434,7 +479,10 @@ async function upload(options:any){
       const first=result.errors[0]
       ElMessage.error(`第 ${first.row} 行 ${first.field}：${first.message}`)
     }else{
-      ElMessage.success(`已导入 ${result.imported} 人`)
+      ElMessage.success({
+        message:`已导入 ${result.imported} 人；在职账号已启用，初始密码为身份证后六位（x按大写X输入）`,
+        duration:6000
+      })
       await load()
     }
   }finally{
@@ -496,6 +544,7 @@ function syncNarrow(event:MediaQueryList|MediaQueryListEvent){
 }
 
 onMounted(()=>{
+  loadColumnLayout()
   narrowMedia=window.matchMedia('(max-width: 800px)')
   syncNarrow(narrowMedia)
   narrowMedia.addEventListener('change',syncNarrow)
@@ -687,16 +736,12 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
           <strong>{{total}}</strong>
           <small v-if="appliedFilterCount">已应用 {{appliedFilterCount}} 个条件</small>
         </span>
-        <el-select
-          v-model="pageSize"
-          class="page-size"
-          aria-label="每页条数"
-          @change="changePageSize"
-        >
-          <el-option :value="20" label="20 条/页"/>
-          <el-option :value="50" label="50 条/页"/>
-          <el-option :value="100" label="100 条/页"/>
-        </el-select>
+        <div class="table-layout-tools">
+          <span>{{loadedLabel}}</span>
+          <el-tooltip v-if="!isNarrow" content="拖拽表头可调整列顺序，拖动列边界可调整宽度" placement="top">
+            <el-button text :icon="Setting" @click="resetColumnLayout">恢复默认列</el-button>
+          </el-tooltip>
+        </div>
       </div>
 
       <div v-if="selectedRows.length" class="selection-bar">
@@ -711,12 +756,17 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
         :data="rows"
         v-loading="loading"
         stripe
+        border
+        :fit="false"
+        :max-height="tableMaxHeight"
+        scrollbar-always-on
         row-key="id"
         empty-text="当前条件下暂无人员"
         class="people-table"
         @selection-change="(selection:DirectoryRow[])=>selectedRows=selection"
+        @header-dragend="resizeColumn"
       >
-        <el-table-column v-if="canWrite&&!isNarrow" type="selection" width="44" fixed/>
+        <el-table-column v-if="canWrite&&!isNarrow" type="selection" width="44" fixed reserve-selection/>
         <el-table-column v-if="isNarrow" label="姓名 / 工号" width="145" fixed>
           <template #default="{row}">
             <button class="name-button" type="button" @click="showDetails(row)">
@@ -735,68 +785,37 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             </button>
           </template>
         </el-table-column>
-        <el-table-column v-else label="姓名" min-width="110" fixed show-overflow-tooltip>
+        <el-table-column v-else :column-key="nameColumn.key" :label="nameColumn.label" :width="nameColumn.width" :min-width="nameColumn.minWidth" fixed show-overflow-tooltip>
           <template #default="{row}">
             <button class="desktop-name-button" type="button" @click="showDetails(row)">
               {{row.name}}
             </button>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isNarrow" label="工号" min-width="120" show-overflow-tooltip>
-          <template #default="{row}">{{row.employee_no}}</template>
-        </el-table-column>
-        <el-table-column v-if="!isNarrow" label="批次" width="88">
-          <template #default="{row}">{{display(row.batch_name)}}</template>
-        </el-table-column>
-        <el-table-column v-if="!isNarrow" label="班级" min-width="110" show-overflow-tooltip>
-          <template #default="{row}">{{display(row.class_name)}}</template>
-        </el-table-column>
-        <el-table-column v-if="!isNarrow" label="所属板块" min-width="110">
-          <template #default="{row}">{{display(row.business_unit_name)}}</template>
-        </el-table-column>
-        <el-table-column v-if="!isNarrow" label="服务站点" min-width="150">
+        <template v-if="!isNarrow">
+        <el-table-column v-for="column in businessColumns" :key="column.key" :column-key="column.key" :label="column.label" :width="column.width" :min-width="column.minWidth" show-overflow-tooltip>
+          <template #header>
+            <span class="draggable-column-header" :class="{dragging:draggedColumnKey===column.key,over:dragOverColumnKey===column.key}" draggable="true" @dragstart="startColumnDrag(column.key,$event)" @dragenter.prevent="dragOverColumnKey=column.key" @dragover.prevent @drop.prevent="dropColumn(column.key)" @dragend="finishColumnDrag"><span class="drag-grip" aria-hidden="true">⋮⋮</span>{{column.label}}</span>
+          </template>
           <template #default="{row}">
-            <el-button
-              v-if="canViewHistory"
-              link
-              type="primary"
-              :icon="MapLocation"
-              class="station-button"
-              @click.stop="showStationHistory(row)"
-            >
-              {{row.station_name||'未分配'}}
-              <span v-if="Number(row.station_change_count)" class="change-count">
-                {{row.station_change_count}} 次
-              </span>
-            </el-button>
-            <span v-else>{{row.station_name||'未分配'}}</span>
+            <template v-if="column.key==='employeeNo'">{{row.employee_no}}</template>
+            <template v-else-if="column.key==='batch'">{{display(row.batch_name)}}</template>
+            <template v-else-if="column.key==='class'">{{display(row.class_name)}}</template>
+            <template v-else-if="column.key==='businessUnit'">{{display(row.business_unit_name)}}</template>
+            <template v-else-if="column.key==='station'">
+              <el-button v-if="canViewHistory" link type="primary" :icon="MapLocation" class="station-button" @click.stop="showStationHistory(row)">{{row.station_name||'未分配'}}<span v-if="Number(row.station_change_count)" class="change-count">{{row.station_change_count}} 次</span></el-button>
+              <span v-else>{{row.station_name||'未分配'}}</span>
+            </template>
+            <template v-else-if="column.key==='technicalMentor'">{{display(row.technical_mentor_name)}}</template>
+            <template v-else-if="column.key==='skillMentor'">{{display(row.skill_mentor_name)}}</template>
+            <template v-else-if="column.key==='school'">{{display(row.school)}}</template>
+            <template v-else-if="column.key==='major'">{{display(row.major)}}</template>
+            <template v-else-if="column.key==='education'">{{display(row.education)}}</template>
+            <template v-else-if="column.key==='phone'">{{display(row.phone)}}</template>
+            <el-tag v-else-if="column.key==='status'" :type="row.status==='ACTIVE'?'success':'info'" effect="light" size="small">{{statusLabel(row.status)}}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isNarrow" label="指导老师（技术）" min-width="140">
-          <template #default="{row}">{{display(row.technical_mentor_name)}}</template>
-        </el-table-column>
-        <el-table-column v-if="!isNarrow" label="指导老师（技能）" min-width="140">
-          <template #default="{row}">{{display(row.skill_mentor_name)}}</template>
-        </el-table-column>
-        <el-table-column v-if="!isNarrow" label="毕业学校" width="160" show-overflow-tooltip>
-          <template #default="{row}">{{display(row.school)}}</template>
-        </el-table-column>
-        <el-table-column v-if="!isNarrow" label="所学专业" width="150" show-overflow-tooltip>
-          <template #default="{row}">{{display(row.major)}}</template>
-        </el-table-column>
-        <el-table-column v-if="!isNarrow" label="学历" width="100" show-overflow-tooltip>
-          <template #default="{row}">{{display(row.education)}}</template>
-        </el-table-column>
-        <el-table-column v-if="!isNarrow" label="联系方式" min-width="130" show-overflow-tooltip>
-          <template #default="{row}">{{display(row.phone)}}</template>
-        </el-table-column>
-        <el-table-column v-if="!isNarrow" label="状态" width="72">
-          <template #default="{row}">
-            <el-tag :type="row.status==='ACTIVE'?'success':'info'" effect="light" size="small">
-              {{statusLabel(row.status)}}
-            </el-tag>
-          </template>
-        </el-table-column>
+        </template>
         <el-table-column v-if="isNarrow" label="板块 / 站点" width="145">
           <template #default="{row}">
             <div class="mobile-organization">
@@ -872,14 +891,8 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
         </template>
       </el-table>
 
-      <div class="pagination-row">
-        <el-pagination
-          v-model:current-page="page"
-          :total="total"
-          :page-size="pageSize"
-          layout="total,prev,pager,next"
-          @current-change="load"
-        />
+      <div v-if="rows.length" class="scroll-load-row">
+        <span>已在当前页面显示全部 {{total}} 人</span>
       </div>
     </section>
     </section>
@@ -1318,11 +1331,12 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
 .table-bar{height:48px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #edf0f4;color:#667085;font-size:13px}
 .table-bar strong{color:#253043;font-size:15px;margin-left:4px}
 .table-bar small{margin-left:8px;color:#98a2b3;font-size:11px}
-.page-size{width:112px}
+.table-layout-tools{display:flex;align-items:center;gap:10px;color:#8a96a8;font-size:12px}.table-layout-tools .el-button{margin:0}
 .selection-bar{min-height:46px;display:flex;align-items:center;gap:8px;padding:8px 14px;background:#edf6ff;border-bottom:1px solid #d7eafd;color:#475467;font-size:13px}
 .selection-bar strong{color:#1769aa}
 .people-table{width:calc(100% - 24px);margin:0 12px}
 .people-table :deep(.el-table__cell){padding:10px 0}.people-table :deep(th.el-table__cell){padding:9px 0;background:#fafbfd;color:#667085;font-weight:600}
+.draggable-column-header{display:flex;min-width:0;align-items:center;gap:4px;cursor:grab;user-select:none}.draggable-column-header:active{cursor:grabbing}.draggable-column-header.dragging{opacity:.45}.draggable-column-header.over{color:#1769aa}.drag-grip{color:#a5afbd;font-size:13px;letter-spacing:-4px}
 .name-button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;border:0;background:transparent;padding:4px 0;color:inherit;cursor:pointer;text-align:left}
 .desktop-name-button{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:0;background:transparent;padding:0;color:#253043;font:inherit;font-weight:600;cursor:pointer;text-align:left}
 .desktop-name-button:hover{color:#1769aa}
@@ -1340,7 +1354,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
 .row-actions{display:flex;justify-content:center;gap:2px}
 .row-actions .el-button+.el-button{margin-left:0}
 .people-empty{display:flex;min-height:280px;align-items:center;justify-content:center;flex-direction:column;color:#98a2b3}.people-empty>.el-icon{margin-bottom:10px;font-size:38px}.people-empty>strong{color:#596579;font-size:14px}.people-empty>span{margin:7px 0 15px;font-size:11px}
-.pagination-row{display:flex;justify-content:flex-end;padding:14px 16px;border-top:1px solid #edf0f4}
+.scroll-load-row{display:flex;min-height:42px;align-items:center;justify-content:center;padding:0 16px;border-top:1px solid #edf0f4;color:#8a96a8;font-size:12px}
 .drawer-header{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%}
 .drawer-heading{display:flex;align-items:center;gap:12px;min-width:0}
 .employee-avatar{width:46px;height:46px;display:grid;place-items:center;border-radius:7px;background:#e8f2fb;color:#1769aa;font-size:18px;font-weight:700;flex:0 0 auto}
@@ -1419,7 +1433,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
   .selection-bar{flex-wrap:wrap}
   .table-bar{padding:0 10px}
   .people-table{width:calc(100% - 16px);margin:0 8px}
-  .pagination-row{justify-content:center;padding:12px 8px}
+  .table-layout-tools>span{display:none}
   .detail-grid,.employee-form .form-grid{grid-template-columns:1fr}
   .portrait-view{align-items:flex-start}
   .current-station{align-items:flex-start;flex-wrap:wrap}

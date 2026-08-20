@@ -69,6 +69,7 @@ function planPhase(row:any){
 function participation(row:any){
   return ({COMPLETED:{label:'已完成',type:'success'},ABSENT:{label:'缺考',type:'danger'},IN_PROGRESS:{label:'考试中',type:'primary'},NOT_STARTED:{label:'未开始',type:'info'},INCOMPLETE:{label:'未完成',type:'warning'}} as any)[row.participation_status]??{label:'--',type:'info'}
 }
+function proctorMode(row:any){return row.proctor_mode==='MOBILE_COMPATIBLE'?{label:'移动兼容',type:'warning'}:{label:'严格全屏',type:'success'}}
 onMounted(async()=>{if(canManage.value)classOptions.value=await loadDictionaryValues('CLASS');await load();if(String(route.query.focus)==='review'){await nextTick();document.getElementById('exam-review-queue')?.scrollIntoView({behavior:'smooth',block:'start'})}})
 </script>
 
@@ -93,7 +94,7 @@ onMounted(async()=>{if(canManage.value)classOptions.value=await loadDictionaryVa
       <section v-if="pendingReviews.length" id="exam-review-queue" class="exam-workspace review-workspace">
         <div class="exam-workspace-head"><div><span class="card-title">待阅卷答卷</span><span class="header-tip">主观题评分完成后，系统自动合成考试总分</span></div><el-tag type="warning" effect="plain">{{pendingReviews.length}} 份待处理</el-tag></div>
         <el-table :data="pendingReviews" empty-text="暂无待阅卷答卷">
-          <el-table-column prop="exam_name" label="考试" min-width="160"/><el-table-column prop="employee_name" label="员工" min-width="110"/><el-table-column prop="objective_score" label="客观题得分" width="110"/><el-table-column prop="event_count" label="异常次数" width="90"/><el-table-column label="提交时间" width="150"><template #default="s">{{dateTimeParts(s.row.submitted_at).date}} {{dateTimeParts(s.row.submitted_at).time}}</template></el-table-column><el-table-column label="操作" width="90"><template #default="s"><el-button link type="primary" @click="openReview(s.row)">开始阅卷</el-button></template></el-table-column>
+          <el-table-column prop="exam_name" label="考试" min-width="160"/><el-table-column prop="employee_name" label="员工" min-width="110"/><el-table-column prop="objective_score" label="客观题得分" width="110"/><el-table-column label="监考模式" width="104"><template #default="s"><el-tag :type="proctorMode(s.row).type" effect="plain">{{proctorMode(s.row).label}}</el-tag></template></el-table-column><el-table-column prop="event_count" label="异常次数" width="90"/><el-table-column label="提交时间" width="150"><template #default="s">{{dateTimeParts(s.row.submitted_at).date}} {{dateTimeParts(s.row.submitted_at).time}}</template></el-table-column><el-table-column label="操作" width="90"><template #default="s"><el-button link type="primary" @click="openReview(s.row)">开始阅卷</el-button></template></el-table-column>
         </el-table>
       </section>
       <section class="exam-workspace">
@@ -161,6 +162,7 @@ onMounted(async()=>{if(canManage.value)classOptions.value=await loadDictionaryVa
       <el-table :data="filteredPlanResults" v-loading="detailLoading" empty-text="暂无应考员工">
         <el-table-column prop="employee_no" label="工号" width="110"/><el-table-column prop="employee_name" label="员工" min-width="100"/><el-table-column prop="class_name" label="班级" min-width="100"><template #default="s">{{s.row.class_name||'未设置'}}</template></el-table-column>
         <el-table-column label="完成状态" width="92"><template #default="s"><el-tag :type="participation(s.row).type" effect="plain">{{participation(s.row).label}}</el-tag></template></el-table-column>
+        <el-table-column label="监考模式" width="104"><template #default="s"><el-tag v-if="s.row.id" :type="proctorMode(s.row).type" effect="plain">{{proctorMode(s.row).label}}</el-tag><span v-else>--</span></template></el-table-column>
         <el-table-column prop="attempt_no" label="考试次数" width="82" align="center"><template #default="s">{{s.row.attempt_no??'--'}}</template></el-table-column>
         <el-table-column prop="total_score" label="成绩" width="74" align="center"><template #default="s"><strong v-if="s.row.total_score!==null&&s.row.total_score!==undefined">{{s.row.total_score}}</strong><span v-else>--</span></template></el-table-column>
         <el-table-column prop="event_count" label="异常次数" width="82" align="center"><template #default="s">{{s.row.event_count??0}}</template></el-table-column>

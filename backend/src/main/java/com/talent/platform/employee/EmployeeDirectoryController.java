@@ -74,7 +74,8 @@ public class EmployeeDirectoryController {
       @RequestParam(required = false) Long mentorId,
       @RequestParam(required = false) Long skillMentorId,
       @RequestParam(required = false) String education,
-      @RequestParam(required = false) String status) {
+      @RequestParam(required = false) String status,
+      @RequestParam(defaultValue = "false") boolean all) {
     permissions.require(Permissions.EMPLOYEE_READ);
     var query = filters(
         keyword, batchId, classId, businessUnitId, stationId, mentorId, skillMentorId, education, status);
@@ -82,6 +83,12 @@ public class EmployeeDirectoryController {
         "select count(*)" + FROM + query.sql(),
         Long.class,
         query.args().toArray());
+    if (all) {
+      var rows = db.queryForList(
+          SELECT + FROM + query.sql() + " order by e.id desc",
+          query.args().toArray());
+      return ApiResponse.ok(new PageResult<>(rows, total, 1, rows.size()));
+    }
     int pageSize = Math.min(Math.max(size, 1), 100);
     var args = new ArrayList<>(query.args());
     args.add(pageSize);

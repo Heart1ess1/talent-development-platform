@@ -64,6 +64,8 @@ function openMaterials(session:CourseSession){
   }
   materialOpen.value=true
 }
+
+onMounted(load)
 </script>
 
 <template>
@@ -94,7 +96,7 @@ function openMaterials(session:CourseSession){
           <div class="my-session-head"><div><strong>{{session.title}}</strong><span>{{session.course_name}}</span></div><el-tag :type="attendedSessionIds.has(session.id)?'success':sessionStatus(session).type">{{attendedSessionIds.has(session.id)?'已签到':sessionStatus(session).label}}</el-tag></div>
           <div class="my-session-time">
             <div><small>培训时间</small><strong>{{formatCourseDate(session.starts_at)}} 至 {{formatCourseDate(session.ends_at).slice(11)}}</strong></div>
-            <div><small>地点 / 学时</small><strong>{{session.location||'待定'}} · {{session.hours||'-'}} 学时</strong></div>
+            <div><small>{{session.delivery_mode==='ONLINE'?'会议链接':'地点'}} / 学时</small><strong class="session-location"><el-link v-if="session.delivery_mode==='ONLINE'&&session.meeting_url" :href="session.meeting_url" target="_blank" rel="noopener noreferrer" type="primary">{{session.meeting_url}}</el-link><template v-else>{{session.location||'待定'}}</template><span> · {{session.hours||'-'}} 学时</span></strong></div>
           </div>
           <div class="my-session-actions"><span class="course-result-count"><el-icon><Location/></el-icon> 签到 {{formatCourseDate(session.checkin_starts_at).slice(11)}}—{{formatCourseDate(session.checkin_ends_at).slice(11)}}</span><el-button link :icon="Document" @click="openMaterials(session)">查看课件</el-button></div>
         </article>

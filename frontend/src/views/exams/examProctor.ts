@@ -1,7 +1,8 @@
 import type {Envelope} from '@/api'
 
 export type ProctorEventType='BLUR'|'HIDDEN'|'EXIT_FULLSCREEN'
-export type ProctorEventResult={violationCount:number;allowedViolations:number;autoSubmitted:boolean;status:string}
+export type ProctorStatusResult={status:string;violationCount:number;violationLimit:number;violationGraceSeconds:number;violationDeadlineEpochMillis:number|null;serverNowEpochMillis?:number;deadlineEpochMillis?:number}
+export type ProctorEventResult=ProctorStatusResult&{autoSubmitted:boolean}
 export type ProctorEvent={type:ProctorEventType;eventId:string;detail:string}
 
 export function examDeadlineMillis(value:unknown):number|null{
@@ -17,6 +18,11 @@ export function serverClockOffsetMillis(serverNowMillis:unknown,clientNowMillis=
 
 export function remainingExamSeconds(deadlineMillis:number,nowMillis=Date.now(),serverOffsetMillis=0):number{
   return Math.max(0,Math.ceil((deadlineMillis-(nowMillis+serverOffsetMillis))/1000))
+}
+
+export function remainingViolationSeconds(deadlineMillis:number|null|undefined,nowMillis=Date.now(),serverOffsetMillis=0):number{
+  if(!Number.isFinite(Number(deadlineMillis)))return 0
+  return Math.max(0,Math.ceil((Number(deadlineMillis)-(nowMillis+serverOffsetMillis))/1000))
 }
 
 export function formatExamCountdown(totalSeconds:number):string{
@@ -46,5 +52,18 @@ export async function postProctorEvent(attemptId:number,event:ProctorEvent):Prom
   })
   const envelope=await response.json() as Envelope<ProctorEventResult>
   if(!response.ok||envelope.code!==0)throw new Error(envelope.message||'异常行为记录失败')
+  return envelope.data
+}
+
+export async function recoverProctorViolation(attemptId:number,eventId:string):Promise<ProctorStatusResult>{
+  const token=globalThis.localStorage?.getItem('token')
+  const response=await fetch(`/api/v1/exams/attempts/${attemptId}/violations/recover`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Request-Id':createProctorEventId(),...(token?{Authorization:`Bearer ${token}`}:{})},
+    body:JSON.stringify({eventId}),
+    credentials:'same-origin'
+  })
+  const envelope=await response.json() as Envelope<ProctorStatusResult>
+  if(!response.ok||envelope.code!==0)throw new Error(envelope.message||'异常恢复确认失败')
   return envelope.data
 }
