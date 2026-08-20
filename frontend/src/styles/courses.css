@@ -36,6 +36,7 @@
 .course-dialog-intro>span{display:grid;flex:0 0 38px;height:38px;place-items:center;border-radius:8px;color:#2678c9;background:#dfedfc;font-size:19px}
 .course-dialog-intro div{display:flex;flex-direction:column;gap:3px}.course-dialog-intro strong{font-size:13px}.course-dialog-intro p{margin:0;color:#7f8a9b;font-size:11px;line-height:1.5}
 .course-dialog-intro~.el-form .el-select,.course-dialog-intro~.el-form .el-date-editor,.course-dialog-intro~.el-form .el-input-number{width:100%}
+.session-delivery-fields{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px}.session-delivery-fields .el-form-item{min-width:0}
 .session-route{display:flex;align-items:center;gap:7px}.session-route .el-icon{color:#a1aab8}.session-route strong{color:#2678c9}
 .session-progress{display:flex;min-width:130px;flex-direction:column;gap:6px}.session-progress>div{display:flex;justify-content:space-between;color:#8290a3;font-size:11px}.session-progress strong{color:#344054}
 .checkin-code{display:inline-flex;align-items:center;gap:7px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:15px;font-weight:700;letter-spacing:.12em;color:#1769aa}

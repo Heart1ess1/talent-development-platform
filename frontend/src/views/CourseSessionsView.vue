@@ -267,10 +267,12 @@ onMounted(async()=>{
         <div class="form-grid">
           <el-form-item label="课程" required><el-select v-model="form.courseId" filterable placeholder="选择已启用课程"><el-option v-for="course in courses.filter(isCourseEnabled)" :key="course.id" :label="course.name" :value="course.id"/></el-select></el-form-item>
           <el-form-item label="场次名称" required><el-select v-model="form.sessionTitleId" filterable placeholder="选择场次名称"><el-option v-for="item in sessionTitleOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select></el-form-item>
-          <el-form-item label="授课方式" required><el-radio-group v-model="form.deliveryMode"><el-radio-button value="OFFLINE">线下</el-radio-button><el-radio-button value="ONLINE">线上</el-radio-button></el-radio-group></el-form-item>
+          <div class="session-delivery-fields">
+            <el-form-item label="课程学时"><el-input-number v-model="form.hours" :min="0.5" :max="999" :step="0.5"/></el-form-item>
+            <el-form-item label="授课方式" required><el-radio-group v-model="form.deliveryMode"><el-radio-button value="OFFLINE">线下</el-radio-button><el-radio-button value="ONLINE">线上</el-radio-button></el-radio-group></el-form-item>
+          </div>
           <el-form-item v-if="form.deliveryMode==='OFFLINE'" label="培训地点"><el-select v-model="form.trainingLocationId" clearable filterable placeholder="选择线下培训地点"><el-option v-for="item in trainingLocationOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select></el-form-item>
           <el-form-item v-else label="会议链接" required><el-input v-model="form.meetingUrl" maxlength="512" :prefix-icon="Location" placeholder="https://meeting.example.com/..."/></el-form-item>
-          <el-form-item label="课程学时"><el-input-number v-model="form.hours" :min="0.5" :max="999" :step="0.5"/></el-form-item>
           <el-form-item label="开始时间" required><el-date-picker v-model="form.startsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY-MM-DD HH:mm" date-format="YYYY-MM-DD" time-format="HH:mm" placeholder="选择开始时间" :teleported="true"/></el-form-item>
           <el-form-item label="结束时间" required><el-date-picker v-model="form.endsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY-MM-DD HH:mm" date-format="YYYY-MM-DD" time-format="HH:mm" placeholder="选择结束时间" :teleported="true"/></el-form-item>
           <el-form-item label="签到开始" required><el-date-picker v-model="form.checkinStartsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY-MM-DD HH:mm" date-format="YYYY-MM-DD" time-format="HH:mm" placeholder="选择签到开始时间" :teleported="true"/></el-form-item>
