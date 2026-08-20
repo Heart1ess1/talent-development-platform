@@ -13,6 +13,8 @@ const courses=ref<Course[]>([])
 const sessions=ref<CourseSession[]>([])
 const employees=ref<any[]>([])
 const classOptions=ref<DictionaryOption[]>([])
+const sessionTitleOptions=ref<DictionaryOption[]>([])
+const trainingLocationOptions=ref<DictionaryOption[]>([])
 const enrollmentClassId=ref<number|null>(null)
 const enrollments=ref<any[]>([])
 const loading=ref(false)
@@ -24,7 +26,7 @@ const editing=ref<CourseSession|null>(null)
 const selectedSession=ref<CourseSession|null>(null)
 const selectedEmployees=ref<number[]>([])
 const filters=reactive({keyword:'',courseId:null as number|null,status:'ALL'})
-const form=reactive<any>({courseId:null,title:'',location:'',hours:1,startsAt:'',endsAt:'',checkinStartsAt:'',checkinEndsAt:''})
+const form=reactive<any>({courseId:null,sessionTitleId:null,deliveryMode:'OFFLINE',trainingLocationId:null,meetingUrl:'',hours:1,startsAt:'',endsAt:'',checkinStartsAt:'',checkinEndsAt:''})
 
 const filteredSessions=computed(()=>{
   const term=filters.keyword.trim().toLowerCase()
@@ -32,7 +34,7 @@ const filteredSessions=computed(()=>{
     const state=sessionStatus(row).key
     return (!filters.courseId||row.course_id===filters.courseId)
       &&(filters.status==='ALL'||state===filters.status)
-      &&(!term||`${row.course_name} ${row.title} ${row.location||''}`.toLowerCase().includes(term))
+      &&(!term||`${row.course_name} ${row.title} ${row.location||''} ${row.meeting_url||''}`.toLowerCase().includes(term))
   })
 })
 const tabs=computed(()=>[
@@ -51,6 +53,9 @@ function normalize(row:any,courseNames:Map<number,string>):CourseSession{
   return {
     ...row,
     course_id:courseId,
+    session_title_id:row.session_title_id==null?null:Number(row.session_title_id),
+    training_location_id:row.training_location_id==null?null:Number(row.training_location_id),
+    delivery_mode:row.delivery_mode||'OFFLINE',
     course_name:row.course_name||courseNames.get(courseId)||`课程 #${courseId}`,
     hours:Number(row.hours||0),
     enrollment_count:Number(row.enrollment_count||0),
@@ -66,9 +71,11 @@ function localValue(date:Date,hour:number,minute=0){
 async function load(){
   loading.value=true
   try{
-    const [courseResponse,sessionResponse]=await Promise.all([
+    const [courseResponse,sessionResponse,titleValues,locationValues]=await Promise.all([
       api.get<any,Envelope<Course[]>>('/courses'),
-      api.get<any,Envelope<CourseSession[]>>('/sessions')
+      api.get<any,Envelope<CourseSession[]>>('/sessions'),
+      loadDictionaryValues('SESSION_NAME'),
+      loadDictionaryValues('TRAINING_LOCATION')
     ])
     const courseNames=new Map(courseResponse.data.map(row=>[Number(row.id),row.name]))
     courses.value=courseResponse.data.map(row=>({
@@ -78,6 +85,8 @@ async function load(){
       material_count:Number(row.material_count||0)
     }))
     sessions.value=sessionResponse.data.map(row=>normalize(row,courseNames))
+    sessionTitleOptions.value=titleValues
+    trainingLocationOptions.value=locationValues
   }finally{
     loading.value=false
   }
@@ -89,7 +98,8 @@ function openCreate(){
   editing.value=null
   Object.assign(form,{
     courseId:filters.courseId||courses.value.find(isCourseEnabled)?.id||null,
-    title:'',location:'',hours:1,
+    sessionTitleId:sessionTitleOptions.value[0]?.id||null,
+    deliveryMode:'OFFLINE',trainingLocationId:null,meetingUrl:'',hours:1,
     startsAt:localValue(next,9),
     endsAt:localValue(next,11),
     checkinStartsAt:localValue(next,8,45),
@@ -101,7 +111,9 @@ function openCreate(){
 function openEdit(row:CourseSession){
   editing.value=row
   Object.assign(form,{
-    courseId:row.course_id,title:row.title,location:row.location||'',hours:row.hours||1,
+    courseId:row.course_id,sessionTitleId:row.session_title_id||null,
+    deliveryMode:row.delivery_mode||'OFFLINE',
+    trainingLocationId:row.training_location_id||null,meetingUrl:row.meeting_url||'',hours:row.hours||1,
     startsAt:inputDate(row.starts_at),endsAt:inputDate(row.ends_at),
     checkinStartsAt:inputDate(row.checkin_starts_at),checkinEndsAt:inputDate(row.checkin_ends_at)
   })
@@ -110,11 +122,18 @@ function openEdit(row:CourseSession){
 
 async function save(){
   if(!form.courseId)return ElMessage.warning('请选择课程')
-  if(!form.title.trim())return ElMessage.warning('请输入场次名称')
+  if(!form.sessionTitleId)return ElMessage.warning('请选择场次名称')
+  if(form.deliveryMode==='ONLINE'&&!/^https?:\/\/[^\s]+$/i.test(form.meetingUrl.trim()))return ElMessage.warning('请输入有效的 HTTP(S) 会议链接')
   if(!form.startsAt||!form.endsAt||!form.checkinStartsAt||!form.checkinEndsAt)return ElMessage.warning('请完整填写场次与签到时间')
+  if(new Date(form.endsAt)<=new Date(form.startsAt))return ElMessage.warning('结束时间必须晚于开始时间')
+  if(new Date(form.checkinEndsAt)<=new Date(form.checkinStartsAt))return ElMessage.warning('签到结束时间必须晚于签到开始时间')
   saving.value=true
   try{
-    const payload={...form,title:form.title.trim(),location:form.location.trim()}
+    const payload={
+      ...form,
+      trainingLocationId:form.deliveryMode==='OFFLINE'?form.trainingLocationId:null,
+      meetingUrl:form.deliveryMode==='ONLINE'?form.meetingUrl.trim():null
+    }
     if(editing.value)await api.put(`/sessions/${editing.value.id}`,payload)
     else{
       const result=await api.post<any,Envelope<any>>('/sessions',payload)
@@ -224,7 +243,7 @@ onMounted(async()=>{
         <el-table :data="filteredSessions" v-loading="loading" row-key="id">
           <el-table-column label="课程与场次" min-width="240"><template #default="{row}"><div class="course-name-cell"><span class="course-mark"><el-icon><Calendar/></el-icon></span><div><strong>{{row.course_name}}</strong><span>{{row.title}}</span></div></div></template></el-table-column>
           <el-table-column label="培训时间" min-width="200"><template #default="{row}"><div class="course-meta-cell"><strong>{{formatCourseDate(row.starts_at)}}</strong><span>至 {{formatCourseDate(row.ends_at)}}</span></div></template></el-table-column>
-          <el-table-column label="地点 / 学时" min-width="140"><template #default="{row}"><div class="course-meta-cell"><strong>{{row.location||'待定'}}</strong><span>{{row.hours||'-'}} 学时</span></div></template></el-table-column>
+          <el-table-column label="方式 / 学时" min-width="170"><template #default="{row}"><div class="course-meta-cell"><strong v-if="row.delivery_mode==='ONLINE'"><el-link :href="row.meeting_url" target="_blank" rel="noopener noreferrer" type="primary">线上会议</el-link></strong><strong v-else>{{row.location||'地点待定'}}</strong><span>{{row.hours||'-'}} 学时</span></div></template></el-table-column>
           <el-table-column label="人员与签到" min-width="170"><template #default="{row}"><div class="session-progress"><div><span>已签到 {{row.attendance_count}}</span><strong>{{row.enrollment_count}} 人</strong></div><el-progress :percentage="row.enrollment_count?Math.round(row.attendance_count/row.enrollment_count*100):0" :stroke-width="6" :show-text="false"/></div></template></el-table-column>
           <el-table-column label="签到码" width="125"><template #default="{row}"><button class="checkin-code" type="button" title="点击复制" @click="copyCode(row.checkin_code)">{{row.checkin_code}}</button></template></el-table-column>
           <el-table-column label="状态" width="95"><template #default="{row}"><el-tag :type="sessionStatus(row).type">{{sessionStatus(row).label}}</el-tag></template></el-table-column>
@@ -235,25 +254,27 @@ onMounted(async()=>{
 
       <div class="course-mobile-list" v-loading="loading">
         <article v-for="row in filteredSessions" :key="row.id" class="mobile-course-card">
-          <div class="mobile-course-head"><span class="course-mark"><el-icon><Calendar/></el-icon></span><div><strong>{{row.course_name}}</strong><span>{{row.title}} · {{row.location||'地点待定'}}</span></div><el-tag :type="sessionStatus(row).type" size="small">{{sessionStatus(row).label}}</el-tag></div>
+          <div class="mobile-course-head"><span class="course-mark"><el-icon><Calendar/></el-icon></span><div><strong>{{row.course_name}}</strong><span>{{row.title}} · {{row.delivery_mode==='ONLINE'?'线上会议':row.location||'地点待定'}}</span></div><el-tag :type="sessionStatus(row).type" size="small">{{sessionStatus(row).label}}</el-tag></div>
           <div class="mobile-course-metrics"><span><strong>{{row.enrollment_count}}</strong> 人安排</span><span><strong>{{row.attendance_count}}</strong> 人签到</span><span>{{formatCourseDate(row.starts_at).slice(5)}}</span></div>
           <div class="mobile-course-actions"><el-button type="primary" plain @click="openEnrollment(row)">安排人员</el-button><el-button @click="copyCode(row.checkin_code)">签到码</el-button><el-button @click="openEdit(row)">编辑</el-button></div>
         </article>
       </div>
     </section>
 
-    <el-dialog v-model="editorOpen" :title="editing?'编辑培训场次':'新建培训场次'" width="min(700px, 94vw)" destroy-on-close>
+    <el-dialog v-model="editorOpen" :title="editing?'编辑培训场次':'新建培训场次'" width="min(760px, 94vw)" append-to-body destroy-on-close>
       <div class="course-dialog-intro"><span><el-icon><Calendar/></el-icon></span><div><strong>设置一次具体培训</strong><p>签到窗口建议覆盖开课前 15 分钟至开课后 15 分钟。</p></div></div>
       <el-form label-position="top">
         <div class="form-grid">
           <el-form-item label="课程" required><el-select v-model="form.courseId" filterable placeholder="选择已启用课程"><el-option v-for="course in courses.filter(isCourseEnabled)" :key="course.id" :label="course.name" :value="course.id"/></el-select></el-form-item>
-          <el-form-item label="场次名称" required><el-input v-model="form.title" maxlength="128" placeholder="例如：第一期线下培训"/></el-form-item>
-          <el-form-item label="培训地点"><el-input v-model="form.location" maxlength="128" :prefix-icon="Location" placeholder="教室、会议室或线上会议"/></el-form-item>
+          <el-form-item label="场次名称" required><el-select v-model="form.sessionTitleId" filterable placeholder="选择场次名称"><el-option v-for="item in sessionTitleOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select></el-form-item>
+          <el-form-item label="授课方式" required><el-radio-group v-model="form.deliveryMode"><el-radio-button value="OFFLINE">线下</el-radio-button><el-radio-button value="ONLINE">线上</el-radio-button></el-radio-group></el-form-item>
+          <el-form-item v-if="form.deliveryMode==='OFFLINE'" label="培训地点"><el-select v-model="form.trainingLocationId" clearable filterable placeholder="选择线下培训地点"><el-option v-for="item in trainingLocationOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select></el-form-item>
+          <el-form-item v-else label="会议链接" required><el-input v-model="form.meetingUrl" maxlength="512" :prefix-icon="Location" placeholder="https://meeting.example.com/..."/></el-form-item>
           <el-form-item label="课程学时"><el-input-number v-model="form.hours" :min="0.5" :max="999" :step="0.5"/></el-form-item>
-          <el-form-item label="开始时间" required><el-date-picker v-model="form.startsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss"/></el-form-item>
-          <el-form-item label="结束时间" required><el-date-picker v-model="form.endsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss"/></el-form-item>
-          <el-form-item label="签到开始" required><el-date-picker v-model="form.checkinStartsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss"/></el-form-item>
-          <el-form-item label="签到结束" required><el-date-picker v-model="form.checkinEndsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss"/></el-form-item>
+          <el-form-item label="开始时间" required><el-date-picker v-model="form.startsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY-MM-DD HH:mm" date-format="YYYY-MM-DD" time-format="HH:mm" placeholder="选择开始时间" :teleported="true"/></el-form-item>
+          <el-form-item label="结束时间" required><el-date-picker v-model="form.endsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY-MM-DD HH:mm" date-format="YYYY-MM-DD" time-format="HH:mm" placeholder="选择结束时间" :teleported="true"/></el-form-item>
+          <el-form-item label="签到开始" required><el-date-picker v-model="form.checkinStartsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY-MM-DD HH:mm" date-format="YYYY-MM-DD" time-format="HH:mm" placeholder="选择签到开始时间" :teleported="true"/></el-form-item>
+          <el-form-item label="签到结束" required><el-date-picker v-model="form.checkinEndsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY-MM-DD HH:mm" date-format="YYYY-MM-DD" time-format="HH:mm" placeholder="选择签到结束时间" :teleported="true"/></el-form-item>
         </div>
       </el-form>
       <template #footer><el-button @click="editorOpen=false">取消</el-button><el-button type="primary" :loading="saving" @click="save">{{editing?'保存修改':'创建场次'}}</el-button></template>

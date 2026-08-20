@@ -7,7 +7,7 @@ describe('question editor defaults',()=>{
   })
 
   it('does not prefill options or the correct answer',()=>{
-    expect(createEmptyQuestion()).toMatchObject({type:'SINGLE',options:[],answer:null})
+    expect(createEmptyQuestion()).toMatchObject({type:'SINGLE',options:[],answer:null,score:null})
   })
 
   it('clears previous options and answers when the type changes',()=>{

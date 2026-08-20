@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest'
-import {createProctorEventId,examDeadlineMillis,formatExamCountdown,remainingExamSeconds,serverClockOffsetMillis} from './examProctor'
+import {createProctorEventId,examDeadlineMillis,formatExamCountdown,remainingExamSeconds,remainingViolationSeconds,serverClockOffsetMillis} from './examProctor'
 
 describe('exam proctor countdown',()=>{
   it('uses the server deadline and rounds partial seconds up',()=>{
@@ -10,6 +10,12 @@ describe('exam proctor countdown',()=>{
 
   it('never shows a negative countdown',()=>{
     expect(remainingExamSeconds(1_000,2_000)).toBe(0)
+    expect(remainingViolationSeconds(1_000,2_000)).toBe(0)
+    expect(remainingViolationSeconds(null,2_000)).toBe(0)
+  })
+
+  it('uses the server clock for the abnormal-leave countdown',()=>{
+    expect(remainingViolationSeconds(20_000,5_000,3_000)).toBe(12)
   })
 
   it('uses the server clock instead of trusting the device clock',()=>{

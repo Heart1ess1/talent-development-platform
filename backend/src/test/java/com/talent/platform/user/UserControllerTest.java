@@ -5,8 +5,8 @@ import org.junit.jupiter.api.*;import org.springframework.jdbc.core.JdbcTemplate
 import java.util.*;import static org.assertj.core.api.Assertions.*;import static org.mockito.ArgumentMatchers.*;import static org.mockito.Mockito.*;
 
 class UserControllerTest {
-  private JdbcTemplate db;private UserController controller;private final PermissionService permissionService=new PermissionService(mock(JdbcTemplate.class));
-  @BeforeEach void setUp(){db=mock(JdbcTemplate.class);var encoder=mock(PasswordEncoder.class);when(encoder.encode(anyString())).thenReturn("hash");when(db.queryForObject(eq("select last_insert_id()"),eq(Long.class))).thenReturn(10L);controller=new UserController(db,encoder,permissionService,mock(AuditService.class));}
+  private JdbcTemplate db;private PasswordEncoder encoder;private UserController controller;private final PermissionService permissionService=new PermissionService(mock(JdbcTemplate.class));
+  @BeforeEach void setUp(){db=mock(JdbcTemplate.class);encoder=mock(PasswordEncoder.class);when(encoder.encode(anyString())).thenReturn("hash");when(db.queryForObject(eq("select last_insert_id()"),eq(Long.class))).thenReturn(10L);controller=new UserController(db,encoder,permissionService,mock(AuditService.class));}
   @AfterEach void clear(){SecurityContextHolder.clearContext();}
 
   @Test void adminCanCreateOperationalRoles(){
@@ -62,6 +62,17 @@ class UserControllerTest {
     controller.displayName(2L,new UserController.DisplayNameRequest("新姓名"));
     verify(db).update(eq("update sys_user set display_name=?,version=version+1 where id=?"),eq("新姓名"),eq(2L));
     verify(db).update(eq("update employee set name=?,version=version+1 where user_id=?"),eq("新姓名"),eq(2L));
+  }
+
+  @Test void employeePasswordResetUsesRandomTemporaryPassword(){
+    authenticate("ADMIN");
+    when(db.queryForObject(eq("select role from sys_user where id=?"),eq(String.class),eq(2L))).thenReturn("EMPLOYEE");
+
+    var result=controller.reset(2L);
+
+    String temporaryPassword=result.data().get("temporaryPassword");
+    assertThat(temporaryPassword).matches("Tmp\\d{6}!a");
+    verify(encoder).encode(temporaryPassword);
   }
 
   @Test void superAdminCanChangeUsernameAndRevokeTheTargetSession(){

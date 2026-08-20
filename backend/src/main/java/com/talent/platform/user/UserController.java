@@ -29,7 +29,14 @@ public class UserController {
     audit.log("CHANGE_USERNAME","USER",id,before,Map.of("username",username));
     return ApiResponse.ok(null);
   }
-  @PostMapping("/{id}/reset-password") public ApiResponse<Map<String,String>> reset(@PathVariable Long id){String role=db.queryForObject("select role from sys_user where id=?",String.class,id);requireRoleManage(role);String pwd=temp();db.update("update sys_user set password_hash=?,must_change_password=true,version=version+1,security_version=security_version+1 where id=?",encoder.encode(pwd),id);audit.log("RESET_PASSWORD","USER",id,null,null);return ApiResponse.ok(Map.of("temporaryPassword",pwd));}
+  @PostMapping("/{id}/reset-password") public ApiResponse<Map<String,String>> reset(@PathVariable Long id){
+    String role=db.queryForObject("select role from sys_user where id=?",String.class,id);
+    requireRoleManage(role);
+    String pwd=temp();
+    db.update("update sys_user set password_hash=?,must_change_password=true,version=version+1,security_version=security_version+1 where id=?",encoder.encode(pwd),id);
+    audit.log("RESET_PASSWORD","USER",id,null,null);
+    return ApiResponse.ok(Map.of("temporaryPassword",pwd));
+  }
   @PutMapping("/{id}/stations") @Transactional public ApiResponse<Void> stations(@PathVariable Long id,@RequestBody Map<String,List<Long>> q){String role=db.queryForObject("select role from sys_user where id=?",String.class,id);if(!"STATION_MANAGER".equals(role))throw new BusinessException(400,"只有服务站负责人需要设置服务站范围");requireRoleManage(role);saveStations(id,role,q.get("stationIds"));audit.log("SET_STATION_SCOPE","USER",id,null,q);return ApiResponse.ok(null);}
   private List<String> allowedRoles(CurrentUser u){var roles=new ArrayList<String>();roles.add("EMPLOYEE");if(u.can(Permissions.USER_OPS_ROLE_MANAGE))roles.addAll(OPS_ROLES);if(u.can(Permissions.USER_ADMIN_MANAGE))roles.addAll(SYSTEM_ROLES);return roles;}
   private void requireRoleManage(String role){if("EMPLOYEE".equals(role))permissions.require(Permissions.USER_EMPLOYEE_MANAGE);else if(OPS_ROLES.contains(role))permissions.require(Permissions.USER_OPS_ROLE_MANAGE);else if(SYSTEM_ROLES.contains(role))permissions.require(Permissions.USER_ADMIN_MANAGE);else throw new BusinessException(400,"非法角色");}

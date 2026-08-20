@@ -43,11 +43,11 @@ public class ExamScoringService {
               id,questionId,point);
     }
     String status=subjective?"PENDING_REVIEW":"GRADED";
-    db.update("update exam_attempt set status=?,submitted_at=now(),objective_score=?,total_score=? where id=? and status='IN_PROGRESS'",
+    db.update("update exam_attempt set status=?,submitted_at=now(),objective_score=?,total_score=?,active_violation_key=null,violation_deadline_at=null where id=? and status='IN_PROGRESS'",
             status,objective,subjective?null:objective,id);
     return Map.of("status",status,"objectiveScore",objective,"submission",submittedStatus);
   }
-  @Transactional public int scoreExpired(){var ids=db.queryForList("select id from exam_attempt where status='IN_PROGRESS' and deadline_at<=now()",Long.class);for(Long id:ids)try{score(id,"TIMEOUT");}catch(Exception e){throw new IllegalStateException(e);}return ids.size();}
+  @Transactional public int scoreExpired(){var rows=db.queryForList("select id,(deadline_at<=now()) exam_expired from exam_attempt where status='IN_PROGRESS' and (deadline_at<=now() or violation_deadline_at<=now())");for(var row:rows)try{Long id=((Number)row.get("id")).longValue();Object expired=row.get("exam_expired");boolean examExpired=Boolean.TRUE.equals(expired)||(expired instanceof Number number&&number.intValue()!=0);score(id,examExpired?"TIMEOUT":"ANTI_CHEAT_TIMEOUT");}catch(Exception e){throw new IllegalStateException(e);}return rows.size();}
   @Transactional public int publishEndedResults(){return db.update("""
       update exam_attempt a join exam_plan p on p.id=a.plan_id
       set a.published=true,a.version=a.version+1

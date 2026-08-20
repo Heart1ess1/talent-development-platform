@@ -12,7 +12,7 @@ class EmployeeDirectoryControllerTest {
     when(db.queryForList(anyString(),any(Object[].class))).thenReturn(List.of());
     var controller=new EmployeeDirectoryController(db,permissions,mock(AuditService.class));
 
-    controller.list(1,20,null,null,null,null,null,null,null,null,null);
+    controller.list(1,20,null,null,null,null,null,null,null,null,null,false);
 
     var sql=ArgumentCaptor.forClass(String.class);verify(db).queryForObject(sql.capture(),eq(Long.class),any(Object[].class));
     assertThat(sql.getValue()).contains("e.mentor_user_id=?");
@@ -26,6 +26,23 @@ class EmployeeDirectoryControllerTest {
         "skill_mentor_name",
         "station_change_count",
         "last_station_change_at");
+  }
+
+  @Test void allRowsRequestDoesNotAddPaginationClause(){
+    var db=mock(JdbcTemplate.class);var permissions=mock(PermissionService.class);
+    when(permissions.employeeFilter("e")).thenReturn(new PermissionService.ScopeFilter("",List.of()));
+    when(db.queryForObject(anyString(),eq(Long.class),any(Object[].class))).thenReturn(2L);
+    when(db.queryForList(anyString(),any(Object[].class))).thenReturn(List.of(
+      Map.of("id",2L,"name","李四"),Map.of("id",1L,"name","张三")));
+    var controller=new EmployeeDirectoryController(db,permissions,mock(AuditService.class));
+
+    var result=controller.list(1,20,null,null,null,null,null,null,null,null,null,true);
+
+    var listSql=ArgumentCaptor.forClass(String.class);
+    verify(db).queryForList(listSql.capture(),any(Object[].class));
+    assertThat(listSql.getValue()).doesNotContain("limit ? offset ?");
+    assertThat(result.data().records()).hasSize(2);
+    assertThat(result.data().total()).isEqualTo(2L);
   }
 
   @Test void summaryUsesScopeAndReturnsManagementCoverage(){

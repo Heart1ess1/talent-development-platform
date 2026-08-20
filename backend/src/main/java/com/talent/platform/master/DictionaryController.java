@@ -200,6 +200,8 @@ public class DictionaryController {
     register(values, new TypeDefinition("SERVICE_STATION", "服务站点", "用于人员归属、调站与数据权限", "service_station"));
     register(values, new TypeDefinition("EDUCATION", "学历", "用于人员档案和人员筛选", null));
     register(values, new TypeDefinition("POLITICAL_STATUS", "政治面貌", "用于人员档案", null));
+    register(values, new TypeDefinition("SESSION_NAME", "场次名称", "用于培训场次名称选择", null));
+    register(values, new TypeDefinition("TRAINING_LOCATION", "培训地点", "用于线下培训地点选择", null));
     return Collections.unmodifiableMap(values);
   }
 
