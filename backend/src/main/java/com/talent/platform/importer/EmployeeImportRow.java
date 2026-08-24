@@ -29,87 +29,91 @@ import lombok.NoArgsConstructor;
         verticalAlignment = VerticalAlignmentEnum.CENTER)
 public class EmployeeImportRow {
 
-    @ExcelProperty(value = "序号", index = 0)
+    @ExcelProperty(value = "序号", order = 0)
     @NumberFormat("0")
     @ColumnWidth(8)
     private Integer serialNo;
 
-    @ExcelProperty(value = "工号", index = 1)
+    @ExcelProperty(value = "工号", order = 1)
     private String employeeNo;
 
-    @ExcelProperty(value = "姓名", index = 2)
+    @ExcelProperty(value = "姓名", order = 2)
     @ColumnWidth(22)
     private String name;
 
-    @ExcelProperty(value = "批次", index = 3)
+    @ExcelProperty(value = "批次", order = 3)
     @ColumnWidth(12)
     private String batch;
 
-    @ExcelProperty(value = "所属板块", index = 4)
+    @ExcelProperty(value = "班级", order = 4)
+    @ColumnWidth(14)
+    private String className;
+
+    @ExcelProperty(value = "所属板块", order = 5)
     private String businessUnit;
 
-    @ExcelProperty(value = "服务站点", index = 5)
+    @ExcelProperty(value = "服务站点", order = 6)
     @ColumnWidth(20)
     private String station;
 
-    @ExcelProperty(value = "指导老师（技术）", index = 6)
+    @ExcelProperty(value = "指导老师（技术）", order = 7)
     @ColumnWidth(20)
     private String technicalMentor;
 
-    @ExcelProperty(value = "指导老师（技能）", index = 7)
+    @ExcelProperty(value = "指导老师（技能）", order = 8)
     @ColumnWidth(20)
     private String skillMentor;
 
-    @ExcelProperty(value = "身份证号码", index = 8)
+    @ExcelProperty(value = "身份证号码", order = 9)
     @ColumnWidth(22)
     private String idCard;
 
-    @ExcelProperty(value = "毕业学校", index = 9)
+    @ExcelProperty(value = "毕业学校", order = 10)
     @ColumnWidth(20)
     private String school;
 
-    @ExcelProperty(value = "所学专业", index = 10)
+    @ExcelProperty(value = "所学专业", order = 11)
     private String major;
 
-    @ExcelProperty(value = "学历", index = 11)
+    @ExcelProperty(value = "学历", order = 12)
     @ColumnWidth(10)
     private String education;
 
-    @ExcelProperty(value = "出生日期", index = 12)
+    @ExcelProperty(value = "出生日期", order = 13)
     @ColumnWidth(14)
     private String birthDate;
 
-    @ExcelProperty(value = "籍贯", index = 13)
+    @ExcelProperty(value = "籍贯", order = 14)
     private String nativePlace;
 
-    @ExcelProperty(value = "政治面貌", index = 14)
+    @ExcelProperty(value = "政治面貌", order = 15)
     @ColumnWidth(12)
     private String politicalStatus;
 
-    @ExcelProperty(value = "住址（公司）", index = 15)
+    @ExcelProperty(value = "住址（公司）", order = 16)
     @ColumnWidth(24)
     private String residence;
 
-    @ExcelProperty(value = "兴趣爱好", index = 16)
+    @ExcelProperty(value = "兴趣爱好", order = 17)
     @ColumnWidth(20)
     private String hobbies;
 
-    @ExcelProperty(value = "特长", index = 17)
+    @ExcelProperty(value = "特长", order = 18)
     @ColumnWidth(20)
     private String speciality;
 
-    @ExcelProperty(value = "私人邮箱", index = 18)
+    @ExcelProperty(value = "私人邮箱", order = 19)
     @ColumnWidth(26)
     private String email;
 
-    @ExcelProperty(value = "联系方式", index = 19)
+    @ExcelProperty(value = "联系方式", order = 20)
     private String phone;
 
-    @ExcelProperty(value = "入职日期", index = 20)
+    @ExcelProperty(value = "入职日期", order = 21)
     @ColumnWidth(14)
     private String onboardDate;
 
-    @ExcelProperty(value = "状态", index = 21)
+    @ExcelProperty(value = "状态", order = 22)
     @ColumnWidth(10)
     private String status;
 }

@@ -47,6 +47,7 @@ public class ImportController {
         sample.setEmployeeNo("20260001");
         sample.setName("示例员工（请删除）");
         sample.setBatch(firstEnabledName("talent_batch"));
+        sample.setClassName(firstEnabledDictionaryLabel("CLASS"));
         sample.setBusinessUnit(firstEnabledName("business_unit"));
         sample.setStation(firstEnabledName("service_station"));
         sample.setTechnicalMentor(firstEnabledMentor());
@@ -65,7 +66,7 @@ public class ImportController {
         try (var writer = EasyExcel.write(response.getOutputStream()).build()) {
             var employeeSheet = EasyExcel.writerSheet(0, "新员工导入")
                     .head(EmployeeImportRow.class)
-                    .registerWriteHandler(new EmployeeExcelSheetHandler(21))
+                    .registerWriteHandler(new EmployeeExcelSheetHandler(22))
                     .build();
             writer.write(List.of(sample), employeeSheet);
             var instructionSheet = EasyExcel.writerSheet(1, "填写说明")
@@ -107,6 +108,9 @@ public class ImportController {
                 errors.add(new RowError(line, "批次", "不能为空"));
             else if (id("talent_batch", r.getBatch()) == null)
                 errors.add(new RowError(line, "批次", "不存在"));
+            if (r.getClassName() != null && !r.getClassName().isBlank()
+                    && dictionaryItemId("CLASS", r.getClassName()) == null)
+                errors.add(new RowError(line, "班级", "不存在或已停用"));
             if (r.getBusinessUnit() != null && !r.getBusinessUnit().isBlank()
                     && id("business_unit", r.getBusinessUnit()) == null)
                 errors.add(new RowError(line, "所属板块", "不存在"));
@@ -137,18 +141,19 @@ public class ImportController {
             db.update("""
                 insert into employee(
                     user_id, employee_no, name,
-                    batch_id, business_unit_id, station_id,
+                    batch_id, class_id, business_unit_id, station_id,
                     mentor_user_id, skill_mentor_user_id,
                     school, major, education,
                     birth_date, native_place, political_status, residence,
                     hobbies, speciality,
                     email, id_card, phone, onboard_date
                     ,status
-                ) values(?,?,?, ?,?,?, ?,?, ?,?,?, ?,?,?,?, ?,?, ?,?,?,?, ?)
+                ) values(?,?,?, ?,?,?,?, ?,?, ?,?,?, ?,?,?,?, ?,?, ?,?,?,?, ?)
                 """,
                     uid,
                     r.getEmployeeNo(), r.getName(),
                     id("talent_batch", r.getBatch()),
+                    dictionaryItemId("CLASS", r.getClassName()),
                     id("business_unit", r.getBusinessUnit()),
                     id("service_station", r.getStation()),
                     mentorId(r.getTechnicalMentor()),
@@ -236,6 +241,24 @@ public class ImportController {
         return names.isEmpty() ? null : names.get(0);
     }
 
+    private Long dictionaryItemId(String typeCode, String label) {
+        if (label == null || label.isBlank()) return null;
+        var ids = db.queryForList("""
+                select id from dictionary_item
+                where type_code=? and label=? and enabled=true
+                """, Long.class, typeCode, label.trim());
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    private String firstEnabledDictionaryLabel(String typeCode) {
+        var labels = db.queryForList("""
+                select label from dictionary_item
+                where type_code=? and enabled=true
+                order by sort_order,id limit 1
+                """, String.class, typeCode);
+        return labels.isEmpty() ? null : labels.get(0);
+    }
+
     private String firstEnabledMentor() {
         var usernames = db.queryForList("""
                 select username from sys_user
@@ -251,6 +274,7 @@ public class ImportController {
                 instruction("工号", "是", "必须唯一；将同时作为员工登录用户名。建议按文本填写，避免前导零丢失。", "20260001"),
                 instruction("姓名", "是", "填写员工真实姓名。", "张三"),
                 instruction("批次", "是", "必须与系统中已启用的培养批次名称完全一致。", "2026届"),
+                instruction("班级", "否", "必须与字典管理中已启用的班级名称完全一致；留空表示暂不分配班级。", "2026届1班"),
                 instruction("所属板块", "否", "必须与系统中已启用的所属板块名称完全一致。", "机动车"),
                 instruction("服务站点", "否", "必须与系统中已启用的服务站点名称完全一致。", "示例服务站"),
                 instruction("指导老师（技术）", "否", "填写已启用导师的用户名；也可填写不重名的导师姓名。", "mentor"),
