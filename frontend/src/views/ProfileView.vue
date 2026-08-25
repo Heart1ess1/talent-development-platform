@@ -255,7 +255,7 @@ onMounted(async()=>{
     <el-dialog v-model="stationDialog" title="申请变更服务站" width="400px">
       <el-form label-position="top">
         <el-form-item label="目标服务站">
-          <el-select v-model="selectedStationId" placeholder="选择服务站" style="width:100%">
+          <el-select v-model="selectedStationId" filterable placeholder="选择服务站" style="width:100%">
             <el-option v-for="station in availableStations" :key="station.id" :label="station.name" :value="station.id"/>
           </el-select>
         </el-form-item>

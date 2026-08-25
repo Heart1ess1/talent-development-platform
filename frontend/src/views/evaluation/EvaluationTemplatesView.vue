@@ -112,7 +112,7 @@ onMounted(load)
 
     <el-dialog v-model="applyOpen" title="应用模板到月份" width="min(560px, 94vw)" :close-on-click-modal="false">
       <el-alert title="应用后生成独立方案草稿；发布前不会影响当前计算。" type="info" :closable="false" show-icon/>
-      <el-form label-position="top" style="margin-top:18px"><el-form-item label="评价模板" required><el-select v-model="application.templateId" style="width:100%"><el-option v-for="row in activeTemplates" :key="row.id" :value="row.id" :label="row.name"/></el-select></el-form-item><el-form-item label="培养批次" required><el-select v-model="application.batchId" filterable style="width:100%"><el-option v-for="row in batches" :key="row.id" :value="row.id" :label="row.name"/></el-select></el-form-item><el-form-item label="生效月份" required><el-date-picker v-model="application.effectiveMonth" type="month" value-format="YYYY-MM" style="width:100%"/></el-form-item></el-form>
+      <el-form label-position="top" style="margin-top:18px"><el-form-item label="评价模板" required><el-select v-model="application.templateId" filterable style="width:100%"><el-option v-for="row in activeTemplates" :key="row.id" :value="row.id" :label="row.name"/></el-select></el-form-item><el-form-item label="培养批次" required><el-select v-model="application.batchId" filterable style="width:100%"><el-option v-for="row in batches" :key="row.id" :value="row.id" :label="row.name"/></el-select></el-form-item><el-form-item label="生效月份" required><el-date-picker v-model="application.effectiveMonth" type="month" value-format="YYYY-MM" style="width:100%"/></el-form-item></el-form>
       <template #footer><el-button @click="applyOpen=false">取消</el-button><el-button type="primary" @click="applyTemplate">生成方案草稿</el-button></template>
     </el-dialog>
   </div>

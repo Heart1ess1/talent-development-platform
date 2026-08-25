@@ -166,7 +166,7 @@ async function importAttendance(options:UploadRequestOptions){
         <el-select v-model="filters.classPositionId" clearable filterable placeholder="全部班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
         <el-select v-model="filters.courseId" clearable filterable placeholder="全部课程" @change="filters.sessionId=null"><el-option v-for="course in courses" :key="course.id" :label="course.name" :value="course.id"/></el-select>
         <el-select v-model="filters.sessionId" clearable filterable placeholder="全部场次"><el-option v-for="session in availableSessions" :key="session.id" :label="session.title" :value="session.id"/></el-select>
-        <el-select v-model="filters.source" clearable placeholder="签到来源"><el-option label="员工签到" value="SELF"/><el-option label="人工补录" value="MANUAL"/></el-select>
+        <el-select v-model="filters.source" clearable filterable placeholder="签到来源"><el-option label="员工签到" value="SELF"/><el-option label="人工补录" value="MANUAL"/></el-select>
         <el-date-picker v-model="filters.dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" range-separator="至"/>
         <el-button type="primary" @click="search">查询</el-button>
         <el-button :icon="Refresh" @click="reset">重置</el-button>

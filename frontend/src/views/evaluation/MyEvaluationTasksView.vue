@@ -34,7 +34,7 @@ watch([month,status,component],load);onMounted(load)
 
     <section class="evaluation-workspace">
       <div class="evaluation-workspace-head"><div><h2>任务清单</h2><p>“当前平均”包含已提交评分，仅供过程查看；所有评分人提交后才成为正式得分。</p></div></div>
-      <div class="my-task-filters"><el-select v-model="component" clearable placeholder="全部评分项"><el-option label="导师评价" value="MENTOR"/><el-option label="站点评价" value="STATION"/><el-option label="培训评价" value="TRAINING"/></el-select><el-select v-model="status" clearable placeholder="全部状态"><el-option v-for="(label,key) in statusLabels" :key="key" :label="label" :value="key"/></el-select></div>
+      <div class="my-task-filters"><el-select v-model="component" clearable filterable placeholder="全部评分项"><el-option label="导师评价" value="MENTOR"/><el-option label="站点评价" value="STATION"/><el-option label="培训评价" value="TRAINING"/></el-select><el-select v-model="status" clearable filterable placeholder="全部状态"><el-option v-for="(label,key) in statusLabels" :key="key" :label="label" :value="key"/></el-select></div>
       <div v-if="rows.length" class="my-task-list">
         <article v-for="row in rows" :key="row.id" :class="{overdue:row.status==='OVERDUE'}">
           <div class="task-person"><span>{{row.employee_name.slice(0,1)}}</span><div><strong>{{row.employee_name}} <small>{{row.employee_no}}</small></strong><p>{{row.batch_name||'未分配批次'}} · {{row.station_name||'未分配站点'}}</p></div></div>

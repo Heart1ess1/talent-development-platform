@@ -86,7 +86,7 @@ onMounted(load)
 
     <section class="exam-workspace" v-loading="loading">
       <div class="exam-workspace-head"><div><h2>试卷库</h2><p>试卷一旦用于考试计划即保留为历史版本，避免后续修改影响既有考试。</p></div><span class="exam-result-count">共 {{papers.length}} 份</span></div>
-      <div class="exam-filter-bar paper-library-filter"><el-input v-model="keyword" clearable :prefix-icon="Search" placeholder="搜索试卷名称或说明"/><el-select v-model="modeFilter" clearable placeholder="全部组卷方式"><el-option label="手动组卷" value="MANUAL"/><el-option label="随机组卷" value="RANDOM"/></el-select><el-button type="primary" :icon="Plus" @click="openCreate">新建试卷</el-button></div>
+      <div class="exam-filter-bar paper-library-filter"><el-input v-model="keyword" clearable :prefix-icon="Search" placeholder="搜索试卷名称或说明"/><el-select v-model="modeFilter" clearable filterable placeholder="全部组卷方式"><el-option label="手动组卷" value="MANUAL"/><el-option label="随机组卷" value="RANDOM"/></el-select><el-button type="primary" :icon="Plus" @click="openCreate">新建试卷</el-button></div>
       <el-table :data="filteredPapers" class="exam-table" empty-text="暂无试卷">
         <el-table-column label="试卷" min-width="260"><template #default="s"><div class="paper-name"><span><el-icon><Document/></el-icon></span><div><strong>{{s.row.name}}</strong><small>{{s.row.description||'暂无试卷说明'}}</small></div></div></template></el-table-column>
         <el-table-column label="组卷方式" width="120"><template #default="s"><el-tag :type="s.row.assembly_mode==='RANDOM'?'success':'info'" effect="plain">{{modeLabel(s.row)}}</el-tag></template></el-table-column>
@@ -107,14 +107,14 @@ onMounted(load)
         <div class="paper-section-title"><span>2</span><div><strong>组卷方式</strong><small>手动组卷适合固定考核；随机组卷适合复用和防止题目重复。</small></div></div>
         <el-radio-group v-model="paper.mode" class="mode-cards"><el-radio-button value="MANUAL">手动选题</el-radio-button><el-radio-button value="RANDOM">规则抽题</el-radio-button></el-radio-group>
         <template v-if="paper.mode==='MANUAL'">
-          <div class="question-picker-filter"><el-input v-model="questionKeyword" clearable :prefix-icon="Search" placeholder="搜索题干"/><el-select v-model="questionBankId" clearable placeholder="全部题库"><el-option v-for="item in banks.filter(x=>truthy(x.enabled))" :key="item.id" :label="item.name" :value="item.id"/></el-select><el-select v-model="questionType" clearable placeholder="全部题型"><el-option v-for="key in objectiveTypes" :key="key" :label="typeLabels[key]" :value="key"/></el-select></div>
+          <div class="question-picker-filter"><el-input v-model="questionKeyword" clearable :prefix-icon="Search" placeholder="搜索题干"/><el-select v-model="questionBankId" clearable filterable placeholder="全部题库"><el-option v-for="item in banks.filter(x=>truthy(x.enabled))" :key="item.id" :label="item.name" :value="item.id"/></el-select><el-select v-model="questionType" clearable filterable placeholder="全部题型"><el-option v-for="key in objectiveTypes" :key="key" :label="typeLabels[key]" :value="key"/></el-select></div>
           <div class="question-picker">
             <label v-for="item in selectableQuestions" :key="item.id" :class="{selected:paper.selected.includes(item.id)}"><el-checkbox v-model="paper.selected" :value="item.id"/><span class="question-copy"><strong>{{item.stem}}</strong><small>{{item.bank_name}} · {{typeLabels[item.question_type]}}</small></span><el-input-number v-if="paper.selected.includes(item.id)" v-model="paper.scores[item.id]" :min="0.01" :precision="2" controls-position="right"/><em v-if="paper.selected.includes(item.id)">分</em></label>
             <el-empty v-if="!selectableQuestions.length" :image-size="70" description="没有符合条件的可用题目"/>
           </div>
         </template>
         <template v-else>
-          <el-select v-model="paper.bankIds" multiple collapse-tags collapse-tags-tooltip clearable class="bank-source-select" placeholder="抽题范围：全部启用题库"><el-option v-for="item in banks.filter(x=>truthy(x.enabled))" :key="item.id" :label="item.name" :value="item.id"/></el-select>
+          <el-select v-model="paper.bankIds" multiple filterable collapse-tags collapse-tags-tooltip clearable class="bank-source-select" placeholder="抽题范围：全部启用题库"><el-option v-for="item in banks.filter(x=>truthy(x.enabled))" :key="item.id" :label="item.name" :value="item.id"/></el-select>
           <el-table :data="objectiveTypes.map(type=>({type,...paper.rules[type]}))" class="rule-table">
             <el-table-column label="题型" width="105"><template #default="s">{{typeLabels[s.row.type]}}</template></el-table-column>
             <el-table-column label="可用量" width="90"><template #default="s">{{availableCount(s.row.type)}} 题</template></el-table-column>

@@ -163,7 +163,7 @@ onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promis
 
             <div class="evaluation-total-card"><div><span>当前月度综合分</span><strong>{{scoreText(detail.finalScore)}}</strong></div><div v-if="detail.missingItems.length" class="evaluation-missing">待补齐：{{detail.missingItems.map((x:ComponentCode)=>componentLabels[x]).join('、')}}</div><div v-else>所有启用项已齐全，可以生成并发布汇总。</div></div>
 
-            <section v-if="canManage" class="adjustment-panel"><div><h3>加扣分登记</h3><p>仅登记有明确事实依据的额外表现，最终值受模板上限约束。</p></div><div class="evaluation-filters"><el-select v-model="adjustment.type"><el-option label="加分" value="BONUS"/><el-option label="扣分" value="DEDUCTION"/></el-select><el-input-number v-model="adjustment.points" :min="0.01" :precision="2" controls-position="right"/><el-input v-model="adjustment.reason" maxlength="1000" placeholder="填写事实依据和原因"/><el-button type="primary" :disabled="detail.locked||!adjustment.reason.trim()" @click="addAdjustment">登记</el-button></div></section>
+            <section v-if="canManage" class="adjustment-panel"><div><h3>加扣分登记</h3><p>仅登记有明确事实依据的额外表现，最终值受模板上限约束。</p></div><div class="evaluation-filters"><el-select v-model="adjustment.type" filterable><el-option label="加分" value="BONUS"/><el-option label="扣分" value="DEDUCTION"/></el-select><el-input-number v-model="adjustment.points" :min="0.01" :precision="2" controls-position="right"/><el-input v-model="adjustment.reason" maxlength="1000" placeholder="填写事实依据和原因"/><el-button type="primary" :disabled="detail.locked||!adjustment.reason.trim()" @click="addAdjustment">登记</el-button></div></section>
           </template>
         </template>
       </main>
