@@ -178,6 +178,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `db/migration/V28__use_business_units_for_exam_plan_scopes.sql` | 将考试计划的“板块”范围从历史服务站口径统一为所属板块主数据，并迁移同名历史范围。 |
 | `db/migration/V23__course_material_learning.sql` | 增加课件预览会话、员工学习次数和累计学习时长记录。 |
 | `db/migration/V24__object_upload_ticket.sql` | 增加 OSS 客户端直传票据、用途/归属绑定、有效期和单次消费状态。 |
+| `db/migration/V35__employee_gender_and_class_position.sql` | 增加员工性别和班级职务字段、班级职务字典关联及查询索引。 |
 
 ## 5. 前端结构
 

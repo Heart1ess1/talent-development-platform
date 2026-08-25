@@ -103,4 +103,15 @@ class DictionaryControllerTest {
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining("类型不存在");
   }
+
+  @Test
+  void exposesClassPositionButKeepsGenderOutsideDictionaryManagement() {
+    when(db.queryForList(startsWith("select id,item_value"), eq("CLASS_POSITION")))
+        .thenReturn(List.of());
+
+    assertThat(controller.values("CLASS_POSITION", false).data()).isEmpty();
+    assertThatThrownBy(() -> controller.values("GENDER", false))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("类型不存在");
+  }
 }

@@ -17,6 +17,8 @@ interface ReviewRow {
   employee_status:string;
   class_id?:number|null;
   class_name?:string|null;
+  class_position_id?:number|null;
+  class_position_name?:string|null;
   avatar_token?:string|null;
   current_station_id?:number|null;
   current_station_name?:string|null;
@@ -46,6 +48,7 @@ interface ReviewSummary {
 const rows=ref<ReviewRow[]>([]);
 const stations=ref<any[]>([]);
 const classOptions=ref<DictionaryOption[]>([]);
+const classPositionOptions=ref<DictionaryOption[]>([]);
 const loading=ref(false);
 const summaryLoading=ref(false);
 const detailOpen=ref(false);
@@ -57,7 +60,7 @@ const submitting=ref(false);
 const reviewAction=ref<ReviewAction>('APPROVE');
 const reviewComment=ref('');
 const dateRange=ref<[string,string]|[]>([]);
-const filters=reactive({status:'PENDING',keyword:'',classId:undefined as number|undefined,stationId:undefined as number|undefined});
+const filters=reactive({status:'PENDING',keyword:'',classId:undefined as number|undefined,classPositionId:undefined as number|undefined,stationId:undefined as number|undefined});
 const summary=reactive<ReviewSummary>({
   total:0,
   pending:0,
@@ -154,6 +157,7 @@ async function loadList(){
     if(filters.status)params.status=filters.status;
     if(filters.keyword.trim())params.keyword=filters.keyword.trim();
     if(filters.classId)params.classId=filters.classId;
+    if(filters.classPositionId)params.classPositionId=filters.classPositionId;
     if(filters.stationId)params.stationId=filters.stationId;
     if(dateRange.value.length===2){
       params.dateFrom=dateRange.value[0];
@@ -164,6 +168,7 @@ async function loadList(){
       const keyword=filters.keyword.trim().toLowerCase();
       if(keyword&&!`${row.employee_name} ${row.employee_no}`.toLowerCase().includes(keyword))return false;
       if(filters.classId&&row.class_id!==filters.classId)return false;
+      if(filters.classPositionId&&row.class_position_id!==filters.classPositionId)return false;
       if(filters.stationId&&row.current_station_id!==filters.stationId&&row.requested_station_id!==filters.stationId)return false;
       const requestDate=String(row.created_at).slice(0,10);
       if(dateRange.value.length===2&&(requestDate<dateRange.value[0]||requestDate>dateRange.value[1]))return false;
@@ -175,9 +180,10 @@ async function loadList(){
 }
 
 async function loadStations(){
-  const [response,classValues]=await Promise.all([api.get<any,Envelope<any[]>>('/stations'),loadDictionaryValues('CLASS')]);
+  const [response,classValues,classPositionValues]=await Promise.all([api.get<any,Envelope<any[]>>('/stations'),loadDictionaryValues('CLASS'),loadDictionaryValues('CLASS_POSITION')]);
   stations.value=response.data;
   classOptions.value=classValues;
+  classPositionOptions.value=classPositionValues;
 }
 
 async function refresh(){
@@ -187,6 +193,7 @@ async function refresh(){
 function resetFilters(){
   filters.keyword='';
   filters.classId=undefined;
+  filters.classPositionId=undefined;
   filters.stationId=undefined;
   dateRange.value=[];
   filters.status='PENDING';
@@ -299,6 +306,7 @@ onMounted(()=>Promise.all([loadStations(),refresh()]));
           <el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/>
         </el-select>
         <el-select v-model="filters.classId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
+        <el-select v-model="filters.classPositionId" clearable filterable placeholder="全部班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
         <el-date-picker
           v-model="dateRange"
           type="daterange"

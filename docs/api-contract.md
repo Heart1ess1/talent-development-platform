@@ -93,8 +93,8 @@ Authorization: Bearer <token>
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/employees` | `employee:read`，非 `EMPLOYEE`，按数据范围过滤 | 分页查询员工 | `page`、`size`、`keyword`、`batchId`、`stationId`、`mentorId` | 分页员工列表 |
-| `POST` | `/api/v1/employees` | `employee:write` | 创建员工和关联员工账号 | `employeeNo`、`name`、`batchId`、`businessUnitId`、`stationId`、`mentorUserId`、`skillMentorUserId`、`status` 及个人资料字段 | 员工 ID |
+| `GET` | `/api/v1/employees` | `employee:read`，非 `EMPLOYEE`，按数据范围过滤 | 分页查询员工 | `page`、`size`、`keyword`、`batchId`、`classId`、`classPositionId`、`stationId`、`mentorId` | 分页员工列表 |
+| `POST` | `/api/v1/employees` | `employee:write` | 创建员工和关联员工账号 | `employeeNo`、`name`、`gender=男|女`、`batchId`、`classId`、`classPositionId`、`businessUnitId`、`stationId`、`mentorUserId`、`skillMentorUserId`、`status` 及个人资料字段 | 员工 ID |
 | `PUT` | `/api/v1/employees/{id}` | `employee:write` | 更新人员完整档案；站点改变时自动写入已生效历史 | 同创建员工 | 空 |
 | `POST` | `/api/v1/employees/bind-mentor` | `employee:write` | 批量设置技术或技能导师 | `employeeIds`、`mentorUserId`、`mentorType=TECHNICAL|SKILL` | 更新数量 |
 | `GET` | `/api/v1/employees/{id}` | `employee:read`，非 `EMPLOYEE`，按数据范围校验 | 查询员工详情 | 路径 `id` | 员工详情 |
@@ -114,13 +114,13 @@ Authorization: Bearer <token>
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/employee-directory` | `employee:read`，按数据范围过滤 | 统一人员台账分页查询 | `page`、`size`、`keyword`、`batchId`、`businessUnitId`、`stationId`、`mentorId`、`skillMentorId`、`education`、`status` | 分页人员目录，包含证件照令牌、所属板块、双导师、完整档案字段、已生效调站次数和最近调站时间 |
+| `GET` | `/api/v1/employee-directory` | `employee:read`，按数据范围过滤 | 统一人员台账分页查询 | `page`、`size`、`keyword`、`batchId`、`classId`、`classPositionId`、`businessUnitId`、`stationId`、`mentorId`、`skillMentorId`、`education`、`status` | 分页人员目录，包含性别、班级、班级职务、证件照令牌、所属板块、双导师、完整档案字段、已生效调站次数和最近调站时间 |
 | `GET` | `/api/v1/employee-directory/summary` | `employee:read`，按数据范围过滤 | 人员工作台管理概览 | 除 `status`、分页外的目录筛选参数 | 权限范围内人员总数、在职/停用人数、已分配站点人数和双导师完整人数 |
 | `GET` | `/api/v1/employee-directory/export` | `employee:export`，按数据范围过滤 | 导出人员目录 Excel | 同目录筛选参数 | Excel 文件 |
 | `GET` | `/api/v1/imports/employees/template` | `employee:write` | 下载员工导入模板 | 无 | Excel 文件 |
 | `POST` | `/api/v1/imports/employees` | `employee:write` | 导入员工 | `multipart/form-data` 字段 `file` | `imported`、`errors` |
 
-导入员工采用整批校验；如存在错误，返回 `imported=0` 和行级错误，不写入任何员工。
+导入员工采用整批校验；如存在错误，返回 `imported=0` 和行级错误，不写入任何员工。模板列顺序为工号、姓名、性别、批次、班级、班级职务、所属板块等字段；性别仅允许“男”或“女”，班级职务必须匹配已启用的 `CLASS_POSITION` 字典值。
 
 ## 服务站变更申请
 

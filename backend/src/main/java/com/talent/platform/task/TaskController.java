@@ -54,9 +54,9 @@ public class TaskController {
 
   public record TaskRequest(@NotBlank String title, @NotBlank String description, String requirements,
                             @NotNull LocalDateTime deadline) {}
-  public record AssignRequest(@NotNull Long taskId, Long batchId, Long classId, Long businessUnitId, Long stationId) {}
+  public record AssignRequest(@NotNull Long taskId, Long batchId, Long classId, Long classPositionId, Long businessUnitId, Long stationId) {}
   public record ManualDispatchRequest(@NotBlank String title, @NotBlank String description, String requirements,
-                                      @NotNull LocalDateTime deadline, Long batchId, Long classId, Long businessUnitId,
+                                      @NotNull LocalDateTime deadline, Long batchId, Long classId, Long classPositionId, Long businessUnitId,
                                       Long stationId) {}
   public record ManualDispatchResult(Long taskId, int assignedEmployees) {}
   public record PlanDispatchRequest(
@@ -69,6 +69,7 @@ public class TaskController {
       LocalDate deadlineDate,
       Long batchId,
       Long classId,
+      Long classPositionId,
       Long businessUnitId,
       Long stationId) {}
   public record PlanDispatchResult(int targetEmployees, int createdTasks, int createdAssignments) {}
@@ -230,7 +231,7 @@ public class TaskController {
     permissions.require(Permissions.TASK_MANAGE);
     var u = SecurityUtils.current();
     int count = 0;
-    for (Long employeeId : targetEmployees(q.batchId(), q.classId(), q.businessUnitId(), q.stationId())) {
+    for (Long employeeId : targetEmployees(q.batchId(), q.classId(), q.classPositionId(), q.businessUnitId(), q.stationId())) {
       count += db.update("insert ignore into task_assignment(task_id,employee_id,assigned_by) values(?,?,?)",
           q.taskId(), employeeId, u.id());
     }
@@ -243,7 +244,7 @@ public class TaskController {
   @Transactional
   public ApiResponse<ManualDispatchResult> dispatchManual(@Valid @RequestBody ManualDispatchRequest q) {
     permissions.require(Permissions.TASK_MANAGE);
-    var employeeIds = targetEmployees(q.batchId(), q.classId(), q.businessUnitId(), q.stationId());
+    var employeeIds = targetEmployees(q.batchId(), q.classId(), q.classPositionId(), q.businessUnitId(), q.stationId());
     if (employeeIds.isEmpty()) throw new BusinessException(400, "未匹配到在职员工，无法下发任务");
     var user = SecurityUtils.current();
     db.update("insert into challenge_task(title,description,requirements,deadline,created_by) values(?,?,?,?,?)",
@@ -353,7 +354,7 @@ public class TaskController {
     requireDispatchablePlan(q.planId());
     var planTasks = selectedPlanTasks(q);
 
-    var employees = targetEmployees(q.batchId(), q.classId(), q.businessUnitId(), q.stationId());
+    var employees = targetEmployees(q.batchId(), q.classId(), q.classPositionId(), q.businessUnitId(), q.stationId());
     var deadline = resolveDeadline(q);
     var u = SecurityUtils.current();
     int createdTasks = 0;
@@ -387,7 +388,7 @@ public class TaskController {
     permissions.require(Permissions.TASK_MANAGE);
     requireDispatchablePlan(q.planId());
     var planTasks = selectedPlanTasks(q);
-    var employees = targetEmployees(q.batchId(), q.classId(), q.businessUnitId(), q.stationId());
+    var employees = targetEmployees(q.batchId(), q.classId(), q.classPositionId(), q.businessUnitId(), q.stationId());
     var deadline = resolveDeadline(q);
     var taskIds = planTasks.stream().map(row -> row.get("id")).toList();
     String placeholders = String.join(",", Collections.nCopies(taskIds.size(), "?"));
@@ -555,11 +556,11 @@ public class TaskController {
     return ApiResponse.ok(null);
   }
 
-  private List<Long> targetEmployees(Long batchId, Long classId, Long businessUnitId, Long stationId) {
+  private List<Long> targetEmployees(Long batchId, Long classId, Long classPositionId, Long businessUnitId, Long stationId) {
     var where = new StringBuilder(" where e.status='ACTIVE'");
     var args = new ArrayList<Object>();
-    if (batchId == null && classId == null && businessUnitId == null && stationId == null) {
-      throw new BusinessException(400, "请选择批次、班级、所属板块或服务站");
+    if (batchId == null && classId == null && classPositionId == null && businessUnitId == null && stationId == null) {
+      throw new BusinessException(400, "请选择批次、班级、班级职务、所属板块或服务站");
     }
     if (batchId != null) {
       where.append(" and e.batch_id=?");
@@ -568,6 +569,10 @@ public class TaskController {
     if (classId != null) {
       where.append(" and e.class_id=?");
       args.add(classId);
+    }
+    if (classPositionId != null) {
+      where.append(" and e.class_position_id=?");
+      args.add(classPositionId);
     }
     if (businessUnitId != null) {
       where.append(" and e.business_unit_id=?");
@@ -626,10 +631,12 @@ public class TaskController {
     args.addAll(scope.args());
     String sql = "select a.id,a.status,a.assigned_at,a.final_score,"
         + "e.id employee_id,e.name employee_name,e.employee_no,e.class_id,cls.label class_name,"
+        + "e.class_position_id,cp.label class_position_name,"
         + "s.id submission_id,s.submitted_at,s.status submission_status,s.submission_version,s.review_comment,"
         + "(select count(*) from stored_file f where f.submission_id=s.id) file_count "
         + "from task_assignment a join challenge_task t on t.id=a.task_id join employee e on e.id=a.employee_id "
         + "left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS' "
+        + "left join dictionary_item cp on cp.id=e.class_position_id and cp.type_code='CLASS_POSITION' "
         + "left join task_submission s on s.id=(select s2.id from task_submission s2 where s2.assignment_id=a.id order by s2.submission_version desc limit 1) "
         + "where a.task_id=?" + scope.sql() + " order by a.assigned_at,e.id";
     return db.queryForList(sql, args.toArray());

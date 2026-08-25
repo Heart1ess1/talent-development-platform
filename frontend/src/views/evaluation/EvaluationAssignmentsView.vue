@@ -13,7 +13,7 @@ type TargetType='ALL'|'BATCH'|'BUSINESS_UNIT'
 interface Summary{component:ManualComponent;taskCount:number;employeeCount:number;unassignedCount:number;pendingCount:number;completedCount:number;coveredTaskCount:number;ruleCount:number;reviewerCount:number}
 interface Reviewer{id:number;username:string;display_name:string;role:string}
 interface ScopeRule{id:number;period_month:string;component_type:ManualComponent;target_type:TargetType;target_id:number;targetName:string;due_at?:string;note?:string;reviewers:Reviewer[];matchedEmployeeCount:number;matchedTaskCount:number}
-interface RatingTask{id:number;employee_no:string;employee_name:string;class_id?:number;class_name?:string;batch_name?:string;business_unit_name?:string;scope_name?:string;component_type:ManualComponent;status:string;reviewerCount:number;submittedCount:number;reviewers:Array<{reviewerName:string}>}
+interface RatingTask{id:number;employee_no:string;employee_name:string;class_id?:number;class_name?:string;class_position_id?:number;class_position_name?:string;batch_name?:string;business_unit_name?:string;scope_name?:string;component_type:ManualComponent;status:string;reviewerCount:number;submittedCount:number;reviewers:Array<{reviewerName:string}>}
 
 const router=useRouter(),loading=ref(false),month=ref(new Date().toISOString().slice(0,7))
 const summaries=ref<Summary[]>([]),batches=ref<any[]>([]),businessUnits=ref<any[]>([])
@@ -21,6 +21,7 @@ const drawerOpen=ref(false),drawerLoading=ref(false),saving=ref(false),activeCom
 const rules=ref<ScopeRule[]>([]),reviewerOptions=ref<Reviewer[]>([]),employeeTasks=ref<RatingTask[]>([])
 const editingId=ref<number|null>(null),detailKeyword=ref('')
 const detailClassId=ref<number|null>(null),classOptions=ref<DictionaryOption[]>([])
+const detailClassPositionId=ref<number|null>(null),classPositionOptions=ref<DictionaryOption[]>([])
 const form=reactive<{targetType:TargetType;targetId:number|null;reviewerIds:number[];dueAt:string;note:string}>({targetType:'ALL',targetId:null,reviewerIds:[],dueAt:'',note:''})
 const componentMeta:Record<ManualComponent,{title:string;description:string;color:string}>={
   MENTOR:{title:'导师评价任务',description:'按全员、批次或板块统一配置导师评分人',color:'blue'},
@@ -30,10 +31,10 @@ const componentMeta:Record<ManualComponent,{title:string;description:string;colo
 const targetLabels:Record<TargetType,string>={ALL:'全员默认',BATCH:'指定批次',BUSINESS_UNIT:'指定板块'}
 const statusLabels:Record<string,string>={UNASSIGNED:'未分配',PENDING:'待评分',IN_PROGRESS:'评分中',OVERDUE:'已逾期',COMPLETED:'已完成',CLOSED:'已锁定'}
 const totals=computed(()=>({tasks:summaries.value.reduce((n,x)=>n+x.taskCount,0),employees:Math.max(0,...summaries.value.map(x=>x.employeeCount)),unassigned:summaries.value.reduce((n,x)=>n+x.unassignedCount,0),rules:summaries.value.reduce((n,x)=>n+x.ruleCount,0)}))
-const filteredTasks=computed(()=>{const q=detailKeyword.value.trim().toLowerCase();return employeeTasks.value.filter(x=>(!detailClassId.value||x.class_id===detailClassId.value)&&(!q||[x.employee_name,x.employee_no,x.class_name,x.batch_name,x.business_unit_name,x.scope_name].some(v=>String(v||'').toLowerCase().includes(q))))})
+const filteredTasks=computed(()=>{const q=detailKeyword.value.trim().toLowerCase();return employeeTasks.value.filter(x=>(!detailClassId.value||x.class_id===detailClassId.value)&&(!detailClassPositionId.value||x.class_position_id===detailClassPositionId.value)&&(!q||[x.employee_name,x.employee_no,x.class_name,x.class_position_name,x.batch_name,x.business_unit_name,x.scope_name].some(v=>String(v||'').toLowerCase().includes(q))))})
 
 async function loadOverview(){loading.value=true;try{summaries.value=(await api.get<any,Envelope<Summary[]>>('/evaluation/assignments/overview',{params:{month:month.value}})).data}finally{loading.value=false}}
-async function loadMasters(){const [batchResult,unitOptions,classValues]=await Promise.all([api.get<any,Envelope<any[]>>('/batches'),loadEnabledBusinessUnits(),loadDictionaryValues('CLASS')]);batches.value=batchResult.data.filter(x=>x.enabled);businessUnits.value=unitOptions;classOptions.value=classValues}
+async function loadMasters(){const [batchResult,unitOptions,classValues,classPositionValues]=await Promise.all([api.get<any,Envelope<any[]>>('/batches'),loadEnabledBusinessUnits(),loadDictionaryValues('CLASS'),loadDictionaryValues('CLASS_POSITION')]);batches.value=batchResult.data.filter(x=>x.enabled);businessUnits.value=unitOptions;classOptions.value=classValues;classPositionOptions.value=classPositionValues}
 async function generate(){const dueAt=`${month.value}-${String(new Date(Number(month.value.slice(0,4)),Number(month.value.slice(5,7)),0).getDate()).padStart(2,'0')}T23:59:59`;await ElMessageBox.confirm('系统将依据本月已发布评分方案生成三类人工评分任务。已有任务不会重复创建，已配置的范围规则会自动应用。','生成本月评分任务',{type:'info'});const count=(await api.post<any,Envelope<number>>('/evaluation/assignments/generate',{month:month.value,dueAt})).data;ElMessage.success(`已新增 ${count} 个员工评分任务`);await loadOverview()}
 async function loadComponent(){drawerLoading.value=true;try{const code=activeComponent.value;const [ruleResult,reviewerResult,taskResult]=await Promise.all([
   api.get<any,Envelope<ScopeRule[]>>('/evaluation/assignments/scope-rules',{params:{month:month.value,component:code}}),
@@ -116,10 +117,10 @@ onMounted(async()=>{await Promise.all([loadOverview(),loadMasters()])})
 
         <el-collapse class="employee-task-detail">
           <el-collapse-item name="tasks"><template #title><strong>查看系统自动展开的员工任务（{{employeeTasks.length}}）</strong></template>
-            <div style="display:flex;gap:10px;margin-bottom:12px"><el-input v-model="detailKeyword" clearable placeholder="搜索姓名、工号、班级、批次或板块" style="max-width:360px"/><el-select v-model="detailClassId" clearable filterable placeholder="全部班级" style="width:180px"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select></div>
+            <div style="display:flex;gap:10px;margin-bottom:12px"><el-input v-model="detailKeyword" clearable placeholder="搜索姓名、工号、班级、班级职务、批次或板块" style="max-width:360px"/><el-select v-model="detailClassId" clearable filterable placeholder="全部班级" style="width:180px"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><el-select v-model="detailClassPositionId" clearable filterable placeholder="全部班级职务" style="width:180px"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select></div>
             <el-table :data="filteredTasks" max-height="360" empty-text="尚未生成员工任务">
               <el-table-column label="员工" min-width="150"><template #default="s"><strong>{{s.row.employee_name}}</strong><small class="cell-subtitle">{{s.row.employee_no}}</small></template></el-table-column>
-              <el-table-column prop="class_name" label="班级" min-width="100"/><el-table-column prop="batch_name" label="批次" min-width="110"/><el-table-column prop="business_unit_name" label="板块" min-width="110"/>
+              <el-table-column prop="class_name" label="班级" min-width="100"/><el-table-column prop="class_position_name" label="班级职务" min-width="100"/><el-table-column prop="batch_name" label="批次" min-width="110"/><el-table-column prop="business_unit_name" label="板块" min-width="110"/>
               <el-table-column label="评分人" min-width="180"><template #default="s">{{taskReviewerNames(s.row)}}</template></el-table-column>
               <el-table-column label="进度" width="100"><template #default="s">{{s.row.submittedCount}} / {{s.row.reviewerCount}}</template></el-table-column>
               <el-table-column label="状态" width="90"><template #default="s">{{statusLabels[s.row.status]||s.row.status}}</template></el-table-column>

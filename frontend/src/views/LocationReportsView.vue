@@ -54,9 +54,11 @@ const page=ref(1)
 const pageSize=ref(20)
 const summary=reactive<Summary>({totalReports:0,trackedEmployees:0,todayReports:0,weekReports:0})
 const classOptions=ref<DictionaryOption[]>([])
+const classPositionOptions=ref<DictionaryOption[]>([])
 const filters=reactive({
   keyword:'',
   classId:null as number|null,
+  classPositionId:null as number|null,
   location:'',
   currentOnly:true,
   dateRange:[] as string[]
@@ -70,7 +72,7 @@ const latestReport=computed(()=>mine.value.records[0])
 const currentUpdatedAt=computed(()=>latestReport.value?.occurred_at||'')
 const expectedReturn=computed(()=>latestReport.value?.expected_return_at||'')
 const hasManagerFilters=computed(()=>Boolean(
-  filters.keyword||filters.classId||filters.location||filters.dateRange.length||!filters.currentOnly
+  filters.keyword||filters.classId||filters.classPositionId||filters.location||filters.dateRange.length||!filters.currentOnly
 ))
 
 function pad(value:number){return String(value).padStart(2,'0')}
@@ -96,6 +98,7 @@ function requestParams(){
     size:pageSize.value,
     keyword:filters.keyword||undefined,
     classId:filters.classId||undefined,
+    classPositionId:filters.classPositionId||undefined,
     location:filters.location||undefined,
     currentOnly:filters.currentOnly,
     dateFrom:filters.dateRange[0]||undefined,
@@ -147,7 +150,7 @@ function search(){
   load()
 }
 function resetFilters(){
-  Object.assign(filters,{keyword:'',classId:null,location:'',currentOnly:true,dateRange:[]})
+  Object.assign(filters,{keyword:'',classId:null,classPositionId:null,location:'',currentOnly:true,dateRange:[]})
   search()
 }
 function changePageSize(){
@@ -169,7 +172,7 @@ function isCurrent(row:LocationRecord){
   return row.is_current===true||row.is_current===1
 }
 
-onMounted(async()=>{if(!isEmployee.value)classOptions.value=await loadDictionaryValues('CLASS');await load()})
+onMounted(async()=>{if(!isEmployee.value)[classOptions.value,classPositionOptions.value]=await Promise.all([loadDictionaryValues('CLASS'),loadDictionaryValues('CLASS_POSITION')]);await load()})
 </script>
 
 <template>
@@ -264,6 +267,7 @@ onMounted(async()=>{if(!isEmployee.value)classOptions.value=await loadDictionary
           <div class="manager-filters">
             <el-input v-model="filters.keyword" :prefix-icon="Search" clearable placeholder="搜索姓名、工号或原因" @keyup.enter="search"/>
             <el-select v-model="filters.classId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
+            <el-select v-model="filters.classPositionId" clearable filterable placeholder="全部班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
             <el-input v-model="filters.location" :prefix-icon="Location" clearable placeholder="搜索地点" @keyup.enter="search"/>
             <el-date-picker v-model="filters.dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" range-separator="至"/>
             <el-checkbox v-model="filters.currentOnly" label="仅看当前位置" @change="search"/>

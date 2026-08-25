@@ -196,6 +196,7 @@ public class DictionaryController {
     var values = new LinkedHashMap<String, TypeDefinition>();
     register(values, new TypeDefinition("BATCH", "培养批次", "用于人员、任务、考试与评价范围", "talent_batch"));
     register(values, new TypeDefinition("CLASS", "班级", "用于人员归班和各业务场景的人员筛选", null));
+    register(values, new TypeDefinition("CLASS_POSITION", "班级职务", "用于人员班级职责和各业务场景的人员筛选", null));
     register(values, new TypeDefinition("BUSINESS_UNIT", "所属板块", "用于人员组织归属与业务范围", "business_unit"));
     register(values, new TypeDefinition("SERVICE_STATION", "服务站点", "用于人员归属、调站与数据权限", "service_station"));
     register(values, new TypeDefinition("EDUCATION", "学历", "用于人员档案和人员筛选", null));

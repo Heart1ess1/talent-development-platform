@@ -7,6 +7,9 @@ describe('employee directory column layout',()=>{
     expect(columns[0]!.key).toBe('name')
     expect(columns[1]!.key).toBe('school')
     expect(columns).toHaveLength(defaultDirectoryColumns.length)
+    expect(defaultDirectoryColumns.findIndex(column=>column.key==='gender')).toBeLessThan(defaultDirectoryColumns.findIndex(column=>column.key==='batch'))
+    expect(defaultDirectoryColumns.findIndex(column=>column.key==='classPosition')).toBeGreaterThan(defaultDirectoryColumns.findIndex(column=>column.key==='class'))
+    expect(defaultDirectoryColumns.findIndex(column=>column.key==='classPosition')).toBeLessThan(defaultDirectoryColumns.findIndex(column=>column.key==='businessUnit'))
   })
 
   it('clamps stored widths to safe limits',()=>{

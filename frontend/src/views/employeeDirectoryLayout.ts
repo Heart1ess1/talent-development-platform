@@ -1,4 +1,4 @@
-export type DirectoryColumnKey='name'|'employeeNo'|'batch'|'class'|'businessUnit'|'station'|'technicalMentor'|'skillMentor'|'school'|'major'|'education'|'phone'|'status'
+export type DirectoryColumnKey='name'|'employeeNo'|'gender'|'batch'|'class'|'classPosition'|'businessUnit'|'station'|'technicalMentor'|'skillMentor'|'school'|'major'|'education'|'phone'|'status'
 
 export type DirectoryColumnLayout={
   key:DirectoryColumnKey
@@ -12,8 +12,10 @@ export type DirectoryColumnLayout={
 export const defaultDirectoryColumns:DirectoryColumnLayout[]=[
   {key:'name',label:'姓名',width:120,minWidth:90,maxWidth:260,locked:true},
   {key:'employeeNo',label:'工号',width:130,minWidth:100,maxWidth:240},
+  {key:'gender',label:'性别',width:80,minWidth:68,maxWidth:130},
   {key:'batch',label:'批次',width:100,minWidth:80,maxWidth:220},
   {key:'class',label:'班级',width:120,minWidth:90,maxWidth:240},
+  {key:'classPosition',label:'班级职务',width:120,minWidth:90,maxWidth:240},
   {key:'businessUnit',label:'所属板块',width:130,minWidth:100,maxWidth:280},
   {key:'station',label:'服务站点',width:170,minWidth:120,maxWidth:360},
   {key:'technicalMentor',label:'指导老师（技术）',width:150,minWidth:110,maxWidth:300},

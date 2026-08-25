@@ -97,6 +97,8 @@ const mentors=ref<any[]>([])
 const educationOptions=ref<DictionaryOption[]>([])
 const politicalStatusOptions=ref<DictionaryOption[]>([])
 const classOptions=ref<DictionaryOption[]>([])
+const classPositionOptions=ref<DictionaryOption[]>([])
+const genderOptions=['男','女'] as const
 
 const isNarrow=ref(false)
 let narrowMedia:MediaQueryList|undefined
@@ -105,6 +107,7 @@ const filters=reactive({
   keyword:'',
   batchId:null as number|null,
   classId:null as number|null,
+  classPositionId:null as number|null,
   businessUnitId:null as number|null,
   stationId:null as number|null,
   mentorId:null as number|null,
@@ -116,8 +119,10 @@ const filters=reactive({
 const emptyEmployeeForm=()=>({
   employeeNo:'',
   name:'',
+  gender:null as string|null,
   batchId:null as number|null,
   classId:null as number|null,
+  classPositionId:null as number|null,
   businessUnitId:null as number|null,
   stationId:null as number|null,
   mentorUserId:null as number|null,
@@ -147,6 +152,7 @@ const summaryParams=computed(()=>({
   keyword:filters.keyword||undefined,
   batchId:filters.batchId||undefined,
   classId:filters.classId||undefined,
+  classPositionId:filters.classPositionId||undefined,
   businessUnitId:filters.businessUnitId||undefined,
   stationId:filters.stationId||undefined,
   mentorId:filters.mentorId||undefined,
@@ -176,7 +182,7 @@ const drawerTitle=computed(
 const nameColumn=computed(()=>directoryColumns.value.find(column=>column.key==='name')!)
 const businessColumns=computed(()=>directoryColumns.value.filter(column=>!column.locked))
 const tableMaxHeight=computed(()=>isNarrow.value?'62vh':'calc(100vh - 280px)')
-const layoutStorageKey=computed(()=>`employee-directory-layout:v1:${auth.user?.id??'anonymous'}`)
+const layoutStorageKey=computed(()=>`employee-directory-layout:v2:${auth.user?.id??'anonymous'}`)
 const loadedLabel=computed(()=>`共 ${total.value} 人，已全部加载`)
 
 function requestParams(){
@@ -232,7 +238,8 @@ async function loadMasters(){
     mentorResponse,
     educationValues,
     politicalStatusValues,
-    classValues
+    classValues,
+    classPositionValues
   ]=await Promise.all([
     api.get<any,Envelope<any[]>>('/batches'),
     loadEnabledBusinessUnits(),
@@ -240,7 +247,8 @@ async function loadMasters(){
     api.get<any,Envelope<any[]>>('/mentors'),
     loadDictionaryValues('EDUCATION'),
     loadDictionaryValues('POLITICAL_STATUS'),
-    loadDictionaryValues('CLASS')
+    loadDictionaryValues('CLASS'),
+    loadDictionaryValues('CLASS_POSITION')
   ])
   batches.value=batchResponse.data
   businessUnits.value=unitOptions
@@ -249,6 +257,7 @@ async function loadMasters(){
   educationOptions.value=educationValues
   politicalStatusOptions.value=politicalStatusValues
   classOptions.value=classValues
+  classPositionOptions.value=classPositionValues
 }
 
 async function loadPending(){
@@ -273,6 +282,7 @@ function reset(){
     keyword:'',
     batchId:null,
     classId:null,
+    classPositionId:null,
     businessUnitId:null,
     stationId:null,
     mentorId:null,
@@ -330,8 +340,10 @@ function fillEmployeeForm(row:DirectoryRow){
   Object.assign(employeeForm,{
     employeeNo:row.employee_no||'',
     name:row.name||'',
+    gender:row.gender||null,
     batchId:row.batch_id??null,
     classId:row.class_id??null,
+    classPositionId:row.class_position_id??null,
     businessUnitId:row.business_unit_id??null,
     stationId:row.station_id??null,
     mentorUserId:row.mentor_user_id??null,
@@ -539,6 +551,27 @@ async function addClass(){
   }
 }
 
+async function addClassPosition(){
+  try{
+    const {value}=await ElMessageBox.prompt('请输入班级职务名称','新增班级职务',{
+      inputPattern:/\S/,
+      inputErrorMessage:'班级职务名称不能为空'
+    })
+    const name=value.trim()
+    await api.post('/dictionaries/CLASS_POSITION/values',{
+      value:name,
+      label:name,
+      sortOrder:classPositionOptions.value.length*10+10,
+      enabled:true
+    })
+    ElMessage.success('新增班级职务成功')
+    dataToolsOpen.value=false
+    await loadMasters()
+  }catch(error){
+    if(error!=='cancel')throw error
+  }
+}
+
 function syncNarrow(event:MediaQueryList|MediaQueryListEvent){
   isNarrow.value=event.matches
 }
@@ -595,6 +628,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
               <el-divider/>
               <el-button text :icon="Plus" @click="addMaster('batches')">新增批次</el-button>
               <el-button text :icon="Plus" @click="addClass">新增班级</el-button>
+              <el-button text :icon="Plus" @click="addClassPosition">新增班级职务</el-button>
               <el-button text :icon="Plus" @click="addMaster('business-units')">
                 新增所属板块
               </el-button>
@@ -672,6 +706,9 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
         </el-select>
         <el-select v-model="filters.classId" placeholder="班级" clearable filterable>
           <el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/>
+        </el-select>
+        <el-select v-model="filters.classPositionId" placeholder="班级职务" clearable filterable>
+          <el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/>
         </el-select>
         <el-select v-model="filters.businessUnitId" placeholder="所属板块" clearable filterable>
           <el-option
@@ -781,7 +818,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
                   {{statusLabel(row.status)}}
                 </el-tag>
               </span>
-              <span class="employee-class">{{row.class_name||'未分班'}}</span>
+              <span class="employee-class">{{row.class_name||'未分班'}} · {{row.class_position_name||'无班级职务'}}</span>
             </button>
           </template>
         </el-table-column>
@@ -799,8 +836,10 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
           </template>
           <template #default="{row}">
             <template v-if="column.key==='employeeNo'">{{row.employee_no}}</template>
+            <template v-else-if="column.key==='gender'">{{display(row.gender)}}</template>
             <template v-else-if="column.key==='batch'">{{display(row.batch_name)}}</template>
             <template v-else-if="column.key==='class'">{{display(row.class_name)}}</template>
+            <template v-else-if="column.key==='classPosition'">{{display(row.class_position_name)}}</template>
             <template v-else-if="column.key==='businessUnit'">{{display(row.business_unit_name)}}</template>
             <template v-else-if="column.key==='station'">
               <el-button v-if="canViewHistory" link type="primary" :icon="MapLocation" class="station-button" @click.stop="showStationHistory(row)">{{row.station_name||'未分配'}}<span v-if="Number(row.station_change_count)" class="change-count">{{row.station_change_count}} 次</span></el-button>
@@ -958,6 +997,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
           <dl class="detail-grid">
             <div><dt>批次</dt><dd>{{display(selectedEmployee.batch_name)}}</dd></div>
             <div><dt>班级</dt><dd>{{display(selectedEmployee.class_name)}}</dd></div>
+            <div><dt>班级职务</dt><dd>{{display(selectedEmployee.class_position_name)}}</dd></div>
             <div><dt>所属板块</dt><dd>{{display(selectedEmployee.business_unit_name)}}</dd></div>
             <div>
               <dt>服务站点</dt>
@@ -996,6 +1036,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
           <h3>个人信息</h3>
           <dl class="detail-grid">
             <div><dt>身份证号码</dt><dd>{{maskedIdCard(selectedEmployee.id_card)}}</dd></div>
+            <div><dt>性别</dt><dd>{{display(selectedEmployee.gender)}}</dd></div>
             <div><dt>出生日期</dt><dd>{{formatDate(selectedEmployee.birth_date)}}</dd></div>
             <div><dt>籍贯</dt><dd>{{display(selectedEmployee.native_place)}}</dd></div>
             <div><dt>政治面貌</dt><dd>{{display(selectedEmployee.political_status)}}</dd></div>
@@ -1027,6 +1068,11 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             <el-form-item label="工号" required>
               <el-input v-model="employeeForm.employeeNo"/>
             </el-form-item>
+            <el-form-item label="性别">
+              <el-select v-model="employeeForm.gender" clearable placeholder="请选择性别">
+                <el-option v-for="item in genderOptions" :key="item" :label="item" :value="item"/>
+              </el-select>
+            </el-form-item>
             <el-form-item label="批次">
               <el-select v-model="employeeForm.batchId" clearable>
                 <el-option
@@ -1041,6 +1087,16 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
               <el-select v-model="employeeForm.classId" clearable filterable>
                 <el-option
                   v-for="item in classOptions"
+                  :key="item.id"
+                  :label="item.label"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="班级职务">
+              <el-select v-model="employeeForm.classPositionId" clearable filterable>
+                <el-option
+                  v-for="item in classPositionOptions"
                   :key="item.id"
                   :label="item.label"
                   :value="item.id"
@@ -1323,7 +1379,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
 .directory-status-tabs button span{display:inline-grid;min-width:19px;height:19px;margin-left:4px;place-items:center;border-radius:10px;background:#f1f3f6;color:#7b8798;font-size:10px}
 .directory-status-tabs button.active{color:#1976c8;font-weight:700}.directory-status-tabs button.active:after{position:absolute;right:8px;bottom:-1px;left:8px;height:2px;background:#409eff;content:""}
 .filter-surface{padding:14px 18px;border-bottom:1px solid #edf0f4;background:#fff}
-.filter-grid{display:grid;grid-template-columns:minmax(250px,1.6fr) repeat(4,minmax(120px,1fr)) auto;gap:9px;align-items:center}
+.filter-grid{display:grid;grid-template-columns:minmax(250px,1.6fr) repeat(5,minmax(120px,1fr)) auto;gap:9px;align-items:center}
 .filter-actions{display:flex;gap:8px;white-space:nowrap}
 .filter-actions .el-button{margin:0}
 .advanced-filter-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,240px));gap:10px;padding-top:12px;border-top:1px solid #edf0f4;margin-top:12px}

@@ -75,6 +75,7 @@ public class StationChangeRequestController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long classId,
+            @RequestParam(required = false) Long classPositionId,
             @RequestParam(required = false) Long stationId,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
@@ -110,8 +111,8 @@ public class StationChangeRequestController {
         }
         var sql = new StringBuilder("""
             select r.*, s.name requested_station_name, cs.name current_station_name,
-                   e.name employee_name, e.employee_no,e.class_id,e.status employee_status,
-                   cls.label class_name,
+                   e.name employee_name, e.employee_no,e.class_id,e.class_position_id,e.status employee_status,
+                   cls.label class_name,cp.label class_position_name,
                    eu.avatar_token,
                    b.name batch_name,bu.name business_unit_name,
                    tm.display_name mentor_name,sm.display_name skill_mentor_name,
@@ -126,6 +127,7 @@ public class StationChangeRequestController {
             left join service_station cs on cs.id=r.current_station_id
             left join talent_batch b on b.id=e.batch_id
             left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS'
+            left join dictionary_item cp on cp.id=e.class_position_id and cp.type_code='CLASS_POSITION'
             left join business_unit bu on bu.id=e.business_unit_id
             left join sys_user tm on tm.id=e.mentor_user_id
             left join sys_user sm on sm.id=e.skill_mentor_user_id
@@ -146,6 +148,10 @@ public class StationChangeRequestController {
         if (classId != null) {
             where.add("e.class_id=?");
             args.add(classId);
+        }
+        if (classPositionId != null) {
+            where.add("e.class_position_id=?");
+            args.add(classPositionId);
         }
         if (stationId != null) {
             where.add("(r.current_station_id=? or r.requested_station_id=?)");

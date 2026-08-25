@@ -12,7 +12,8 @@ const auth=useAuthStore()
 const canManage=computed(()=>auth.can('evaluation:manage')),isAdmin=computed(()=>['ADMIN','SUPER_ADMIN'].includes(auth.user?.role||'')),isEmployee=computed(()=>auth.user?.role==='EMPLOYEE')
 const employees=ref<any[]>([]),selected=ref<number>(),summaries=ref<any[]>([]),loading=ref(false)
 const classId=ref<number|null>(null),classOptions=ref<DictionaryOption[]>([])
-const filteredEmployees=computed(()=>employees.value.filter(employee=>!classId.value||employee.class_id===classId.value))
+const classPositionId=ref<number|null>(null),classPositionOptions=ref<DictionaryOption[]>([])
+const filteredEmployees=computed(()=>employees.value.filter(employee=>(!classId.value||employee.class_id===classId.value)&&(!classPositionId.value||employee.class_position_id===classPositionId.value)))
 const monthRows=computed(()=>summaries.value.filter(x=>x.summary_type==='MONTH'))
 const quarterRows=computed(()=>summaries.value.filter(x=>x.summary_type==='QUARTER'))
 const latestPublished=computed(()=>monthRows.value.find(x=>x.status==='PUBLISHED'))
@@ -23,14 +24,14 @@ async function load(){if(!selected.value)return;loading.value=true;try{summaries
 async function generateQuarter(){const year=Number((await ElMessageBox.prompt('请输入年份','生成季度汇总',{inputValue:String(new Date().getFullYear()),inputPattern:/^20\d{2}$/,inputErrorMessage:'请输入四位年份'})).value);const quarter=Number((await ElMessageBox.prompt('请输入季度 1-4','生成季度汇总',{inputPattern:/^[1-4]$/,inputErrorMessage:'请输入1至4'})).value);const count=(await api.post<any,Envelope<number>>('/evaluation/summaries/generate-quarter',null,{params:{year,quarter}})).data;ElMessage.success(`已生成或刷新 ${count} 份季度汇总草稿`);await load()}
 async function publish(row:any){let waiverReason:string|undefined,overrideScore:number|undefined;if(row.missing_items){if(!isAdmin.value)return ElMessage.warning('存在缺失项，仅管理员可以核定发布');waiverReason=(await ElMessageBox.prompt('说明为何允许缺项发布','缺项豁免原因')).value;overrideScore=Number((await ElMessageBox.prompt('请输入最终核定综合分（0-100）','人工核定总分',{inputPattern:/^(100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/,inputErrorMessage:'请输入0至100'})).value)}await api.post(`/evaluation/summaries/${row.id}/publish`,{waiverReason,overrideScore});ElMessage.success('评价结果已发布并锁定');await load()}
 async function reopen(row:any){const reason=(await ElMessageBox.prompt('请说明重开原因；系统将保留旧版本','重开月度结果')).value;await api.post(`/evaluation/summaries/${row.id}/reopen`,{reason});ElMessage.success('已创建新的月度草稿版本');await load()}
-watch(selected,load);watch(classId,()=>{if(!filteredEmployees.value.some(employee=>employee.id===selected.value))selected.value=filteredEmployees.value[0]?.id});onMounted(async()=>{if(!isEmployee.value)classOptions.value=await loadDictionaryValues('CLASS');await loadEmployees();await load()})
+watch(selected,load);watch([classId,classPositionId],()=>{if(!filteredEmployees.value.some(employee=>employee.id===selected.value))selected.value=filteredEmployees.value[0]?.id});onMounted(async()=>{if(!isEmployee.value)[classOptions.value,classPositionOptions.value]=await Promise.all([loadDictionaryValues('CLASS'),loadDictionaryValues('CLASS_POSITION')]);await loadEmployees();await load()})
 </script>
 
 <template>
   <div class="evaluation-module-page" v-loading="loading">
     <header class="evaluation-page-head">
       <div><span class="eyebrow">综合评价 · {{isEmployee?'我的评价':'结果中心'}}</span><h1>{{isEmployee?'我的综合评价':'评价结果中心'}}</h1><p>{{isEmployee?'查看已经正式发布的月度与季度综合评价结果。':'集中核对分项快照、缺失项和版本状态，并完成月度、季度结果发布。'}}</p></div>
-      <div class="evaluation-head-actions"><el-select v-if="!isEmployee" v-model="classId" clearable filterable placeholder="全部班级" style="width:160px"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><el-select v-if="!isEmployee" v-model="selected" filterable placeholder="选择员工" style="width:240px"><el-option v-for="employee in filteredEmployees" :key="employee.id" :value="employee.id" :label="`${employee.name}（${employee.employee_no}）`"/></el-select><el-button v-if="canManage" type="primary" :icon="Calendar" @click="generateQuarter">生成季度汇总</el-button></div>
+      <div class="evaluation-head-actions"><el-select v-if="!isEmployee" v-model="classId" clearable filterable placeholder="全部班级" style="width:160px"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><el-select v-if="!isEmployee" v-model="classPositionId" clearable filterable placeholder="全部班级职务" style="width:160px"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><el-select v-if="!isEmployee" v-model="selected" filterable placeholder="选择员工" style="width:240px"><el-option v-for="employee in filteredEmployees" :key="employee.id" :value="employee.id" :label="`${employee.name}（${employee.employee_no}）`"/></el-select><el-button v-if="canManage" type="primary" :icon="Calendar" @click="generateQuarter">生成季度汇总</el-button></div>
     </header>
 
     <section class="evaluation-summary-grid">
