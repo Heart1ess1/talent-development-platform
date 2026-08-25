@@ -125,7 +125,7 @@ onMounted(load)
           <div><span class="card-title">计划列表</span><span class="header-tip">计分月份根据考试开始时间自动归属</span></div>
           <div class="filters">
             <el-input v-model="keyword" clearable placeholder="搜索考试或试卷" :prefix-icon="Search"/>
-            <el-select v-model="statusFilter" clearable placeholder="计划状态">
+            <el-select v-model="statusFilter" clearable filterable placeholder="计划状态">
               <el-option label="草稿" value="DRAFT"/><el-option label="待开始" value="UPCOMING"/><el-option label="进行中" value="OPEN"/><el-option label="已结束" value="ENDED"/>
             </el-select>
           </div>
@@ -184,10 +184,10 @@ onMounted(load)
         <section class="form-section">
           <div class="section-title"><span>3</span><div><strong>参考人员范围</strong><small>批次与板块均支持多选；某项不选择表示该维度全部，可在匹配结果中排除个别人员</small></div></div>
           <div class="scope-grid">
-            <el-select v-model="scope.batchIds" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部批次" @change="clearCandidates"><el-option v-for="x in batches" :key="x.id" :label="x.name" :value="x.id"/></el-select>
+            <el-select v-model="scope.batchIds" multiple filterable collapse-tags collapse-tags-tooltip clearable placeholder="全部批次" @change="clearCandidates"><el-option v-for="x in batches" :key="x.id" :label="x.name" :value="x.id"/></el-select>
             <el-select v-model="scope.classId" clearable filterable placeholder="全部班级" @change="clearCandidates"><el-option v-for="x in classOptions" :key="x.id" :label="x.label" :value="x.id"/></el-select>
             <el-select v-model="scope.classPositionId" clearable filterable placeholder="全部班级职务" @change="clearCandidates"><el-option v-for="x in classPositionOptions" :key="x.id" :label="x.label" :value="x.id"/></el-select>
-            <el-select v-model="scope.businessUnitIds" multiple clearable placeholder="全部板块" @change="clearCandidates"><el-option v-for="x in businessUnits" :key="x.id" :label="x.name" :value="x.id"/></el-select>
+            <el-select v-model="scope.businessUnitIds" multiple clearable filterable placeholder="全部板块" @change="clearCandidates"><el-option v-for="x in businessUnits" :key="x.id" :label="x.name" :value="x.id"/></el-select>
             <el-input v-model="scope.keyword" clearable placeholder="姓名或工号（可选）" :prefix-icon="Search" @input="clearCandidates" @keyup.enter="matchCandidates"/>
             <el-button type="primary" plain :loading="candidateLoading" @click="matchCandidates">匹配人员</el-button>
           </div>

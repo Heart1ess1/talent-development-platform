@@ -398,10 +398,10 @@ onMounted(load)
             :prefix-icon="Search"
             placeholder="搜索姓名、用户名或服务站"
           />
-          <el-select v-model="filters.role" clearable placeholder="全部角色">
+          <el-select v-model="filters.role" clearable filterable placeholder="全部角色">
             <el-option v-for="(label,role) in roleLabels" :key="role" :label="label" :value="role"/>
           </el-select>
-          <el-select v-model="filters.enabled" clearable placeholder="全部状态">
+          <el-select v-model="filters.enabled" clearable filterable placeholder="全部状态">
             <el-option label="正常启用" value="enabled"/>
             <el-option label="已停用" value="disabled"/>
           </el-select>
@@ -448,6 +448,7 @@ onMounted(load)
                 v-else-if="canChangeRole(row)"
                 class="role-select"
                 :model-value="row.role"
+                filterable
                 @change="(value:Role)=>changeRole(row,value)"
               >
                 <el-option v-for="role in changeRoles" :key="role" :value="role" :label="roleLabels[role]"/>
@@ -553,7 +554,7 @@ onMounted(load)
           </el-form-item>
         </div>
         <el-form-item label="账号角色" prop="role">
-          <el-select v-model="form.role" class="full-width">
+          <el-select v-model="form.role" class="full-width" filterable>
             <el-option v-for="role in createRoles" :key="role" :value="role" :label="roleLabels[role]">
               <div class="role-option">
                 <strong>{{roleLabels[role]}}</strong>
@@ -568,6 +569,7 @@ onMounted(load)
             v-model="form.stationIds"
             class="full-width"
             multiple
+            filterable
             collapse-tags
             collapse-tags-tooltip
             placeholder="请选择负责的服务站"
@@ -593,6 +595,7 @@ onMounted(load)
         v-model="scopeForm.stationIds"
         class="full-width"
         multiple
+        filterable
         collapse-tags
         collapse-tags-tooltip
         placeholder="请至少选择一个服务站"

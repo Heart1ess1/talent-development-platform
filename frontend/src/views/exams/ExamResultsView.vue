@@ -103,7 +103,7 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
             <div><span class="card-title">考试完成情况</span><span class="header-tip">点击任意一行查看该考试的员工成绩单</span></div>
             <div class="filters">
               <el-input v-model="keyword" clearable placeholder="搜索考试或试卷" :prefix-icon="Search"/>
-              <el-select v-model="phase" clearable placeholder="考试状态">
+              <el-select v-model="phase" clearable filterable placeholder="考试状态">
                 <el-option label="待开始" value="UPCOMING"/><el-option label="进行中" value="OPEN"/><el-option label="已结束" value="ENDED"/>
               </el-select>
             </div>
@@ -156,7 +156,7 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
           <el-input v-model="detailKeyword" clearable placeholder="搜索姓名或工号" :prefix-icon="Search"/>
           <el-select v-model="detailClassId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
           <el-select v-model="detailClassPositionId" clearable filterable placeholder="全部班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
-          <el-select v-model="detailStatus" clearable placeholder="完成状态">
+          <el-select v-model="detailStatus" clearable filterable placeholder="完成状态">
             <el-option label="已完成" value="COMPLETED"/><el-option label="考试中" value="IN_PROGRESS"/><el-option label="未开始" value="NOT_STARTED"/><el-option label="未完成" value="INCOMPLETE"/><el-option label="缺考" value="ABSENT"/>
           </el-select>
         </div>

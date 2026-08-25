@@ -138,8 +138,8 @@ onMounted(load)
         </div>
         <div class="exam-filter-bar question-filter">
           <el-input v-model="keyword" clearable :prefix-icon="Search" placeholder="搜索题干或题库"/>
-          <el-select v-model="typeFilter" clearable placeholder="全部题型"><el-option v-for="key in objectiveQuestionTypes" :key="key" :label="typeLabels[key]" :value="key"/></el-select>
-          <el-select v-model="statusFilter" clearable placeholder="全部状态"><el-option label="已启用" value="ENABLED"/><el-option label="已停用" value="DISABLED"/></el-select>
+          <el-select v-model="typeFilter" clearable filterable placeholder="全部题型"><el-option v-for="key in objectiveQuestionTypes" :key="key" :label="typeLabels[key]" :value="key"/></el-select>
+          <el-select v-model="statusFilter" clearable filterable placeholder="全部状态"><el-option label="已启用" value="ENABLED"/><el-option label="已停用" value="DISABLED"/></el-select>
           <span class="exam-result-count">显示 {{filteredQuestions.length}} / {{questions.length}} 道</span>
         </div>
         <el-table :data="filteredQuestions" class="exam-table" empty-text="当前题库暂无题目">
@@ -161,10 +161,10 @@ onMounted(load)
     <el-drawer v-model="questionDialog" size="680px" :close-on-click-modal="false">
       <template #header><div class="exam-drawer-title"><h3>{{question.id?'编辑题目':'新增题目'}}</h3><p>配置题干、标准答案与解析，保存后即可参与组卷。</p></div></template>
       <el-form label-position="top">
-        <div class="exam-form-grid"><el-form-item label="所属题库" required><el-select v-model="question.bankId" filterable><el-option v-for="item in enabledBanks" :key="item.id" :label="item.name" :value="item.id"/></el-select></el-form-item><el-form-item label="题型" required><el-select v-model="question.type" @change="questionTypeChanged"><el-option v-for="key in objectiveQuestionTypes" :key="key" :label="typeLabels[key]" :value="key"/></el-select></el-form-item></div>
+        <div class="exam-form-grid"><el-form-item label="所属题库" required><el-select v-model="question.bankId" filterable><el-option v-for="item in enabledBanks" :key="item.id" :label="item.name" :value="item.id"/></el-select></el-form-item><el-form-item label="题型" required><el-select v-model="question.type" filterable @change="questionTypeChanged"><el-option v-for="key in objectiveQuestionTypes" :key="key" :label="typeLabels[key]" :value="key"/></el-select></el-form-item></div>
         <el-form-item label="题干" required><el-input v-model="question.stem" type="textarea" :rows="4" maxlength="1000" show-word-limit placeholder="请输入清晰、无歧义的题目描述"/></el-form-item>
         <el-form-item v-if="['SINGLE','MULTIPLE'].includes(question.type)" label="选项" required><el-select v-model="question.options" multiple allow-create filterable default-first-option placeholder="输入选项后按回车"/></el-form-item>
-        <el-form-item label="正确答案" required><el-radio-group v-if="question.type==='TRUE_FALSE'" v-model="question.answer"><el-radio :value="true">正确</el-radio><el-radio :value="false">错误</el-radio></el-radio-group><el-select v-else v-model="question.answer" :multiple="question.type==='MULTIPLE'" placeholder="请先填写选项，再选择正确答案"><el-option v-for="item in question.options" :key="item" :label="item" :value="item"/></el-select></el-form-item>
+        <el-form-item label="正确答案" required><el-radio-group v-if="question.type==='TRUE_FALSE'" v-model="question.answer"><el-radio :value="true">正确</el-radio><el-radio :value="false">错误</el-radio></el-radio-group><el-select v-else v-model="question.answer" :multiple="question.type==='MULTIPLE'" filterable placeholder="请先填写选项，再选择正确答案"><el-option v-for="item in question.options" :key="item" :label="item" :value="item"/></el-select></el-form-item>
         <div class="exam-form-grid"><el-form-item label="默认分值（选填）"><el-input-number v-model="question.score" :min="0.01" :precision="2" controls-position="right" placeholder="组卷时再设置"/></el-form-item><el-form-item label="专业标签"><el-select v-model="question.tags" multiple allow-create filterable default-first-option placeholder="空白表示公共题"><el-option v-for="tag in tagOptions" :key="tag" :label="tag" :value="tag"/></el-select></el-form-item></div>
         <el-form-item label="答案解析"><el-input v-model="question.explanation" type="textarea" :rows="3" placeholder="用于阅卷复核和员工学习反馈"/></el-form-item>
       </el-form>

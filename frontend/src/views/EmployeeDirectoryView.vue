@@ -701,7 +701,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
           class="keyword-filter"
           @keyup.enter="search"
         />
-        <el-select v-model="filters.batchId" placeholder="批次" clearable>
+        <el-select v-model="filters.batchId" placeholder="批次" clearable filterable>
           <el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/>
         </el-select>
         <el-select v-model="filters.classId" placeholder="班级" clearable filterable>
@@ -754,7 +754,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
               :value="item.id"
             />
           </el-select>
-          <el-select v-model="filters.education" placeholder="学历" clearable>
+          <el-select v-model="filters.education" placeholder="学历" clearable filterable>
             <el-option
               v-for="item in educationOptions"
               :key="item.id"
@@ -1069,12 +1069,12 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
               <el-input v-model="employeeForm.employeeNo"/>
             </el-form-item>
             <el-form-item label="性别">
-              <el-select v-model="employeeForm.gender" clearable placeholder="请选择性别">
+              <el-select v-model="employeeForm.gender" clearable filterable placeholder="请选择性别">
                 <el-option v-for="item in genderOptions" :key="item" :label="item" :value="item"/>
               </el-select>
             </el-form-item>
             <el-form-item label="批次">
-              <el-select v-model="employeeForm.batchId" clearable>
+              <el-select v-model="employeeForm.batchId" clearable filterable>
                 <el-option
                   v-for="item in batches"
                   :key="item.id"
@@ -1104,7 +1104,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
               </el-select>
             </el-form-item>
             <el-form-item label="状态">
-              <el-select v-model="employeeForm.status">
+              <el-select v-model="employeeForm.status" filterable>
                 <el-option label="在职" value="ACTIVE"/>
                 <el-option label="停用" value="INACTIVE"/>
               </el-select>

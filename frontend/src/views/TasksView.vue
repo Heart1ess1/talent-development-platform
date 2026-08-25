@@ -590,7 +590,7 @@ onMounted(async () => {
             <div class="step-heading"><span>1</span><div><h3>选择计划与任务</h3><p>附件将随计划任务一并生成下发快照</p></div></div>
             <el-form label-position="top">
               <el-form-item label="培养计划" required>
-                <el-select v-model="selectedPlanId" placeholder="选择已启用的培养计划" style="width:100%">
+                <el-select v-model="selectedPlanId" filterable placeholder="选择已启用的培养计划" style="width:100%">
                   <el-option v-for="item in plans" :key="item.id" :label="item.name" :value="item.id"/>
                 </el-select>
               </el-form-item>
@@ -617,7 +617,7 @@ onMounted(async () => {
           <article class="dispatch-step">
             <div class="step-heading"><span>2</span><div><h3>设置完成时限</h3><p>支持按入职或安排日期计算，也可统一指定截止日</p></div></div>
             <div class="deadline-grid">
-              <el-select v-model="dispatch.deadlineMode">
+              <el-select v-model="dispatch.deadlineMode" filterable>
                 <el-option label="按基准日期偏移" value="OFFSET"/>
                 <el-option label="统一截止日期" value="ABSOLUTE"/>
               </el-select>
@@ -633,7 +633,7 @@ onMounted(async () => {
           <article class="dispatch-step">
             <div class="step-heading"><span>3</span><div><h3>选择下发对象</h3><p>按批次、班级、班级职务、所属板块和服务站组合筛选在职员工</p></div></div>
             <div class="target-grid">
-              <el-select v-model="dispatch.batchId" clearable placeholder="按批次">
+              <el-select v-model="dispatch.batchId" clearable filterable placeholder="按批次">
                 <el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/>
               </el-select>
               <el-select v-model="dispatch.classId" clearable filterable placeholder="按班级">
@@ -642,10 +642,10 @@ onMounted(async () => {
               <el-select v-model="dispatch.classPositionId" clearable filterable placeholder="按班级职务">
                 <el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/>
               </el-select>
-              <el-select v-model="dispatch.businessUnitId" clearable placeholder="按板块">
+              <el-select v-model="dispatch.businessUnitId" clearable filterable placeholder="按板块">
                 <el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/>
               </el-select>
-              <el-select v-model="dispatch.stationId" clearable placeholder="按服务站">
+              <el-select v-model="dispatch.stationId" clearable filterable placeholder="按服务站">
                 <el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/>
               </el-select>
             </div>
@@ -683,11 +683,11 @@ onMounted(async () => {
         </div>
         <div class="manual-target">
           <div class="step-heading"><span>2</span><div><h3>下发对象</h3><p>按批次、班级、班级职务、所属板块和服务站组合筛选，至少选择一项</p></div></div>
-          <el-select v-model="manualDispatch.batchId" clearable placeholder="按批次"><el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.batchId" clearable filterable placeholder="按批次"><el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/></el-select>
           <el-select v-model="manualDispatch.classId" clearable filterable placeholder="按班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
           <el-select v-model="manualDispatch.classPositionId" clearable filterable placeholder="按班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
-          <el-select v-model="manualDispatch.businessUnitId" clearable placeholder="按板块"><el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/></el-select>
-          <el-select v-model="manualDispatch.stationId" clearable placeholder="按服务站"><el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.businessUnitId" clearable filterable placeholder="按板块"><el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.stationId" clearable filterable placeholder="按服务站"><el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/></el-select>
           <el-button type="primary" size="large" :loading="dispatching" :disabled="!manualDispatchReady" @click="dispatchManualTask">确认下发临时任务</el-button>
         </div>
       </div>
@@ -824,7 +824,7 @@ onMounted(async () => {
           <el-input v-model="progressFilters.keyword" :prefix-icon="Search" clearable placeholder="搜索员工姓名或工号" />
           <el-select v-model="progressFilters.classId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id" /></el-select>
           <el-select v-model="progressFilters.classPositionId" clearable filterable placeholder="全部班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id" /></el-select>
-          <el-select v-model="progressFilters.status" clearable placeholder="全部状态">
+          <el-select v-model="progressFilters.status" clearable filterable placeholder="全部状态">
             <el-option label="未提交" value="NOT_SUBMITTED" />
             <el-option label="待审核" value="PENDING_REVIEW" />
             <el-option label="已退回" value="RETURNED" />
