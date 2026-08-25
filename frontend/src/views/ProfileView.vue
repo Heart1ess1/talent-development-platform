@@ -19,7 +19,7 @@ const myRequests=ref<any[]>([])
 const form=reactive({oldPassword:'',newPassword:'',confirm:''})
 const loading=ref(false),profileLoading=ref(false),avatarUploading=ref(false)
 const profile=reactive<any>({
-  employeeNo:'',name:'',batchName:'',className:'',businessUnitName:'',stationId:null,stationName:'',
+  employeeNo:'',name:'',gender:'',batchName:'',className:'',classPositionName:'',businessUnitName:'',stationId:null,stationName:'',
   technicalMentorName:'',skillMentorName:'',
   onboardDate:null,status:'',phone:'',email:'',birthDate:null,nativePlace:'',
   residence:'',school:'',major:'',education:''
@@ -32,7 +32,7 @@ async function loadProfile(){
   if(!isEmployee.value)return
   const r=await api.get<any,Envelope<any>>('/profile/employee')
   Object.assign(profile,{
-    employeeNo:r.data.employee_no||'',name:r.data.name||'',batchName:r.data.batch_name||'',className:r.data.class_name||'',
+    employeeNo:r.data.employee_no||'',name:r.data.name||'',gender:r.data.gender||'',batchName:r.data.batch_name||'',className:r.data.class_name||'',classPositionName:r.data.class_position_name||'',
     businessUnitName:r.data.business_unit_name||'',
     stationId:r.data.station_id??null,stationName:r.data.station_name||'',
     technicalMentorName:r.data.technical_mentor_name||'',
@@ -211,8 +211,10 @@ onMounted(async()=>{
           <el-descriptions :column="1" border>
             <el-descriptions-item label="工号">{{profile.employeeNo||'-'}}</el-descriptions-item>
             <el-descriptions-item label="姓名">{{profile.name||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="性别">{{profile.gender||'-'}}</el-descriptions-item>
             <el-descriptions-item label="批次">{{profile.batchName||'-'}}</el-descriptions-item>
             <el-descriptions-item label="班级">{{profile.className||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="班级职务">{{profile.classPositionName||'-'}}</el-descriptions-item>
             <el-descriptions-item label="所属板块">{{profile.businessUnitName||'-'}}</el-descriptions-item>
             <el-descriptions-item label="服务站点">{{profile.stationName||'-'}}</el-descriptions-item>
             <el-descriptions-item label="指导老师（技术）">{{profile.technicalMentorName||'-'}}</el-descriptions-item>

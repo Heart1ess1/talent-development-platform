@@ -63,10 +63,12 @@ public class EvaluationAssignmentService {
   public List<Map<String,Object>> list(YearMonth month,String component,String status,Long reviewerId,String keyword){
     StringBuilder sql=new StringBuilder("""
       select t.id,t.employee_id,t.period_month,t.component_type,t.scope_id,t.due_at,t.note,t.status task_status,
-        e.employee_no,e.name employee_name,e.class_id,cls.label class_name,b.name batch_name,bu.name business_unit_name,s.name station_name,scope.name scope_name,
+        e.employee_no,e.name employee_name,e.class_id,cls.label class_name,
+        e.class_position_id,cp.label class_position_name,
+        b.name batch_name,bu.name business_unit_name,s.name station_name,scope.name scope_name,
         exists(select 1 from score_summary ss where ss.employee_id=t.employee_id and ss.summary_type='MONTH' and ss.period_key=date_format(t.period_month,'%Y-%m') and ss.status='PUBLISHED') locked
       from evaluation_rating_task t join employee e on e.id=t.employee_id
-      left join talent_batch b on b.id=e.batch_id left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS' left join business_unit bu on bu.id=e.business_unit_id left join service_station s on s.id=e.station_id
+      left join talent_batch b on b.id=e.batch_id left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS' left join dictionary_item cp on cp.id=e.class_position_id and cp.type_code='CLASS_POSITION' left join business_unit bu on bu.id=e.business_unit_id left join service_station s on s.id=e.station_id
       left join service_station scope on scope.id=nullif(t.scope_id,0)
       where t.period_month=?
       """);

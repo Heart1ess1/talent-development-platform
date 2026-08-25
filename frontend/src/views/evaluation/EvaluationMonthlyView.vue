@@ -10,7 +10,7 @@ import {componentLabels,componentStatusLabels,scoreText,type ComponentCode,type 
 import '@/styles/evaluation-center.css'
 
 type CandidateStatus='MY_PENDING'|'IN_PROGRESS'|'READY'|'PUBLISHED'|'NO_SCHEME'
-interface Candidate{id:number;employee_no:string;name:string;class_id?:number;class_name?:string;batch_name?:string;station_name?:string;status:CandidateStatus;completedCount:number;enabledCount:number;finalScore:number|null;missingItems:ComponentCode[]}
+interface Candidate{id:number;employee_no:string;name:string;class_id?:number;class_name?:string;class_position_id?:number;class_position_name?:string;batch_name?:string;station_name?:string;status:CandidateStatus;completedCount:number;enabledCount:number;finalScore:number|null;missingItems:ComponentCode[]}
 interface ManualInput{score:number;comment:string}
 
 const auth=useAuthStore(),route=useRoute(),router=useRouter()
@@ -20,13 +20,14 @@ const isAdmin=computed(()=>['ADMIN','SUPER_ADMIN'].includes(auth.user?.role||'')
 const month=ref(new Date().toISOString().slice(0,7)),candidates=ref<Candidate[]>([]),selected=ref<number>(),detail=ref<any>()
 const loading=ref(false),queueLoading=ref(false),loadError=ref(''),keyword=ref(''),statusFilter=ref('')
 const classId=ref<number|null>(null),classOptions=ref<DictionaryOption[]>([])
+const classPositionId=ref<number|null>(null),classPositionOptions=ref<DictionaryOption[]>([])
 const manualInputs=reactive<Record<string,ManualInput>>({})
 const adjustment=reactive({type:'BONUS',points:1,reason:''})
 const stationWeightOpen=ref(false),stationWeights=ref<any[]>([])
 const roleComponent=computed<ComponentCode|undefined>(()=>({MENTOR:'MENTOR',STATION_MANAGER:'STATION',TRAINING_ADMIN:'TRAINING'} as Record<string,ComponentCode>)[auth.user?.role||''])
 const completedCount=computed(()=>detail.value?.components?.filter((x:ScoreComponent)=>x.enabled&&x.status!=='PENDING').length||0)
 const enabledCount=computed(()=>detail.value?.components?.filter((x:ScoreComponent)=>x.enabled).length||0)
-const filteredCandidates=computed(()=>{const q=keyword.value.trim().toLowerCase();return candidates.value.filter(x=>(!classId.value||x.class_id===classId.value)&&(!statusFilter.value||x.status===statusFilter.value)&&(!q||`${x.name} ${x.employee_no} ${x.class_name||''} ${x.batch_name||''} ${x.station_name||''}`.toLowerCase().includes(q)))})
+const filteredCandidates=computed(()=>{const q=keyword.value.trim().toLowerCase();return candidates.value.filter(x=>(!classId.value||x.class_id===classId.value)&&(!classPositionId.value||x.class_position_id===classPositionId.value)&&(!statusFilter.value||x.status===statusFilter.value)&&(!q||`${x.name} ${x.employee_no} ${x.class_name||''} ${x.class_position_name||''} ${x.batch_name||''} ${x.station_name||''}`.toLowerCase().includes(q)))})
 const queueCounts=computed(()=>Object.fromEntries(['MY_PENDING','IN_PROGRESS','READY','PUBLISHED','NO_SCHEME'].map(status=>[status,candidates.value.filter(x=>x.status===status).length])))
 const selectedCandidate=computed(()=>candidates.value.find(x=>x.id===selected.value))
 const stationComponent=computed<any>(()=>detail.value?.components?.find((x:any)=>x.code==='STATION'))
@@ -47,7 +48,7 @@ function jump(component:ScoreComponent){router.push(component.code==='EXAM'?'/ex
 function candidateProgress(row:Candidate){return row.enabledCount?Math.round(row.completedCount*100/row.enabledCount):0}
 function chooseCandidate(id:number){selected.value=id}
 
-async function loadCandidates(){queueLoading.value=true;try{candidates.value=(await api.get<any,Envelope<Candidate[]>>('/evaluation/monthly/candidates',{params:{month:month.value,classId:classId.value||undefined}})).data;const requested=Number(route.query.employeeId);if(requested&&candidates.value.some(x=>x.id===requested))selected.value=requested;else if(!selected.value||!candidates.value.some(x=>x.id===selected.value)){selected.value=(candidates.value.find(x=>x.status==='MY_PENDING')||candidates.value.find(x=>x.status==='IN_PROGRESS')||candidates.value[0])?.id}}finally{queueLoading.value=false}}
+async function loadCandidates(){queueLoading.value=true;try{candidates.value=(await api.get<any,Envelope<Candidate[]>>('/evaluation/monthly/candidates',{params:{month:month.value,classId:classId.value||undefined,classPositionId:classPositionId.value||undefined}})).data;const requested=Number(route.query.employeeId);if(requested&&candidates.value.some(x=>x.id===requested))selected.value=requested;else if(!selected.value||!candidates.value.some(x=>x.id===selected.value)){selected.value=(candidates.value.find(x=>x.status==='MY_PENDING')||candidates.value.find(x=>x.status==='IN_PROGRESS')||candidates.value[0])?.id}}finally{queueLoading.value=false}}
 function hydrateInputs(){for(const key of Object.keys(manualInputs))delete manualInputs[key];for(const component of detail.value?.components||[]){if(component.code==='MENTOR'){for(const row of component.breakdown||[])if(Number(row.evaluatorId)===Number(auth.user?.id))Object.assign(inputFor('MENTOR'),{score:Number(row.score||0),comment:row.comment||''})}else if(component.code==='STATION'){for(const row of component.breakdown||[]){const own=(row.evaluations||[]).find((x:any)=>Number(x.evaluatorId)===Number(auth.user?.id));if(row.canEvaluate)Object.assign(inputFor('STATION',row.stationId),{score:Number(own?.score||0),comment:own?.comment||''})}}else if(component.code==='TRAINING'){const row=(component.breakdown||[]).find((x:any)=>Number(x.evaluatorId)===Number(auth.user?.id))||component.breakdown?.[0];Object.assign(inputFor('TRAINING'),{score:Number(row?.score||0),comment:row?.comment||''})}}}
 async function loadDetail(){if(!selected.value){detail.value=undefined;return}loading.value=true;loadError.value='';detail.value=undefined;try{detail.value=(await api.get<any,Envelope<any>>('/evaluation/monthly/detail',{params:{employeeId:selected.value,month:month.value}})).data;hydrateInputs()}catch(error:any){loadError.value=error?.response?.data?.message||'当前月份尚未配置可用评价方案'}finally{loading.value=false}}
 async function refreshAll(){await loadCandidates();await loadDetail()}
@@ -62,8 +63,9 @@ async function resetStationWeights(){await ElMessageBox.confirm('确认恢复模
 
 watch(month,async()=>{selected.value=undefined;await loadCandidates();await loadDetail()})
 watch(classId,async()=>{selected.value=undefined;await loadCandidates();await loadDetail()})
+watch(classPositionId,async()=>{selected.value=undefined;await loadCandidates();await loadDetail()})
 watch(selected,async value=>{if(value){if(Number(route.query.employeeId)!==value)await router.replace({query:{...route.query,employeeId:String(value)}});await loadDetail()}})
-onMounted(async()=>{classOptions.value=await loadDictionaryValues('CLASS');await loadCandidates();await loadDetail()})
+onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promise.all([loadDictionaryValues('CLASS'),loadDictionaryValues('CLASS_POSITION')]);await loadCandidates();await loadDetail()})
 </script>
 
 <template>
@@ -78,6 +80,7 @@ onMounted(async()=>{classOptions.value=await loadDictionaryValues('CLASS');await
         <div class="queue-title"><div><span class="eyebrow">评价对象</span><h2>员工队列</h2></div><el-tag effect="plain">{{filteredCandidates.length}} 人</el-tag></div>
         <el-input v-model="keyword" :prefix-icon="Search" clearable placeholder="搜索姓名、工号、班级、批次或站点"/>
         <el-select v-model="classId" clearable filterable placeholder="全部班级" style="width:100%;margin-top:10px"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
+        <el-select v-model="classPositionId" clearable filterable placeholder="全部班级职务" style="width:100%;margin-top:10px"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
         <div class="queue-filters">
           <button :class="{active:!statusFilter}" @click="statusFilter=''">全部 <b>{{candidates.length}}</b></button>
           <button :class="{active:statusFilter==='MY_PENDING'}" @click="statusFilter='MY_PENDING'">待我评价 <b>{{queueCounts.MY_PENDING}}</b></button>

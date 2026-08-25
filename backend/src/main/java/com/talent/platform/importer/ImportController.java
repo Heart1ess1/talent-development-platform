@@ -46,8 +46,10 @@ public class ImportController {
         sample.setSerialNo(1);
         sample.setEmployeeNo("20260001");
         sample.setName("示例员工（请删除）");
+        sample.setGender("男");
         sample.setBatch(firstEnabledName("talent_batch"));
         sample.setClassName(firstEnabledDictionaryLabel("CLASS"));
+        sample.setClassPositionName(firstEnabledDictionaryLabel("CLASS_POSITION"));
         sample.setBusinessUnit(firstEnabledName("business_unit"));
         sample.setStation(firstEnabledName("service_station"));
         sample.setTechnicalMentor(firstEnabledMentor());
@@ -66,7 +68,7 @@ public class ImportController {
         try (var writer = EasyExcel.write(response.getOutputStream()).build()) {
             var employeeSheet = EasyExcel.writerSheet(0, "新员工导入")
                     .head(EmployeeImportRow.class)
-                    .registerWriteHandler(new EmployeeExcelSheetHandler(22))
+                    .registerWriteHandler(new EmployeeExcelSheetHandler(24))
                     .build();
             writer.write(List.of(sample), employeeSheet);
             var instructionSheet = EasyExcel.writerSheet(1, "填写说明")
@@ -100,6 +102,9 @@ public class ImportController {
                 errors.add(new RowError(line, "工号", "重复"));
             if (r.getName() == null || r.getName().isBlank())
                 errors.add(new RowError(line, "姓名", "不能为空"));
+            if (r.getGender() != null && !r.getGender().isBlank()
+                    && normalizeGender(r.getGender()) == null)
+                errors.add(new RowError(line, "性别", "仅支持“男”或“女”"));
             if (r.getIdCard() == null || r.getIdCard().isBlank())
                 errors.add(new RowError(line, "身份证号码", "不能为空；用于生成首次登录密码"));
             else if (!EmployeeInitialPassword.supports(r.getIdCard()))
@@ -111,6 +116,9 @@ public class ImportController {
             if (r.getClassName() != null && !r.getClassName().isBlank()
                     && dictionaryItemId("CLASS", r.getClassName()) == null)
                 errors.add(new RowError(line, "班级", "不存在或已停用"));
+            if (r.getClassPositionName() != null && !r.getClassPositionName().isBlank()
+                    && dictionaryItemId("CLASS_POSITION", r.getClassPositionName()) == null)
+                errors.add(new RowError(line, "班级职务", "不存在或已停用"));
             if (r.getBusinessUnit() != null && !r.getBusinessUnit().isBlank()
                     && id("business_unit", r.getBusinessUnit()) == null)
                 errors.add(new RowError(line, "所属板块", "不存在"));
@@ -140,20 +148,21 @@ public class ImportController {
 
             db.update("""
                 insert into employee(
-                    user_id, employee_no, name,
-                    batch_id, class_id, business_unit_id, station_id,
+                    user_id, employee_no, name, gender,
+                    batch_id, class_id, class_position_id, business_unit_id, station_id,
                     mentor_user_id, skill_mentor_user_id,
                     school, major, education,
                     birth_date, native_place, political_status, residence,
                     hobbies, speciality,
                     email, id_card, phone, onboard_date
                     ,status
-                ) values(?,?,?, ?,?,?,?, ?,?, ?,?,?, ?,?,?,?, ?,?, ?,?,?,?, ?)
+                ) values(?,?,?,?, ?,?,?,?,?, ?,?, ?,?,?, ?,?,?,?, ?,?, ?,?,?,?, ?)
                 """,
                     uid,
-                    r.getEmployeeNo(), r.getName(),
+                    r.getEmployeeNo(), r.getName(), normalizeGender(r.getGender()),
                     id("talent_batch", r.getBatch()),
                     dictionaryItemId("CLASS", r.getClassName()),
+                    dictionaryItemId("CLASS_POSITION", r.getClassPositionName()),
                     id("business_unit", r.getBusinessUnit()),
                     id("service_station", r.getStation()),
                     mentorId(r.getTechnicalMentor()),
@@ -273,8 +282,10 @@ public class ImportController {
                 instruction("序号", "否", "仅用于阅读排序，不参与系统校验。", "1"),
                 instruction("工号", "是", "必须唯一；将同时作为员工登录用户名。建议按文本填写，避免前导零丢失。", "20260001"),
                 instruction("姓名", "是", "填写员工真实姓名。", "张三"),
+                instruction("性别", "否", "仅填写“男”或“女”；该选项固定，不在字典值管理中维护。", "男"),
                 instruction("批次", "是", "必须与系统中已启用的培养批次名称完全一致。", "2026届"),
                 instruction("班级", "否", "必须与字典管理中已启用的班级名称完全一致；留空表示暂不分配班级。", "2026届1班"),
+                instruction("班级职务", "否", "必须与字典管理中已启用的班级职务名称完全一致；留空表示暂无班级职务。", "班长"),
                 instruction("所属板块", "否", "必须与系统中已启用的所属板块名称完全一致。", "机动车"),
                 instruction("服务站点", "否", "必须与系统中已启用的服务站点名称完全一致。", "示例服务站"),
                 instruction("指导老师（技术）", "否", "填写已启用导师的用户名；也可填写不重名的导师姓名。", "mentor"),
@@ -305,6 +316,15 @@ public class ImportController {
         return switch (value.trim().toUpperCase(Locale.ROOT)) {
             case "在职", "ACTIVE" -> "ACTIVE";
             case "停用", "INACTIVE" -> "INACTIVE";
+            default -> null;
+        };
+    }
+
+    private String normalizeGender(String value) {
+        if (value == null || value.isBlank()) return null;
+        return switch (value.trim()) {
+            case "男" -> "男";
+            case "女" -> "女";
             default -> null;
         };
     }

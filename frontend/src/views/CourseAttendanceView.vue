@@ -17,22 +17,25 @@ const courses=ref<Course[]>([])
 const sessions=ref<CourseSession[]>([])
 const employees=ref<any[]>([])
 const classOptions=ref<DictionaryOption[]>([])
+const classPositionOptions=ref<DictionaryOption[]>([])
 const loading=ref(false)
 const importing=ref(false)
 const submitting=ref(false)
 const manualOpen=ref(false)
-const filters=reactive({keyword:'',classId:null as number|null,courseId:null as number|null,sessionId:null as number|null,source:'',dateRange:[] as string[]})
+const filters=reactive({keyword:'',classId:null as number|null,classPositionId:null as number|null,courseId:null as number|null,sessionId:null as number|null,source:'',dateRange:[] as string[]})
 const manual=reactive({sessionId:null as number|null,employeeId:null as number|null,remark:''})
 const manualClassId=ref<number|null>(null)
+const manualClassPositionId=ref<number|null>(null)
 const summary=reactive({totalAttendance:0,todayAttendance:0,selfAttendance:0,manualAttendance:0})
 
 const availableSessions=computed(()=>filters.courseId?sessions.value.filter(item=>item.course_id===filters.courseId):sessions.value)
-const filteredManualEmployees=computed(()=>employees.value.filter(item=>!manualClassId.value||item.class_id===manualClassId.value))
+const filteredManualEmployees=computed(()=>employees.value.filter(item=>(!manualClassId.value||item.class_id===manualClassId.value)&&(!manualClassPositionId.value||item.class_position_id===manualClassPositionId.value)))
 
 function params(){
   return {
     keyword:filters.keyword.trim()||undefined,
     classId:filters.classId||undefined,
+    classPositionId:filters.classPositionId||undefined,
     courseId:filters.courseId||undefined,
     sessionId:filters.sessionId||undefined,
     source:filters.source||undefined,
@@ -52,16 +55,18 @@ function deriveSummary(){
 async function load(){
   loading.value=true
   try{
-    const [attendanceResponse,courseResponse,sessionResponse,classValues]=await Promise.all([
+    const [attendanceResponse,courseResponse,sessionResponse,classValues,classPositionValues]=await Promise.all([
       api.get<any,Envelope<any[]>>('/attendance',{params:params()}),
       api.get<any,Envelope<Course[]>>('/courses'),
       api.get<any,Envelope<CourseSession[]>>('/sessions'),
-      loadDictionaryValues('CLASS')
+      loadDictionaryValues('CLASS'),
+      loadDictionaryValues('CLASS_POSITION')
     ])
     rows.value=attendanceResponse.data
     courses.value=courseResponse.data
     sessions.value=sessionResponse.data.map(row=>({...row,course_id:Number(row.course_id)}))
     classOptions.value=classValues
+    classPositionOptions.value=classPositionValues
     deriveSummary()
     try{
       Object.assign(summary,(await api.get<any,Envelope<any>>('/attendance/summary',{silentError:true} as any)).data)
@@ -79,13 +84,14 @@ async function load(){
 
 function search(){load()}
 function reset(){
-  Object.assign(filters,{keyword:'',classId:null,courseId:null,sessionId:null,source:'',dateRange:[]})
+  Object.assign(filters,{keyword:'',classId:null,classPositionId:null,courseId:null,sessionId:null,source:'',dateRange:[]})
   load()
 }
 
 function openManual(){
   Object.assign(manual,{sessionId:null,employeeId:null,remark:''})
   manualClassId.value=null
+  manualClassPositionId.value=null
   manualOpen.value=true
 }
 
@@ -157,6 +163,7 @@ async function importAttendance(options:UploadRequestOptions){
       <div v-if="!isEmployee" class="course-filter-bar">
         <el-input v-model="filters.keyword" :prefix-icon="Search" clearable placeholder="员工姓名、工号或课程" @keyup.enter="search"/>
         <el-select v-model="filters.classId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
+        <el-select v-model="filters.classPositionId" clearable filterable placeholder="全部班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
         <el-select v-model="filters.courseId" clearable filterable placeholder="全部课程" @change="filters.sessionId=null"><el-option v-for="course in courses" :key="course.id" :label="course.name" :value="course.id"/></el-select>
         <el-select v-model="filters.sessionId" clearable filterable placeholder="全部场次"><el-option v-for="session in availableSessions" :key="session.id" :label="session.title" :value="session.id"/></el-select>
         <el-select v-model="filters.source" clearable placeholder="签到来源"><el-option label="员工签到" value="SELF"/><el-option label="人工补录" value="MANUAL"/></el-select>
@@ -190,6 +197,7 @@ async function importAttendance(options:UploadRequestOptions){
       <el-form label-position="top">
         <el-form-item label="培训场次" required><el-select v-model="manual.sessionId" filterable placeholder="选择场次"><el-option v-for="session in sessions" :key="session.id" :label="`${session.course_name} · ${session.title}`" :value="session.id"/></el-select></el-form-item>
         <el-form-item label="班级筛选"><el-select v-model="manualClassId" clearable filterable placeholder="全部班级" @change="manual.employeeId=null"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select></el-form-item>
+        <el-form-item label="班级职务筛选"><el-select v-model="manualClassPositionId" clearable filterable placeholder="全部班级职务" @change="manual.employeeId=null"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select></el-form-item>
         <el-form-item label="员工" required><el-select v-model="manual.employeeId" filterable placeholder="搜索员工"><el-option v-for="person in filteredManualEmployees" :key="person.id" :label="`${person.name} · ${person.employeeNo||person.employee_no}`" :value="person.id"/></el-select></el-form-item>
         <el-form-item label="补录说明"><el-input v-model="manual.remark" type="textarea" :rows="3" maxlength="255" show-word-limit placeholder="例如：现场签到设备异常，经培训负责人确认"/></el-form-item>
       </el-form>

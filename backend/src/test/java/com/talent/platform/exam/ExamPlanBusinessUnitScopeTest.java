@@ -28,7 +28,7 @@ class ExamPlanBusinessUnitScopeTest {
         new ObjectMapper(),
         mock(ExamScoringService.class));
 
-    controller.planCandidates(null, "3,5", null, null);
+    controller.planCandidates(null, "3,5", null, null, null);
 
     var sql = org.mockito.ArgumentCaptor.forClass(String.class);
     verify(db).queryForList(sql.capture(), aryEq(new Object[]{3L, 5L}));

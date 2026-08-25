@@ -38,12 +38,14 @@ import java.util.UUID;
 @RequestMapping("/api/v1/employees")
 public class EmployeeController {
   private static final String DIRECTORY_SELECT = """
-      select e.*,b.name batch_name,cls.label class_name,bu.name business_unit_name,s.name station_name,
+      select e.*,b.name batch_name,cls.label class_name,cp.label class_position_name,
+             bu.name business_unit_name,s.name station_name,
              tm.display_name technical_mentor_name,tm.display_name mentor_name,
              sm.display_name skill_mentor_name
       from employee e
       left join talent_batch b on b.id=e.batch_id
       left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS'
+      left join dictionary_item cp on cp.id=e.class_position_id and cp.type_code='CLASS_POSITION'
       left join business_unit bu on bu.id=e.business_unit_id
       left join service_station s on s.id=e.station_id
       left join sys_user tm on tm.id=e.mentor_user_id
@@ -69,8 +71,10 @@ public class EmployeeController {
   public record EmployeeRequest(
       @NotBlank String employeeNo,
       @NotBlank String name,
+      @Pattern(regexp = "男|女") String gender,
       Long batchId,
       Long classId,
+      Long classPositionId,
       Long businessUnitId,
       Long stationId,
       Long mentorUserId,
@@ -103,6 +107,7 @@ public class EmployeeController {
       @RequestParam(required = false) String keyword,
       @RequestParam(required = false) Long batchId,
       @RequestParam(required = false) Long classId,
+      @RequestParam(required = false) Long classPositionId,
       @RequestParam(required = false) Long stationId,
       @RequestParam(required = false) Long mentorId) {
     rejectEmployeeLedgerAccess();
@@ -124,6 +129,10 @@ public class EmployeeController {
     if (classId != null) {
       where.append(" and e.class_id=?");
       parameters.add(classId);
+    }
+    if (classPositionId != null) {
+      where.append(" and e.class_position_id=?");
+      parameters.add(classPositionId);
     }
     if (stationId != null) {
       where.append(" and e.station_id=?");
@@ -158,14 +167,14 @@ public class EmployeeController {
     Long userId = db.queryForObject("select last_insert_id()", Long.class);
     db.update("""
         insert into employee(
-          user_id,employee_no,name,batch_id,class_id,business_unit_id,station_id,
+          user_id,employee_no,name,gender,batch_id,class_id,class_position_id,business_unit_id,station_id,
           mentor_user_id,skill_mentor_user_id,school,major,education,birth_date,
           native_place,residence,phone,email,onboard_date,political_status,
           hobbies,speciality,id_card,notes,status
-        ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
-        userId, request.employeeNo(), request.name(), request.batchId(),
-        request.classId(), request.businessUnitId(), request.stationId(), request.mentorUserId(),
+        userId, request.employeeNo(), request.name(), request.gender(), request.batchId(),
+        request.classId(), request.classPositionId(), request.businessUnitId(), request.stationId(), request.mentorUserId(),
         request.skillMentorUserId(), request.school(), request.major(), request.education(),
         request.birthDate(), request.nativePlace(), request.residence(), request.phone(),
         request.email(), request.onboardDate(), request.politicalStatus(), request.hobbies(),
@@ -189,14 +198,14 @@ public class EmployeeController {
     String previousStatus = String.valueOf(before.get("status"));
     db.update("""
         update employee
-        set employee_no=?,name=?,batch_id=?,class_id=?,business_unit_id=?,station_id=?,
+        set employee_no=?,name=?,gender=?,batch_id=?,class_id=?,class_position_id=?,business_unit_id=?,station_id=?,
             mentor_user_id=?,skill_mentor_user_id=?,school=?,major=?,education=?,
             birth_date=?,native_place=?,residence=?,phone=?,email=?,onboard_date=?,
             political_status=?,hobbies=?,speciality=?,id_card=?,notes=?,status=?,version=version+1
         where id=?
         """,
-        request.employeeNo(), request.name(), request.batchId(), request.classId(),
-        request.businessUnitId(), request.stationId(), request.mentorUserId(), request.skillMentorUserId(),
+        request.employeeNo(), request.name(), request.gender(), request.batchId(), request.classId(),
+        request.classPositionId(), request.businessUnitId(), request.stationId(), request.mentorUserId(), request.skillMentorUserId(),
         request.school(), request.major(), request.education(), request.birthDate(),
         request.nativePlace(), request.residence(), request.phone(), request.email(),
         request.onboardDate(), request.politicalStatus(), request.hobbies(),
@@ -247,20 +256,21 @@ public class EmployeeController {
 
   private void validateReferences(EmployeeRequest request) {
     requireEnabledMaster("talent_batch", "批次", request.batchId());
-    requireEnabledClass(request.classId());
+    requireEnabledDictionary("CLASS", "班级", request.classId());
+    requireEnabledDictionary("CLASS_POSITION", "班级职务", request.classPositionId());
     requireEnabledMaster("business_unit", "所属板块", request.businessUnitId());
     requireEnabledMaster("service_station", "服务站点", request.stationId());
     if (request.mentorUserId() != null) requireMentor(request.mentorUserId());
     if (request.skillMentorUserId() != null) requireMentor(request.skillMentorUserId());
   }
 
-  private void requireEnabledClass(Long id) {
+  private void requireEnabledDictionary(String typeCode, String label, Long id) {
     if (id == null) return;
     Integer count = db.queryForObject(
-        "select count(*) from dictionary_item where id=? and type_code='CLASS' and enabled=true",
+        "select count(*) from dictionary_item where id=? and type_code=? and enabled=true",
         Integer.class,
-        id);
-    if (count == null || count == 0) throw new BusinessException(400, "班级不存在或已停用");
+        id, typeCode);
+    if (count == null || count == 0) throw new BusinessException(400, label + "不存在或已停用");
   }
 
   private void requireEnabledMaster(String table, String label, Long id) {

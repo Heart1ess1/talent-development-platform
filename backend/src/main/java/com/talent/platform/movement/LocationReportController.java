@@ -174,6 +174,7 @@ public class LocationReportController {
       @RequestParam(defaultValue = "20") int size,
       @RequestParam(required = false) String keyword,
       @RequestParam(required = false) Long classId,
+      @RequestParam(required = false) Long classPositionId,
       @RequestParam(required = false) String location,
       @RequestParam(required = false) Boolean currentOnly,
       @RequestParam(required = false)
@@ -182,7 +183,7 @@ public class LocationReportController {
       @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
     rejectEmployeeManagementAccess();
     permissions.require(Permissions.EMPLOYEE_READ);
-    var query = filters(keyword, classId, location, Boolean.TRUE.equals(currentOnly), dateFrom, dateTo);
+    var query = filters(keyword, classId, classPositionId, location, Boolean.TRUE.equals(currentOnly), dateFrom, dateTo);
     var countSql = """
         select count(*)
         from employee_location_report r
@@ -196,8 +197,8 @@ public class LocationReportController {
     var selectSql = """
         select r.id,r.employee_id,r.from_location,r.to_location,r.reason,
                r.occurred_at,r.expected_return_at,r.created_at,
-               e.name employee_name,e.employee_no,e.class_id,e.status employee_status,
-               cls.label class_name,
+                e.name employee_name,e.employee_no,e.class_id,e.class_position_id,e.status employee_status,
+                cls.label class_name,cp.label class_position_name,
                u.avatar_token,b.name batch_name,bu.name business_unit_name,
                s.name station_name,tm.display_name mentor_name,
         """ + CURRENT_CONDITION + """
@@ -205,8 +206,9 @@ public class LocationReportController {
         from employee_location_report r
         join employee e on e.id=r.employee_id
         join sys_user u on u.id=e.user_id
-        left join talent_batch b on b.id=e.batch_id
-        left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS'
+         left join talent_batch b on b.id=e.batch_id
+         left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS'
+         left join dictionary_item cp on cp.id=e.class_position_id and cp.type_code='CLASS_POSITION'
         left join business_unit bu on bu.id=e.business_unit_id
         left join service_station s on s.id=e.station_id
         left join sys_user tm on tm.id=e.mentor_user_id
@@ -258,6 +260,7 @@ public class LocationReportController {
   private FilterQuery filters(
       String keyword,
       Long classId,
+      Long classPositionId,
       String location,
       boolean currentOnly,
       LocalDate dateFrom,
@@ -277,6 +280,10 @@ public class LocationReportController {
     if (classId != null) {
       where.append(" and e.class_id=?");
       args.add(classId);
+    }
+    if (classPositionId != null) {
+      where.append(" and e.class_position_id=?");
+      args.add(classPositionId);
     }
     if (location != null && !location.isBlank()) {
       where.append(" and (r.from_location like ? or r.to_location like ?)");

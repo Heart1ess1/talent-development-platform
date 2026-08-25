@@ -7,11 +7,11 @@ import {loadDictionaryValues,loadEnabledBusinessUnits,type DictionaryOption} fro
 import {dateTimeParts,planPhaseLabels,scoreMonth} from './examUi'
 import '@/styles/exam-center.css'
 
-const plans=ref<any[]>([]),papers=ref<any[]>([]),batches=ref<any[]>([]),businessUnits=ref<any[]>([]),classOptions=ref<DictionaryOption[]>([])
+const plans=ref<any[]>([]),papers=ref<any[]>([]),batches=ref<any[]>([]),businessUnits=ref<any[]>([]),classOptions=ref<DictionaryOption[]>([]),classPositionOptions=ref<DictionaryOption[]>([])
 const candidates=ref<any[]>([]),selectedCandidates=ref<any[]>([]),candidateTable=ref<any>()
 const drawerVisible=ref(false),candidateLoading=ref(false),saving=ref(false)
 const keyword=ref(''),statusFilter=ref('')
-const scope=reactive<any>({batchIds:[] as number[],businessUnitIds:[] as number[],classId:null,keyword:''})
+const scope=reactive<any>({batchIds:[] as number[],businessUnitIds:[] as number[],classId:null,classPositionId:null,keyword:''})
 const emptyPlan=()=>({paperId:null,name:'',startsAt:'',endsAt:'',durationMinutes:60,maxAttempts:1,violationLimit:4,violationGraceSeconds:15,employeeIds:[] as number[]})
 const plan=reactive<any>(emptyPlan())
 
@@ -35,24 +35,25 @@ const windowMinutes=computed(()=>{
 })
 
 async function load(){
-  const [planRes,paperRes,batchRes,businessUnitOptions,classValues]=await Promise.all([
+  const [planRes,paperRes,batchRes,businessUnitOptions,classValues,classPositionValues]=await Promise.all([
     api.get<any,Envelope<any[]>>('/exams/plans'),
     api.get<any,Envelope<any[]>>('/exams/papers'),
     api.get<any,Envelope<any[]>>('/batches'),
     loadEnabledBusinessUnits(),
-    loadDictionaryValues('CLASS')
+    loadDictionaryValues('CLASS'),
+    loadDictionaryValues('CLASS_POSITION')
   ])
-  plans.value=planRes.data;papers.value=paperRes.data;batches.value=batchRes.data.filter(x=>x.enabled);businessUnits.value=businessUnitOptions;classOptions.value=classValues
+  plans.value=planRes.data;papers.value=paperRes.data;batches.value=batchRes.data.filter(x=>x.enabled);businessUnits.value=businessUnitOptions;classOptions.value=classValues;classPositionOptions.value=classPositionValues
 }
 function openCreate(){
-  Object.assign(plan,emptyPlan());Object.assign(scope,{batchIds:[],businessUnitIds:[],classId:null,keyword:''})
+  Object.assign(plan,emptyPlan());Object.assign(scope,{batchIds:[],businessUnitIds:[],classId:null,classPositionId:null,keyword:''})
   candidates.value=[];selectedCandidates.value=[];drawerVisible.value=true
 }
 function clearCandidates(){candidates.value=[];selectedCandidates.value=[]}
 async function matchCandidates(){
   candidateLoading.value=true
   try{
-    const params={batchIds:scope.batchIds.join(','),businessUnitIds:scope.businessUnitIds.join(','),classId:scope.classId,keyword:scope.keyword}
+    const params={batchIds:scope.batchIds.join(','),businessUnitIds:scope.businessUnitIds.join(','),classId:scope.classId,classPositionId:scope.classPositionId,keyword:scope.keyword}
     const res=await api.get<any,Envelope<any[]>>('/exams/plans/candidates',{params})
     candidates.value=res.data;selectedCandidates.value=[]
     await nextTick()
@@ -184,8 +185,9 @@ onMounted(load)
           <div class="section-title"><span>3</span><div><strong>参考人员范围</strong><small>批次与板块均支持多选；某项不选择表示该维度全部，可在匹配结果中排除个别人员</small></div></div>
           <div class="scope-grid">
             <el-select v-model="scope.batchIds" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部批次" @change="clearCandidates"><el-option v-for="x in batches" :key="x.id" :label="x.name" :value="x.id"/></el-select>
-            <el-select v-model="scope.businessUnitIds" multiple clearable placeholder="全部板块" @change="clearCandidates"><el-option v-for="x in businessUnits" :key="x.id" :label="x.name" :value="x.id"/></el-select>
             <el-select v-model="scope.classId" clearable filterable placeholder="全部班级" @change="clearCandidates"><el-option v-for="x in classOptions" :key="x.id" :label="x.label" :value="x.id"/></el-select>
+            <el-select v-model="scope.classPositionId" clearable filterable placeholder="全部班级职务" @change="clearCandidates"><el-option v-for="x in classPositionOptions" :key="x.id" :label="x.label" :value="x.id"/></el-select>
+            <el-select v-model="scope.businessUnitIds" multiple clearable placeholder="全部板块" @change="clearCandidates"><el-option v-for="x in businessUnits" :key="x.id" :label="x.name" :value="x.id"/></el-select>
             <el-input v-model="scope.keyword" clearable placeholder="姓名或工号（可选）" :prefix-icon="Search" @input="clearCandidates" @keyup.enter="matchCandidates"/>
             <el-button type="primary" plain :loading="candidateLoading" @click="matchCandidates">匹配人员</el-button>
           </div>
@@ -195,7 +197,7 @@ onMounted(load)
             <span class="muted">默认全选，可取消不需要参加的员工</span>
           </div>
           <el-table ref="candidateTable" :data="candidates" v-loading="candidateLoading" height="230" empty-text="请先设置筛选条件并点击“匹配人员”" @selection-change="onSelectionChange">
-            <el-table-column type="selection" width="44"/><el-table-column prop="employee_no" label="工号" width="112"/><el-table-column prop="name" label="姓名" min-width="100"/><el-table-column prop="batch_name" label="批次" min-width="100"><template #default="s">{{s.row.batch_name||'未设置'}}</template></el-table-column><el-table-column prop="class_name" label="班级" min-width="100"><template #default="s">{{s.row.class_name||'未设置'}}</template></el-table-column><el-table-column prop="business_unit_name" label="所属板块" min-width="110"><template #default="s">{{s.row.business_unit_name||'未设置'}}</template></el-table-column>
+            <el-table-column type="selection" width="44"/><el-table-column prop="employee_no" label="工号" width="112"/><el-table-column prop="name" label="姓名" min-width="100"/><el-table-column prop="batch_name" label="批次" min-width="100"><template #default="s">{{s.row.batch_name||'未设置'}}</template></el-table-column><el-table-column prop="class_name" label="班级" min-width="100"><template #default="s">{{s.row.class_name||'未设置'}}</template></el-table-column><el-table-column prop="class_position_name" label="班级职务" min-width="100"><template #default="s">{{s.row.class_position_name||'未设置'}}</template></el-table-column><el-table-column prop="business_unit_name" label="所属板块" min-width="110"><template #default="s">{{s.row.business_unit_name||'未设置'}}</template></el-table-column>
           </el-table>
         </section>
       </el-form>

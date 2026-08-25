@@ -25,12 +25,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RequestMapping("/api/v1/employee-directory")
 public class EmployeeDirectoryController {
   private static final String SELECT = """
-      select e.id,e.employee_no,e.name,e.batch_id,e.class_id,e.business_unit_id,e.station_id,
+      select e.id,e.employee_no,e.name,e.gender,e.batch_id,e.class_id,e.class_position_id,e.business_unit_id,e.station_id,
              e.mentor_user_id,e.skill_mentor_user_id,e.school,e.major,e.education,
              e.birth_date,e.native_place,e.residence,e.phone,e.email,e.onboard_date,
              e.status,e.political_status,e.hobbies,e.speciality,e.id_card,e.notes,
              u.avatar_token,
-             b.name batch_name,cls.label class_name,bu.name business_unit_name,s.name station_name,
+             b.name batch_name,cls.label class_name,cp.label class_position_name,
+             bu.name business_unit_name,s.name station_name,
              tm.display_name technical_mentor_name,tm.display_name mentor_name,
              sm.display_name skill_mentor_name,
              (select count(*) from station_change_request scr
@@ -43,6 +44,7 @@ public class EmployeeDirectoryController {
        left join sys_user u on u.id=e.user_id
        left join talent_batch b on b.id=e.batch_id
        left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS'
+       left join dictionary_item cp on cp.id=e.class_position_id and cp.type_code='CLASS_POSITION'
        left join business_unit bu on bu.id=e.business_unit_id
        left join service_station s on s.id=e.station_id
        left join sys_user tm on tm.id=e.mentor_user_id
@@ -69,6 +71,7 @@ public class EmployeeDirectoryController {
       @RequestParam(required = false) String keyword,
       @RequestParam(required = false) Long batchId,
       @RequestParam(required = false) Long classId,
+      @RequestParam(required = false) Long classPositionId,
       @RequestParam(required = false) Long businessUnitId,
       @RequestParam(required = false) Long stationId,
       @RequestParam(required = false) Long mentorId,
@@ -78,7 +81,7 @@ public class EmployeeDirectoryController {
       @RequestParam(defaultValue = "false") boolean all) {
     permissions.require(Permissions.EMPLOYEE_READ);
     var query = filters(
-        keyword, batchId, classId, businessUnitId, stationId, mentorId, skillMentorId, education, status);
+        keyword, batchId, classId, classPositionId, businessUnitId, stationId, mentorId, skillMentorId, education, status);
     long total = db.queryForObject(
         "select count(*)" + FROM + query.sql(),
         Long.class,
@@ -104,6 +107,7 @@ public class EmployeeDirectoryController {
       @RequestParam(required = false) String keyword,
       @RequestParam(required = false) Long batchId,
       @RequestParam(required = false) Long classId,
+      @RequestParam(required = false) Long classPositionId,
       @RequestParam(required = false) Long businessUnitId,
       @RequestParam(required = false) Long stationId,
       @RequestParam(required = false) Long mentorId,
@@ -111,7 +115,7 @@ public class EmployeeDirectoryController {
       @RequestParam(required = false) String education) {
     permissions.require(Permissions.EMPLOYEE_READ);
     var query = filters(
-        keyword, batchId, classId, businessUnitId, stationId, mentorId, skillMentorId, education, null);
+        keyword, batchId, classId, classPositionId, businessUnitId, stationId, mentorId, skillMentorId, education, null);
     return ApiResponse.ok(db.queryForMap("""
         select
           count(*) totalEmployees,
@@ -128,6 +132,7 @@ public class EmployeeDirectoryController {
       @RequestParam(required = false) String keyword,
       @RequestParam(required = false) Long batchId,
       @RequestParam(required = false) Long classId,
+      @RequestParam(required = false) Long classPositionId,
       @RequestParam(required = false) Long businessUnitId,
       @RequestParam(required = false) Long stationId,
       @RequestParam(required = false) Long mentorId,
@@ -137,7 +142,7 @@ public class EmployeeDirectoryController {
       HttpServletResponse response) throws Exception {
     permissions.require(Permissions.EMPLOYEE_EXPORT);
     var query = filters(
-        keyword, batchId, classId, businessUnitId, stationId, mentorId, skillMentorId, education, status);
+        keyword, batchId, classId, classPositionId, businessUnitId, stationId, mentorId, skillMentorId, education, status);
     var rows = db.queryForList(
         SELECT + FROM + query.sql() + " order by e.id desc",
         query.args().toArray());
@@ -152,7 +157,7 @@ public class EmployeeDirectoryController {
             + URLEncoder.encode("人员台账.xlsx", StandardCharsets.UTF_8));
     audit.log("EXPORT_EMPLOYEES", "EMPLOYEE", null, null, Map.of("count", output.size()));
     EasyExcel.write(response.getOutputStream(), EmployeeDirectoryExportRow.class)
-        .registerWriteHandler(new EmployeeExcelSheetHandler(22))
+        .registerWriteHandler(new EmployeeExcelSheetHandler(24))
         .sheet("人员台账")
         .doWrite(output);
   }
@@ -161,6 +166,7 @@ public class EmployeeDirectoryController {
       String keyword,
       Long batchId,
       Long classId,
+      Long classPositionId,
       Long businessUnitId,
       Long stationId,
       Long mentorId,
@@ -189,6 +195,10 @@ public class EmployeeDirectoryController {
     if (classId != null) {
       where.append(" and e.class_id=?");
       args.add(classId);
+    }
+    if (classPositionId != null) {
+      where.append(" and e.class_position_id=?");
+      args.add(classPositionId);
     }
     if (businessUnitId != null) {
       where.append(" and e.business_unit_id=?");
@@ -222,8 +232,10 @@ public class EmployeeDirectoryController {
     output.setSerialNo(serialNo);
     output.setName(string(row, "name"));
     output.setEmployeeNo(string(row, "employee_no"));
+    output.setGender(string(row, "gender"));
     output.setBatchName(string(row, "batch_name"));
     output.setClassName(string(row, "class_name"));
+    output.setClassPositionName(string(row, "class_position_name"));
     output.setBusinessUnitName(string(row, "business_unit_name"));
     output.setStationName(string(row, "station_name"));
     output.setTechnicalMentorName(string(row, "technical_mentor_name"));

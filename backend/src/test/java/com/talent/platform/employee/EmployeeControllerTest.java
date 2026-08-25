@@ -52,8 +52,10 @@ class EmployeeControllerTest {
     var request = new EmployeeController.EmployeeRequest(
         "employee",
         "新员工",
+        "男",
         1L,
         5L,
+        6L,
         2L,
         20L,
         3L,

@@ -14,6 +14,7 @@ const plans=ref<any[]>([]),results=ref<any[]>([]),planResults=ref<any[]>([])
 const reviewQueue=ref<any[]>([]),reviewVisible=ref(false),reviewLoading=ref(false),reviewAttempt=ref<any>(),grades=reactive<Record<number,{score:number;comment:string}>>({})
 const keyword=ref(''),phase=ref(''),detailKeyword=ref(''),detailStatus=ref('')
 const detailClassId=ref<number|null>(null),classOptions=ref<DictionaryOption[]>([])
+const detailClassPositionId=ref<number|null>(null),classPositionOptions=ref<DictionaryOption[]>([])
 const detailVisible=ref(false),detailLoading=ref(false),exporting=ref(false),selectedPlan=ref<any>(null)
 const pendingReviews=computed(()=>reviewQueue.value.filter(x=>x.status==='PENDING_REVIEW'))
 
@@ -29,7 +30,7 @@ const overview=computed(()=>({
 }))
 const filteredPlanResults=computed(()=>planResults.value.filter(row=>{
   const matchesKeyword=!detailKeyword.value||`${row.employee_name} ${row.employee_no}`.toLowerCase().includes(detailKeyword.value.trim().toLowerCase())
-  return matchesKeyword&&(!detailClassId.value||row.class_id===detailClassId.value)&&(!detailStatus.value||row.participation_status===detailStatus.value)
+  return matchesKeyword&&(!detailClassId.value||row.class_id===detailClassId.value)&&(!detailClassPositionId.value||row.class_position_id===detailClassPositionId.value)&&(!detailStatus.value||row.participation_status===detailStatus.value)
 }))
 const detailOverview=computed(()=>({
   assigned:planResults.value.length,
@@ -70,7 +71,7 @@ function participation(row:any){
   return ({COMPLETED:{label:'已完成',type:'success'},ABSENT:{label:'缺考',type:'danger'},IN_PROGRESS:{label:'考试中',type:'primary'},NOT_STARTED:{label:'未开始',type:'info'},INCOMPLETE:{label:'未完成',type:'warning'}} as any)[row.participation_status]??{label:'--',type:'info'}
 }
 function proctorMode(row:any){return row.proctor_mode==='MOBILE_COMPATIBLE'?{label:'移动兼容',type:'warning'}:{label:'严格全屏',type:'success'}}
-onMounted(async()=>{if(canManage.value)classOptions.value=await loadDictionaryValues('CLASS');await load();if(String(route.query.focus)==='review'){await nextTick();document.getElementById('exam-review-queue')?.scrollIntoView({behavior:'smooth',block:'start'})}})
+onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.value]=await Promise.all([loadDictionaryValues('CLASS'),loadDictionaryValues('CLASS_POSITION')]);await load();if(String(route.query.focus)==='review'){await nextTick();document.getElementById('exam-review-queue')?.scrollIntoView({behavior:'smooth',block:'start'})}})
 </script>
 
 <template>
@@ -154,13 +155,14 @@ onMounted(async()=>{if(canManage.value)classOptions.value=await loadDictionaryVa
         <div class="filters">
           <el-input v-model="detailKeyword" clearable placeholder="搜索姓名或工号" :prefix-icon="Search"/>
           <el-select v-model="detailClassId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
+          <el-select v-model="detailClassPositionId" clearable filterable placeholder="全部班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
           <el-select v-model="detailStatus" clearable placeholder="完成状态">
             <el-option label="已完成" value="COMPLETED"/><el-option label="考试中" value="IN_PROGRESS"/><el-option label="未开始" value="NOT_STARTED"/><el-option label="未完成" value="INCOMPLETE"/><el-option label="缺考" value="ABSENT"/>
           </el-select>
         </div>
       </div>
       <el-table :data="filteredPlanResults" v-loading="detailLoading" empty-text="暂无应考员工">
-        <el-table-column prop="employee_no" label="工号" width="110"/><el-table-column prop="employee_name" label="员工" min-width="100"/><el-table-column prop="class_name" label="班级" min-width="100"><template #default="s">{{s.row.class_name||'未设置'}}</template></el-table-column>
+        <el-table-column prop="employee_no" label="工号" width="110"/><el-table-column prop="employee_name" label="员工" min-width="100"/><el-table-column prop="class_name" label="班级" min-width="100"><template #default="s">{{s.row.class_name||'未设置'}}</template></el-table-column><el-table-column prop="class_position_name" label="班级职务" min-width="100"><template #default="s">{{s.row.class_position_name||'未设置'}}</template></el-table-column>
         <el-table-column label="完成状态" width="92"><template #default="s"><el-tag :type="participation(s.row).type" effect="plain">{{participation(s.row).label}}</el-tag></template></el-table-column>
         <el-table-column label="监考模式" width="104"><template #default="s"><el-tag v-if="s.row.id" :type="proctorMode(s.row).type" effect="plain">{{proctorMode(s.row).label}}</el-tag><span v-else>--</span></template></el-table-column>
         <el-table-column prop="attempt_no" label="考试次数" width="82" align="center"><template #default="s">{{s.row.attempt_no??'--'}}</template></el-table-column>

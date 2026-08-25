@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 
 class EmployeeSpreadsheetTest {
   private static final List<String> HEADERS = List.of(
-      "序号", "工号", "姓名", "批次", "班级", "所属板块", "服务站点",
+      "序号", "工号", "姓名", "性别", "批次", "班级", "班级职务", "所属板块", "服务站点",
       "指导老师（技术）", "指导老师（技能）", "身份证号码", "毕业学校",
       "所学专业", "学历", "出生日期", "籍贯", "政治面貌", "住址（公司）",
       "兴趣爱好", "特长", "私人邮箱", "联系方式", "入职日期", "状态");
@@ -46,8 +46,10 @@ class EmployeeSpreadsheetTest {
     when(db.queryForList(anyString(), any(Object[].class))).thenReturn(List.of(Map.ofEntries(
         Map.entry("employee_no", "employee"),
         Map.entry("name", "新员工"),
+        Map.entry("gender", "女"),
         Map.entry("batch_name", "2026届"),
         Map.entry("class_name", "2026届1班"),
+        Map.entry("class_position_name", "班长"),
         Map.entry("business_unit_name", "机动车"),
         Map.entry("technical_mentor_name", "技术导师"),
         Map.entry("skill_mentor_name", "技能导师"),
@@ -58,7 +60,7 @@ class EmployeeSpreadsheetTest {
         db, permissions, mock(AuditService.class));
     var response = new MockHttpServletResponse();
 
-    controller.export(null, null, null, null, null, null, null, null, null, response);
+    controller.export(null, null, null, null, null, null, null, null, null, null, response);
 
     try (var workbook = WorkbookFactory.create(
         new ByteArrayInputStream(response.getContentAsByteArray()))) {
@@ -69,8 +71,10 @@ class EmployeeSpreadsheetTest {
       assertThat(sheet.getRow(1).getCell(0).getCellStyle().getDataFormatString())
           .isEqualTo("0");
       assertThat(sheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("employee");
-      assertThat(sheet.getRow(1).getCell(4).getStringCellValue()).isEqualTo("2026届1班");
-      assertThat(sheet.getRow(1).getCell(22).getStringCellValue()).isEqualTo("在职");
+      assertThat(sheet.getRow(1).getCell(3).getStringCellValue()).isEqualTo("女");
+      assertThat(sheet.getRow(1).getCell(5).getStringCellValue()).isEqualTo("2026届1班");
+      assertThat(sheet.getRow(1).getCell(6).getStringCellValue()).isEqualTo("班长");
+      assertThat(sheet.getRow(1).getCell(24).getStringCellValue()).isEqualTo("在职");
       assertThat(sheet.getPaneInformation()).isNotNull();
     }
   }
@@ -81,7 +85,7 @@ class EmployeeSpreadsheetTest {
     when(db.queryForList(anyString(), eq(String.class)))
         .thenReturn(List.of("2026届"));
     when(db.queryForList(anyString(), eq(String.class), any(Object[].class)))
-        .thenReturn(List.of("2026届1班"));
+        .thenReturn(List.of("2026届1班"), List.of("班长"));
     var controller = new ImportController(
         db,
         mock(PasswordEncoder.class),
@@ -96,20 +100,24 @@ class EmployeeSpreadsheetTest {
       assertThat(workbook.getNumberOfSheets()).isEqualTo(2);
       var employeeSheet = workbook.getSheet("新员工导入");
       assertThat(headers(employeeSheet.getRow(0))).containsExactlyElementsOf(HEADERS);
-      assertThat(employeeSheet.getRow(1).getCell(4).getStringCellValue()).isEqualTo("2026届1班");
-      assertThat(employeeSheet.getRow(1).getCell(22).getStringCellValue()).isEqualTo("在职");
-      assertThat(employeeSheet.getRow(1).getCell(9).getStringCellValue()).endsWith("X");
+      assertThat(employeeSheet.getRow(1).getCell(3).getStringCellValue()).isEqualTo("男");
+      assertThat(employeeSheet.getRow(1).getCell(5).getStringCellValue()).isEqualTo("2026届1班");
+      assertThat(employeeSheet.getRow(1).getCell(6).getStringCellValue()).isEqualTo("班长");
+      assertThat(employeeSheet.getRow(1).getCell(24).getStringCellValue()).isEqualTo("在职");
+      assertThat(employeeSheet.getRow(1).getCell(11).getStringCellValue()).endsWith("X");
       assertThat(employeeSheet.getRow(1).getCell(0).getCellStyle().getDataFormatString())
           .isEqualTo("0");
       assertThat(employeeSheet.getPaneInformation()).isNotNull();
       var instructions = workbook.getSheet("填写说明");
       assertThat(instructions).isNotNull();
-      assertThat(instructions.getLastRowNum()).isEqualTo(23);
+      assertThat(instructions.getLastRowNum()).isEqualTo(25);
       assertThat(instructions.getRow(1).getCell(0).getStringCellValue()).isEqualTo("序号");
-      assertThat(instructions.getRow(5).getCell(0).getStringCellValue()).isEqualTo("班级");
-      assertThat(instructions.getRow(10).getCell(1).getStringCellValue()).isEqualTo("是");
-      assertThat(instructions.getRow(10).getCell(2).getStringCellValue()).contains("大写X");
-      assertThat(instructions.getRow(23).getCell(0).getStringCellValue()).isEqualTo("状态");
+      assertThat(instructions.getRow(4).getCell(0).getStringCellValue()).isEqualTo("性别");
+      assertThat(instructions.getRow(6).getCell(0).getStringCellValue()).isEqualTo("班级");
+      assertThat(instructions.getRow(7).getCell(0).getStringCellValue()).isEqualTo("班级职务");
+      assertThat(instructions.getRow(12).getCell(1).getStringCellValue()).isEqualTo("是");
+      assertThat(instructions.getRow(12).getCell(2).getStringCellValue()).contains("大写X");
+      assertThat(instructions.getRow(25).getCell(0).getStringCellValue()).isEqualTo("状态");
     }
   }
 
@@ -127,8 +135,10 @@ class EmployeeSpreadsheetTest {
     var row = new EmployeeImportRow();
     row.setEmployeeNo("20260002");
     row.setName("导入员工");
+    row.setGender("女");
     row.setBatch("2026届");
     row.setClassName("2026届1班");
+    row.setClassPositionName("班长");
     row.setIdCard("11010120020101000X");
     row.setStatus("停用");
     var bytes = new ByteArrayOutputStream();
@@ -150,7 +160,9 @@ class EmployeeSpreadsheetTest {
     assertThat(accountArguments.getValue()).endsWith(false);
     var arguments = ArgumentCaptor.forClass(Object[].class);
     verify(db).update(contains("insert into employee"), arguments.capture());
-    assertThat(arguments.getValue()[4]).isEqualTo(1L);
+    assertThat(arguments.getValue()[3]).isEqualTo("女");
+    assertThat(arguments.getValue()[5]).isEqualTo(1L);
+    assertThat(arguments.getValue()[6]).isEqualTo(1L);
     assertThat(arguments.getValue()).endsWith("INACTIVE");
   }
 
@@ -231,7 +243,52 @@ class EmployeeSpreadsheetTest {
   }
 
   @Test
-  void importKeepsLegacyTemplateWithoutClassCompatible() throws Exception {
+  void importRejectsInvalidGenderAndUnknownClassPosition() throws Exception {
+    var db = mock(JdbcTemplate.class);
+    when(db.queryForList(contains("employee_no"), anyString())).thenReturn(List.of());
+    when(db.queryForList(contains("from talent_batch"), eq(Long.class), any(Object[].class)))
+        .thenReturn(List.of(1L));
+    when(db.queryForList(contains("from dictionary_item"), eq(Long.class), any(Object[].class)))
+        .thenReturn(List.of());
+    var controller = new ImportController(
+        db,
+        mock(PasswordEncoder.class),
+        mock(PermissionService.class),
+        mock(AuditService.class));
+    var row = new EmployeeImportRow();
+    row.setEmployeeNo("20260006");
+    row.setName("固定选项校验员工");
+    row.setGender("未知");
+    row.setBatch("2026届");
+    row.setClassPositionName("不存在的职务");
+    row.setIdCard("110101200201010006");
+    row.setStatus("在职");
+    var bytes = new ByteArrayOutputStream();
+    EasyExcel.write(bytes, EmployeeImportRow.class)
+        .sheet("新员工导入")
+        .doWrite(List.of(row));
+    var file = new MockMultipartFile(
+        "file",
+        "新员工导入模板.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        bytes.toByteArray());
+
+    var result = controller.employees(file);
+
+    assertThat(result.data().imported()).isZero();
+    assertThat(result.data().errors())
+        .anySatisfy(error -> {
+          assertThat(error.field()).isEqualTo("性别");
+          assertThat(error.message()).contains("男").contains("女");
+        })
+        .anySatisfy(error -> {
+          assertThat(error.field()).isEqualTo("班级职务");
+          assertThat(error.message()).contains("不存在或已停用");
+        });
+  }
+
+  @Test
+  void importKeepsLegacyTemplateWithoutNewFieldsCompatible() throws Exception {
     var db = mock(JdbcTemplate.class);
     when(db.queryForList(contains("employee_no"), anyString())).thenReturn(List.of());
     when(db.queryForList(contains("from talent_batch"), eq(Long.class), any(Object[].class)))
@@ -242,7 +299,7 @@ class EmployeeSpreadsheetTest {
     var controller = new ImportController(
         db, encoder, mock(PermissionService.class), mock(AuditService.class));
     var legacyHeaders = HEADERS.stream()
-        .filter(header -> !"班级".equals(header))
+        .filter(header -> !"性别".equals(header) && !"班级职务".equals(header))
         .map(List::of)
         .toList();
     var values = new ArrayList<Object>();
@@ -251,8 +308,8 @@ class EmployeeSpreadsheetTest {
     values.set(1, "20260005");
     values.set(2, "旧模板员工");
     values.set(3, "2026届");
-    values.set(8, "110101200201010005");
-    values.set(21, "在职");
+    values.set(9, "110101200201010005");
+    values.set(22, "在职");
     var bytes = new ByteArrayOutputStream();
     EasyExcel.write(bytes)
         .head(legacyHeaders)
@@ -269,7 +326,9 @@ class EmployeeSpreadsheetTest {
     assertThat(result.data().imported()).isEqualTo(1);
     var arguments = ArgumentCaptor.forClass(Object[].class);
     verify(db).update(contains("insert into employee"), arguments.capture());
-    assertThat(arguments.getValue()[4]).isNull();
+    assertThat(arguments.getValue()[3]).isNull();
+    assertThat(arguments.getValue()[5]).isNull();
+    assertThat(arguments.getValue()[6]).isNull();
   }
 
   private List<String> headers(org.apache.poi.ss.usermodel.Row row) {
