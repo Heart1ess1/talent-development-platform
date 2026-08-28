@@ -17,7 +17,7 @@
 | 证书 | 三张 DigiCert RSA 2048 DV 证书均已签发；主站证书已安装到 ECS，`cert-70iod6` 已部署到 CDN 并覆盖 `static.yryhx.cn`；当前证书均有效至 2026-11-10 |
 | 备案 | 管局审核已通过；主体备案号为 `湘ICP备2026035229号`，`yryhx.cn` 的网站备案号为 `湘ICP备2026035229号-1` |
 | 网站合规页脚 | 已随 `main@d0fde6c2` 部署；登录页及登录后所有业务页面统一展示 `湘ICP备2026035229号-1`，并链接工信部备案系统 `https://beian.miit.gov.cn/`；公安备案号待审核完成后再加入，不展示占位号 |
-| CDN/ESA | `static.yryhx.cn` 已启用中国内地“图片小文件”CDN；源站为私有 ACL 的公共静态资源 OSS Bucket，同账号私有回源、HTTPS、HTTP→HTTPS、TLS 1.2/1.3、Gzip 和一年 immutable 缓存均已验证；不启用 ESA 等非必要增值服务 |
+| CDN/ESA | `static.yryhx.cn` 已启用中国内地“图片小文件”CDN；源站为私有 ACL 的公共静态资源 OSS Bucket，同账号私有回源、HTTPS、HTTP→HTTPS、TLS 1.2/1.3、Gzip 和长期缓存均已验证；OSS 写入 `immutable`，CDN 可能规范化为不少于 30 天的 `max-age`；不启用 ESA 等非必要增值服务 |
 
 当前线上运行 CDN 版应用代码基线为 PR #24 的 `main` 合并提交 `f6d3799c24c47751fe6aad7c5e4c7dd2c46afc04`，JAR SHA-256 为 `b9c1061414546a5fda90db2b4bde67ce7d0a246516a197915afda2ff9742ab1d`，Flyway 为 V30。候选 `/data/talent-platform/releases/staging/cdn-f6d3799c-20260819-0006` 已通过 `activate-cdn-release.sh` 激活，HTML 从 ECS 返回且不缓存，带内容哈希的 `/assets/` 文件从 CDN 返回并缓存一年。本次部署前 JAR 和环境备份位于 `/data/talent-platform/releases/history/cdn-activation-20260819000840-1053093/`，数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260819-000832.sql.gz`。
 
@@ -310,7 +310,7 @@ sudo bash /opt/talent-platform/migrate-local-files.sh
 必须逐项取得当前证据：
 
 - `https://yryhx.cn/actuator/health` 返回 `UP`，HTTP 自动跳转 HTTPS。
-- `static.yryhx.cn/assets/*` 返回 200、正确 MIME、长期 immutable 缓存头，第二次请求命中 CDN。
+- `static.yryhx.cn/assets/*` 返回 200、正确 MIME，以及 `immutable` 或不少于 30 天 `max-age` 的长期缓存头，第二次请求命中 CDN。
 - 公共 Bucket ACL 仍为私有，OSS 原始域名匿名访问返回 403。
 - 50 MB 上限、500 页上限、扩展名、空文件、伪造 Word/PDF/PPT/OFD 包和大小篡改均被拒绝。
 - 上传票据超时、重复消费、跨用户、跨业务对象使用均失败。

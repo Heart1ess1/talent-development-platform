@@ -235,8 +235,12 @@ $wwwCnameReady = @($result.wwwCname | ForEach-Object { $_.TrimEnd('.') }) -conta
 $staticCnameReady = $result.staticCname.Count -gt 0
 $staticCacheControl = [string]$result.staticAsset.headers.'Cache-Control'
 $staticContentType = [string]$result.staticAsset.headers.'Content-Type'
+$staticLongCacheReady = $staticCacheControl -match 'immutable'
+if (-not $staticLongCacheReady -and $staticCacheControl -match '(?i)(?:^|[,; ]+)max-age=(\d+)') {
+  $staticLongCacheReady = [long]$Matches[1] -ge 2592000
+}
 $staticAssetReady = $result.staticAsset.statusCode -eq 200 -and
-  $staticCacheControl -match 'immutable' -and
+  $staticLongCacheReady -and
   -not [string]::IsNullOrWhiteSpace($staticContentType) -and
   $staticContentType -notmatch '^text/html'
 

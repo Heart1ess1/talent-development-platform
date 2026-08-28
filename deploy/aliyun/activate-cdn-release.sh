@@ -55,7 +55,14 @@ fi
 
 headers="$(curl -fsSI --retry 5 --retry-delay 2 "$asset_url")"
 printf '%s' "$headers" | grep -qi '^content-type:.*javascript'
-printf '%s' "$headers" | grep -qi '^cache-control:.*immutable'
+cache_control="$(printf '%s' "$headers" | tr -d '\r' | sed -n 's/^cache-control:[[:space:]]*//Ip' | head -n 1)"
+if ! printf '%s' "$cache_control" | grep -qi 'immutable'; then
+  max_age="$(printf '%s' "$cache_control" | grep -Eio 'max-age=[0-9]+' | head -n 1 | cut -d= -f2 || true)"
+  if [[ ! "$max_age" =~ ^[0-9]+$ ]] || (( max_age < 2592000 )); then
+    echo "CDN 主资源缺少 immutable 或至少 30 天的长期缓存：$cache_control"
+    exit 1
+  fi
+fi
 
 cd "$resolved_app"
 set -a
