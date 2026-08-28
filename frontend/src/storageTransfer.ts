@@ -1,3 +1,4 @@
+import axios from 'axios'
 import {api,type Envelope} from '@/api'
 
 export interface StorageCapabilities{
@@ -14,6 +15,14 @@ export interface UploadTicket{
   expiresAt:string
 }
 
+export interface UploadProgress{
+  loaded:number
+  total?:number
+  percent?:number
+}
+
+export type UploadProgressHandler=(progress:UploadProgress)=>void
+
 let capabilitiesPromise:Promise<StorageCapabilities>|null=null
 
 export async function storageCapabilities(){
@@ -25,7 +34,14 @@ export async function storageCapabilities(){
   return capabilitiesPromise
 }
 
-export async function createUploadTicket(ticketUrl:string,file:File){
+export async function abandonUploadTickets(ticketIds:string[]){
+  const uniqueIds=[...new Set(ticketIds.filter(Boolean))]
+  await Promise.allSettled(uniqueIds.map(ticketId=>
+    api.delete(`/storage/upload-tickets/${encodeURIComponent(ticketId)}`,{silentError:true} as any)
+  ))
+}
+
+export async function createUploadTicket(ticketUrl:string,file:File,onProgress?:UploadProgressHandler){
   const response=await api.post<any,Envelope<UploadTicket>>(ticketUrl,{
     originalName:file.name,
     contentType:file.type||'application/octet-stream',
@@ -40,13 +56,27 @@ export async function createUploadTicket(ticketUrl:string,file:File){
     form.append('file',file)
     body=form
   }
-  const uploadResponse=await fetch(ticket.uploadUrl,{
-    method:ticket.method||'PUT',
-    headers:isFormUpload?{}:(ticket.headers||{}),
-    body
-  })
-  if(!uploadResponse.ok){
-    throw new Error(`OSS 上传失败（HTTP ${uploadResponse.status}）`)
+  try{
+    await axios.request({
+      url:ticket.uploadUrl,
+      method:ticket.method||'PUT',
+      headers:isFormUpload?{}:(ticket.headers||{}),
+      data:body,
+      onUploadProgress:event=>{
+        const total=event.total&&event.total>0?event.total:undefined
+        onProgress?.({
+          loaded:event.loaded,
+          total,
+          percent:total?Math.min(100,Math.round(event.loaded/total*100)):undefined
+        })
+      }
+    })
+  }catch(error){
+    await abandonUploadTickets([ticket.ticketId])
+    if(axios.isAxiosError(error)&&error.response?.status){
+      throw new Error(`OSS 上传失败（HTTP ${error.response.status}）`)
+    }
+    throw error
   }
   return ticket
 }
@@ -56,11 +86,17 @@ export async function uploadWithStorageFallback(options:{
   legacyUrl:string
   ticketUrl:string
   completeUrl:(ticketId:string)=>string
+  onProgress?:UploadProgressHandler
 }){
   const capabilities=await storageCapabilities()
   if(capabilities.directUpload){
-    const ticket=await createUploadTicket(options.ticketUrl,options.file)
-    return api.post(options.completeUrl(ticket.ticketId))
+    const ticket=await createUploadTicket(options.ticketUrl,options.file,options.onProgress)
+    try{
+      return await api.post(options.completeUrl(ticket.ticketId))
+    }catch(error){
+      await abandonUploadTickets([ticket.ticketId])
+      throw error
+    }
   }
   const form=new FormData()
   form.append('file',options.file)

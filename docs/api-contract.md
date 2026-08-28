@@ -70,6 +70,7 @@ Authorization: Bearer <token>
 | 方法 | 路径 | 权限 | 说明 | 响应 |
 | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/storage/capabilities` | 登录 | 查询当前环境是否启用 OSS 直传和签名下载 | `directUpload`、`signedDownload` |
+| `DELETE` | `/api/v1/storage/upload-tickets/{ticketId}` | 登录且票据创建人 | 幂等废弃本人尚未消费的 OSS 上传票据；对象清理失败时立即使票据过期并由定时任务重试 | 空 |
 
 上传票据有效期 15 分钟，绑定创建人、用途和业务对象，只能消费一次。浏览器必须按票据返回的 `method`、`uploadUrl`、`headers` 和 `formFields` 直接上传；OSS POST Policy 会强制精确文件大小、类型和禁止覆盖。完成接口校验临时对象后复制为从未对客户端签名的正式对象，再删除临时对象。完整签名字段不应写入日志或持久化。
 | `GET` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 查询本人工作信息和可维护个人资料 | 无 | 员工个人资料，包含只读批次、所属板块、服务站点、技术/技能导师、入职日期和状态 |
