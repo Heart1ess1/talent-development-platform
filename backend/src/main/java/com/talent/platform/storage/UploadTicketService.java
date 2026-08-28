@@ -55,7 +55,7 @@ public class UploadTicketService {
         where created_by=? and consumed_at is null and expires_at>=now()
         """, Integer.class, creatorId);
     if (pending != null && pending >= 10) {
-      throw new BusinessException(429, "Too many pending uploads; complete them or wait for expiry");
+      throw new BusinessException(429, "待完成上传已达到上限，请等待最多15分钟后重试");
     }
 
     var signed = storage.prepareDirectUpload(
@@ -123,11 +123,14 @@ public class UploadTicketService {
         """, ticketId.toString(), SecurityUtils.current().id());
     if (rows.isEmpty()) return;
     String key = String.valueOf(rows.get(0).get("object_key"));
-    db.update("delete from object_upload_ticket where id=?", ticketId.toString());
     try {
       storage.delete(key);
-    } catch (RuntimeException ignored) {
-      // The ticket is invalidated even if OSS cleanup must be retried asynchronously.
+      db.update("delete from object_upload_ticket where id=? and created_by=? and consumed_at is null",
+          ticketId.toString(), SecurityUtils.current().id());
+    } catch (RuntimeException exception) {
+      // Stop counting the ticket immediately while retaining it for the scheduled OSS cleanup retry.
+      db.update("update object_upload_ticket set expires_at=? where id=? and created_by=? and consumed_at is null",
+          Timestamp.from(Instant.now().minusSeconds(1)), ticketId.toString(), SecurityUtils.current().id());
     }
   }
 

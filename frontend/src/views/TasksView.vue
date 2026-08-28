@@ -7,6 +7,7 @@ import {
   CircleCheck,
   Collection,
   Connection,
+  Delete,
   Document,
   Download,
   FolderOpened,
@@ -20,7 +21,7 @@ import {
 import {api, type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import TaskAttachmentsPanel from '@/components/TaskAttachmentsPanel.vue'
-import {createUploadTicket,storageCapabilities,uploadWithStorageFallback} from '@/storageTransfer'
+import {abandonUploadTickets,createUploadTicket,storageCapabilities,uploadWithStorageFallback} from '@/storageTransfer'
 import {loadDictionaryValues, loadEnabledBusinessUnits, type DictionaryOption} from '@/utils/masterData'
 
 const auth = useAuthStore()
@@ -46,6 +47,8 @@ const dialog = ref(false)
 const submissionMode = ref<'SUBMIT' | 'RESUBMIT' | 'VIEW' | 'REVIEW'>('VIEW')
 const selected = ref<any>()
 const files = ref<any[]>([])
+const submitting = ref(false)
+const submissionStage = ref<'IDLE'|'UPLOADING'|'REGISTERING'|'LOCAL_SUBMITTING'>('IDLE')
 const manualFiles = ref<any[]>([])
 const history = ref<any[]>([])
 const previewDialog = ref(false)
@@ -82,6 +85,56 @@ const dispatch = reactive<any>({planTaskIds: [], taskTitle: '', deadlineMode: 'O
 const submit = reactive({content: ''})
 const review = reactive<any>({decision: 'APPROVE', comment: '', score: null})
 const taskDetail = reactive<any>({title: '', description: '', requirements: '', deadline: '', attachments: []})
+
+type SubmissionFileStatus='WAITING'|'UPLOADING'|'WAITING_SUBMIT'|'SUCCESS'|'FAILED'|'CANCELLED'
+const submissionFileLabels:Record<SubmissionFileStatus,string>={
+  WAITING:'等待上传',
+  UPLOADING:'正在上传',
+  WAITING_SUBMIT:'等待提交',
+  SUCCESS:'提交成功',
+  FAILED:'上传失败',
+  CANCELLED:'已取消'
+}
+
+function initializeSubmissionFile(item:any){
+  item.submissionStatus='WAITING' as SubmissionFileStatus
+  item.submissionProgress=0
+  item.submissionProgressKnown=true
+  item.submissionError=''
+}
+
+function handleSubmissionFiles(_file:any,list:any[]){
+  for(const item of list){
+    if(!item.submissionStatus)initializeSubmissionFile(item)
+  }
+  files.value=list
+}
+
+function removeSubmissionFile(item:any){
+  if(submitting.value)return
+  files.value=files.value.filter(file=>file.uid!==item.uid)
+}
+
+function resetSubmissionProgress(){
+  files.value.forEach(initializeSubmissionFile)
+  submissionStage.value='IDLE'
+}
+
+function submissionStatusType(status:SubmissionFileStatus){
+  return status==='SUCCESS'?'success':status==='FAILED'?'danger':status==='UPLOADING'?'primary':status==='WAITING_SUBMIT'?'warning':'info'
+}
+
+function submissionStatusLabel(status:SubmissionFileStatus){
+  return submissionFileLabels[status]||status
+}
+
+function warnSubmissionFileLimit(){
+  ElMessage.warning('单次最多上传 5 个文件')
+}
+
+function submissionErrorMessage(error:any){
+  return error?.response?.data?.message||error?.message||'上传失败，请重试'
+}
 
 const selectedPlan = computed(() => plans.value.find(item => item.id === selectedPlanId.value))
 const selectedPlanTasks = computed(() => planTasks.value.filter(item => dispatch.planTaskIds.includes(item.id)))
@@ -272,6 +325,7 @@ async function open(row: any, mode: 'SUBMIT' | 'RESUBMIT' | 'VIEW' | 'REVIEW') {
   if (mode === 'SUBMIT' || mode === 'RESUBMIT') {
     submit.content = ''
     files.value = []
+    submissionStage.value = 'IDLE'
   }
   if (mode === 'REVIEW') Object.assign(review, {decision: 'APPROVE', comment: '', score: null})
   history.value = (await api.get<any, Envelope<any[]>>(`/assignments/${row.id}/submissions`)).data
@@ -279,30 +333,70 @@ async function open(row: any, mode: 'SUBMIT' | 'RESUBMIT' | 'VIEW' | 'REVIEW') {
 }
 
 async function doSubmit() {
-  const capabilities=await storageCapabilities()
-  if(capabilities.directUpload){
-    const ticketIds:string[]=[]
-    for(const item of files.value){
-      const ticket=await createUploadTicket(
-        `/assignments/${selected.value.id}/submission-files/upload-ticket`,
-        item.raw
-      )
-      ticketIds.push(ticket.ticketId)
+  if(submitting.value)return
+  submitting.value=true
+  resetSubmissionProgress()
+  const ticketIds:string[]=[]
+  try{
+    const capabilities=await storageCapabilities()
+    if(capabilities.directUpload){
+      submissionStage.value='UPLOADING'
+      for(const item of files.value){
+        item.submissionStatus='UPLOADING'
+        try{
+          const ticket=await createUploadTicket(
+            `/assignments/${selected.value.id}/submission-files/upload-ticket`,
+            item.raw,
+            progress=>{
+              item.submissionProgressKnown=progress.percent!==undefined
+              if(progress.percent!==undefined)item.submissionProgress=progress.percent
+            }
+          )
+          ticketIds.push(ticket.ticketId)
+          item.submissionProgress=100
+          item.submissionProgressKnown=true
+          item.submissionStatus='WAITING_SUBMIT'
+        }catch(error){
+          item.submissionStatus='FAILED'
+          item.submissionError=submissionErrorMessage(error)
+          throw error
+        }
+      }
+      submissionStage.value='REGISTERING'
+      await api.post(`/assignments/${selected.value.id}/submissions/direct`,{
+        content:submit.content,
+        uploadTicketIds:ticketIds
+      })
+    }else{
+      submissionStage.value='LOCAL_SUBMITTING'
+      files.value.forEach(item=>{
+        item.submissionStatus='UPLOADING'
+        item.submissionProgressKnown=false
+      })
+      const form = new FormData()
+      form.append('content', submit.content)
+      files.value.forEach(item => form.append('files', item.raw))
+      await api.post(`/assignments/${selected.value.id}/submissions`, form)
     }
-    await api.post(`/assignments/${selected.value.id}/submissions/direct`,{
-      content:submit.content,
-      uploadTicketIds:ticketIds
+    files.value.forEach(item=>{
+      item.submissionProgress=100
+      item.submissionProgressKnown=true
+      item.submissionStatus='SUCCESS'
     })
     dialog.value=false
     await load()
-    return
+  }catch(error){
+    await abandonUploadTickets(ticketIds)
+    files.value.forEach(item=>{
+      if(item.submissionStatus==='WAITING_SUBMIT'||item.submissionStatus==='UPLOADING'){
+        item.submissionStatus=item.submissionProgressKnown&&item.submissionProgress===100?'CANCELLED':'FAILED'
+        if(item.submissionStatus==='FAILED'&&!item.submissionError)item.submissionError=submissionErrorMessage(error)
+      }
+    })
+  }finally{
+    submitting.value=false
+    submissionStage.value='IDLE'
   }
-  const form = new FormData()
-  form.append('content', submit.content)
-  files.value.forEach(item => form.append('files', item.raw))
-  await api.post(`/assignments/${selected.value.id}/submissions`, form)
-  dialog.value = false
-  await load()
 }
 
 async function doReview() {
@@ -752,10 +846,46 @@ onMounted(async () => {
       <template #footer><el-button @click="previewOpen=false">返回调整</el-button><el-button type="primary" :loading="dispatching" @click="dispatchPlanTasks">确认下发</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="dialog" :title="submissionMode === 'SUBMIT' ? '提交成果' : submissionMode === 'RESUBMIT' ? '重新提交成果' : submissionMode === 'REVIEW' ? '审核成果' : '提交详情'">
+    <el-dialog
+      v-model="dialog"
+      :title="submissionMode === 'SUBMIT' ? '提交成果' : submissionMode === 'RESUBMIT' ? '重新提交成果' : submissionMode === 'REVIEW' ? '审核成果' : '提交详情'"
+      :close-on-click-modal="!submitting"
+      :close-on-press-escape="!submitting"
+      :show-close="!submitting"
+    >
       <template v-if="submissionMode === 'SUBMIT' || submissionMode === 'RESUBMIT'">
-        <el-input v-model="submit.content" type="textarea" :rows="4" placeholder="提交说明" />
-        <el-upload :key="`${selected?.id || ''}-${submissionMode}`" multiple :auto-upload="false" :on-change="(_file: any, list: any[]) => files = list"><el-button>选择文件</el-button></el-upload>
+        <el-input v-model="submit.content" type="textarea" :rows="4" placeholder="提交说明" :disabled="submitting" />
+        <el-upload
+          :key="`${selected?.id || ''}-${submissionMode}`"
+          v-model:file-list="files"
+          multiple
+          :limit="5"
+          :auto-upload="false"
+          :show-file-list="false"
+          :disabled="submitting"
+          :on-change="handleSubmissionFiles"
+          :on-exceed="warnSubmissionFileLimit"
+        ><el-button :disabled="submitting">选择文件</el-button></el-upload>
+        <div v-if="files.length" class="submission-upload-list">
+          <article v-for="item in files" :key="item.uid" class="submission-upload-item">
+            <div class="submission-file-heading">
+              <span><strong>{{item.name}}</strong><small>{{item.size ? `${Math.ceil(item.size/1024)} KB` : '--'}}</small></span>
+              <el-tag size="small" :type="submissionStatusType(item.submissionStatus)">{{submissionStatusLabel(item.submissionStatus)}}</el-tag>
+              <el-button v-if="!submitting" link type="danger" :icon="Delete" aria-label="移除文件" @click="removeSubmissionFile(item)" />
+            </div>
+            <el-progress
+              :percentage="item.submissionProgressKnown===false ? 100 : Number(item.submissionProgress||0)"
+              :indeterminate="item.submissionStatus==='UPLOADING'&&item.submissionProgressKnown===false"
+              :duration="1.2"
+              :show-text="item.submissionProgressKnown!==false"
+              :status="item.submissionStatus==='SUCCESS'?'success':item.submissionStatus==='FAILED'?'exception':undefined"
+            />
+            <small v-if="item.submissionError" class="submission-file-error">{{item.submissionError}}</small>
+          </article>
+        </div>
+        <el-alert v-if="submitting" :closable="false" type="info" show-icon>
+          <template #title>{{submissionStage==='REGISTERING'?'文件上传完成，正在登记成果':submissionStage==='LOCAL_SUBMITTING'?'正在提交成果':'正在上传文件，请勿关闭窗口'}}</template>
+        </el-alert>
       </template>
       <template v-else>
         <div class="submission-heading">提交说明</div>
@@ -779,7 +909,7 @@ onMounted(async () => {
         </div>
       </template>
       <template #footer>
-        <el-button v-if="submissionMode === 'SUBMIT' || submissionMode === 'RESUBMIT'" type="primary" @click="doSubmit">确认</el-button>
+        <el-button v-if="submissionMode === 'SUBMIT' || submissionMode === 'RESUBMIT'" type="primary" :loading="submitting" :disabled="submitting" @click="doSubmit">{{submitting?'提交中':'确认'}}</el-button>
         <el-button v-else-if="submissionMode === 'REVIEW'" type="primary" @click="doReview">确认</el-button>
         <el-button v-else @click="dialog = false">关闭</el-button>
       </template>
@@ -907,6 +1037,7 @@ onMounted(async () => {
 .pending-section{margin-bottom:16px}.task-filter-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #edf0f4}.task-filter-bar .el-input{max-width:360px}.task-name-cell{display:flex;min-width:0;flex-direction:column;gap:5px;padding:3px 0}.task-name-cell>strong{overflow:hidden;color:#326fae;font-size:13px;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.task-name-cell>strong:hover{text-decoration:underline}.task-name-cell>span{overflow:hidden;color:#939dac;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.progress-cell{display:flex;flex-direction:column;gap:5px}.progress-cell strong{font-size:12px}.progress-cell span{color:#939dac;font-size:10px}.task-actions{display:flex;min-height:32px;align-items:center;gap:6px;white-space:nowrap}.task-actions .el-button{min-width:50px;margin:0;padding:6px 9px}
 .dispatch-preview-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:16px}.dispatch-preview-summary span{display:flex;align-items:baseline;justify-content:center;gap:5px;padding:13px;border-radius:9px;color:#738093;background:#f5f8fb;font-size:11px}.dispatch-preview-summary strong{color:#347cc5;font-size:21px}
 .form-stack{display:grid;gap:14px}.task-detail-form{padding:4px 0 18px}.pre-wrap{white-space:pre-wrap}.submission-heading{margin-bottom:8px;color:var(--el-text-color-regular);font-weight:600}.submission-content{margin:0 0 16px;white-space:pre-wrap}.review-panel{display:grid;gap:16px;margin-top:20px}.review-field{display:flex;min-height:32px;align-items:center;gap:14px}.review-label{width:64px;color:var(--el-text-color-regular)}.review-score{width:160px}.review-unit{color:var(--el-text-color-secondary)}
+.submission-upload-list{display:grid;gap:9px;margin:12px 0}.submission-upload-item{padding:10px 12px;border:1px solid #e5eaf1;border-radius:8px;background:#f9fbfd}.submission-file-heading{display:flex;align-items:center;gap:9px;margin-bottom:8px}.submission-file-heading>span{display:flex;min-width:0;flex:1;align-items:baseline;gap:8px}.submission-file-heading strong{overflow:hidden;color:#445066;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.submission-file-heading small{flex:none;color:#929cab;font-size:10px}.submission-file-heading .el-button{margin:0;padding:2px}.submission-file-error{display:block;margin-top:5px;color:var(--el-color-danger);font-size:10px}.submission-upload-item :deep(.el-progress__text){min-width:34px;font-size:10px}
 .progress-dialog-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding-right:28px}.progress-dialog-heading>div{display:flex;min-width:0;flex-direction:column;gap:4px}.progress-dialog-heading span{color:#3b82c4;font-size:11px;font-weight:700}.progress-dialog-heading h3{margin:0;overflow:hidden;color:#28364b;font-size:19px;text-overflow:ellipsis;white-space:nowrap}.progress-dialog-heading p{margin:0;color:#8c97a8;font-size:12px}.progress-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}.progress-overview article{display:grid;grid-template-columns:auto 1fr;align-items:baseline;min-height:72px;padding:12px 14px;border:1px solid #e7ebf1;border-radius:9px;background:#fafcff;column-gap:8px}.progress-overview small{grid-column:1/-1;color:#7d8899;font-size:11px}.progress-overview strong{color:#475569;font-size:22px;line-height:1.25}.progress-overview article>span{overflow:hidden;color:#9aa3b1;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.progress-overview .blue strong{color:#347fc4}.progress-overview .amber strong{color:#c47a12}.progress-overview .green strong{color:#168d70}.progress-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;padding:12px;border:1px solid #e8ecf2;border-radius:9px;background:#f8fafc}.progress-filters,.progress-export-actions{display:flex;align-items:center;gap:8px}.progress-filters .el-input{width:250px}.progress-filters .el-select{width:145px}.progress-count{margin-left:2px;color:#8a95a5;font-size:12px;white-space:nowrap}.progress-export-actions .el-button{margin:0}.progress-table-shell{overflow:hidden;border:1px solid #e6eaf0;border-radius:9px}.progress-row-actions{display:flex;min-height:30px;align-items:center;gap:2px;white-space:nowrap}.progress-row-actions .el-button{margin:0;padding:4px 6px}.file-count{color:#778396;font-size:11px}.score-value{color:#354258}.no-submission{color:#a1a9b5;font-size:11px}
 :deep(.progress-dialog){overflow:hidden;border-radius:12px}:deep(.progress-dialog .el-dialog__header){padding:20px 22px 14px;border-bottom:1px solid #edf0f4}:deep(.progress-dialog .el-dialog__body){padding:16px 22px 22px}
 .preview-file-switcher{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px 12px;overflow-x:auto;border:1px solid #e7ebf1;border-radius:8px;background:#f8fafc;white-space:nowrap}.preview-file-switcher>span{flex:none;color:#7d8899;font-size:12px}.preview-file-switcher .el-button{flex:none;margin:0}.file-preview{width:100%;border:0}.pdf-preview{height:68vh}.image-preview{display:block;max-height:68vh;object-fit:contain}.text-preview{max-height:68vh;margin:0;overflow:auto;white-space:pre-wrap;font-family:inherit;line-height:1.7}.docx-preview{max-height:68vh;padding:28px 40px;overflow:auto;color:var(--el-text-color-primary);background:#fff;line-height:1.7}.docx-preview :deep(p){margin:0 0 14px;word-break:break-word}.docx-preview :deep(img){width:auto!important;max-width:100%;height:auto!important;max-height:52vh;margin:4px 0;object-fit:contain;vertical-align:middle}.docx-preview :deep(table){width:100%;margin:14px 0;border-collapse:collapse;table-layout:fixed}.docx-preview :deep(td),.docx-preview :deep(th){padding:6px 8px;border:1px solid var(--el-border-color);overflow-wrap:anywhere;vertical-align:top}

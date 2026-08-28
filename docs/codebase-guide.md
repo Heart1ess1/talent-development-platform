@@ -225,7 +225,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `utils/trainingPlan.ts` | 培养计划类型、启用判断、业务状态和日期显示规则。 |
 | `components/TaskAttachmentsPanel.vue` | 任务附件文件名展示、上传、删除、下载，以及 PDF、图片、文本和 DOCX 安全预览。 |
 | `views/TasksView.vue` | 管理侧任务下发和任务跟踪、员工侧我的任务、任务附件、提交/重提、审核、进度明细和筛选。 |
-| `storageTransfer.ts` | 查询存储能力，在 OSS 模式执行受 Policy 限制的表单直传和完成确认，在本地模式回退 multipart 上传。 |
+| `storageTransfer.ts` | 查询存储能力，在 OSS 模式执行受 Policy 限制、支持字节进度和失败票据回收的直传与完成确认，在本地模式回退 multipart 上传。 |
 | `views/evaluation/EvaluationWorkbenchView.vue` | 按月份展示方案覆盖、发布进度、缺失汇总和跨任务/考试/人工评价的待办入口。 |
 | `views/evaluation/EvaluationAssignmentsView.vue` | 管理员先选择导师、站点或培训任务，再按全员、批次或板块统一配置多名评分人，并查看自动展开后的覆盖进度。 |
 | `views/evaluation/EvaluationAssignmentDetailView.vue` | 只读追踪单项员工任务的批次/板块匹配依据、评分人、提交时间、个人分数和平均分。 |

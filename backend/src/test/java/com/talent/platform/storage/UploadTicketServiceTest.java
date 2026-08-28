@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -140,5 +141,58 @@ class UploadTicketServiceTest {
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining("其他用户");
     verify(storage, never()).verifyDirectUpload(anyString(), anyLong(), anyString());
+  }
+
+  @Test
+  void rejectsTooManyPendingTicketsWithChineseGuidance() {
+    when(storage.supportsDirectTransfer()).thenReturn(true);
+    when(db.queryForObject(contains("select count(*) from object_upload_ticket"),
+        eq(Integer.class), eq(7L))).thenReturn(10);
+
+    assertThatThrownBy(() -> service.issue(
+        "submission-file", 12L, "result.pdf", "application/pdf", 1024L))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("等待最多15分钟");
+
+    verify(storage, never()).prepareDirectUpload(anyString(), anyString(), anyString(), anyLong(), any());
+  }
+
+  @Test
+  void abandonsOwnPendingTicketAndDeletesStoredObject() {
+    UUID ticketId = UUID.randomUUID();
+    when(db.queryForList(anyString(), eq(ticketId.toString()), eq(7L)))
+        .thenReturn(List.of(Map.of("object_key", "private/submission/result.pdf")));
+
+    service.abandon(ticketId);
+
+    verify(storage).delete("private/submission/result.pdf");
+    verify(db).update(contains("delete from object_upload_ticket"), eq(ticketId.toString()), eq(7L));
+  }
+
+  @Test
+  void expiresTicketWhenStoredObjectCleanupFails() {
+    UUID ticketId = UUID.randomUUID();
+    when(db.queryForList(anyString(), eq(ticketId.toString()), eq(7L)))
+        .thenReturn(List.of(Map.of("object_key", "private/submission/result.pdf")));
+    doThrow(new RuntimeException("OSS unavailable"))
+        .when(storage).delete("private/submission/result.pdf");
+
+    service.abandon(ticketId);
+
+    verify(db).update(contains("set expires_at=?"), any(Timestamp.class),
+        eq(ticketId.toString()), eq(7L));
+    verify(db, never()).update(contains("delete from object_upload_ticket"),
+        eq(ticketId.toString()), eq(7L));
+  }
+
+  @Test
+  void abandoningUnknownOrForeignTicketIsIdempotent() {
+    UUID ticketId = UUID.randomUUID();
+    when(db.queryForList(anyString(), eq(ticketId.toString()), eq(7L))).thenReturn(List.of());
+
+    service.abandon(ticketId);
+    service.abandon(ticketId);
+
+    verify(storage, never()).delete(anyString());
   }
 }
