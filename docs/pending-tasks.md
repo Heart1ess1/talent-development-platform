@@ -4,10 +4,10 @@
 
 ## 当前基线
 
-- 最后核对日期：2026-08-18
-- GitHub：PR #19～#24 已合并；远端 `main` 当前业务代码提交为 `f6d3799c24c47751fe6aad7c5e4c7dd2c46afc04`。
-- 云服务器：已激活 `main@f6d3799c` 的 CDN 专用生产 JAR，SHA-256 为 `b9c1061414546a5fda90db2b4bde67ce7d0a246516a197915afda2ff9742ab1d`；部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260819-000832.sql.gz`。
-- 线上验收：应用健康状态为 `UP`，Flyway V29/V30 成功；MySQL、应用和 Nginx 容器均正常，班级和备注字段已落库，CDN 新资源返回 200 与一年 immutable 缓存，未登录字典管理接口返回 401，部署后日志无 `ERROR` 或 `Exception`。2026-08-17 16:39 至 2026-08-18 16:35 的自动观察共产生 278 次 `PASS`、0 次 `FAIL`，并已写入 `COMPLETE` 后自动停用定时器。此前私有课件直传/水印预览/禁止原件下载、私有附件签名下载及删除清理验收继续有效。
+- 最后核对日期：2026-08-28
+- GitHub：成果提交与上传进度 PR #31、CDN 缓存就绪检查兼容性修复 PR #32 均已合并；远端 `main` 为 `191c600ea72a387170ab4257b618c0c7b09d6894`，本次生产功能提交为 `bc09ffc12be4338cbbacc7ce94354192e82d711a`。
+- 云服务器：已激活成果提交优化版 CDN 生产 JAR，SHA-256 为 `e1cc805303b42691eae8ead74ab6be8234af71c059be99c268f01b6b6f2e1fb2`；部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260828-172010.sql.gz`，激活前回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260828172402-2629519/`。
+- 线上验收：应用健康状态为 `UP`，Flyway 已校验 35 个迁移且无需新增迁移；MySQL、应用和 Nginx 容器均正常，生产就绪检查为 `ready: true`，公网首页和新 CDN 资源正常，未登录删除票据接口返回 401，部署后日志无 `ERROR` 或 `Exception`；私有 OSS 签名上传、下载、删除及临时数据清理冒烟通过。员工成果提交弹窗的生产浏览器视觉复核仍待使用真实员工账号完成。
 - 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、主站及 CDN HTTPS、正式 DNS 和每日本地备份均已投入使用；`static.yryhx.cn` 已通过 CDN 同账号私有 OSS 回源提供公共静态资源。
 
 “代码已合并”不等于“云端已上线”。只有部署任务取得服务器端版本、健康检查、迁移记录和业务冒烟证据后，才能将状态改为 `Done`。

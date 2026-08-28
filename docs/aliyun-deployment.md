@@ -4,7 +4,7 @@
 
 ## 1. 当前状态与上线门槛
 
-截至 2026-08-18 的实机检查结果：
+截至 2026-08-28 的实机检查结果：
 
 | 项目 | 当前证据 |
 | --- | --- |
@@ -19,7 +19,18 @@
 | 网站合规页脚 | 已随 `main@d0fde6c2` 部署；登录页及登录后所有业务页面统一展示 `湘ICP备2026035229号-1`，并链接工信部备案系统 `https://beian.miit.gov.cn/`；公安备案号待审核完成后再加入，不展示占位号 |
 | CDN/ESA | `static.yryhx.cn` 已启用中国内地“图片小文件”CDN；源站为私有 ACL 的公共静态资源 OSS Bucket，同账号私有回源、HTTPS、HTTP→HTTPS、TLS 1.2/1.3、Gzip 和长期缓存均已验证；OSS 写入 `immutable`，CDN 可能规范化为不少于 30 天的 `max-age`；不启用 ESA 等非必要增值服务 |
 
-当前线上运行 CDN 版应用代码基线为 PR #24 的 `main` 合并提交 `f6d3799c24c47751fe6aad7c5e4c7dd2c46afc04`，JAR SHA-256 为 `b9c1061414546a5fda90db2b4bde67ce7d0a246516a197915afda2ff9742ab1d`，Flyway 为 V30。候选 `/data/talent-platform/releases/staging/cdn-f6d3799c-20260819-0006` 已通过 `activate-cdn-release.sh` 激活，HTML 从 ECS 返回且不缓存，带内容哈希的 `/assets/` 文件从 CDN 返回并缓存一年。本次部署前 JAR 和环境备份位于 `/data/talent-platform/releases/history/cdn-activation-20260819000840-1053093/`，数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260819-000832.sql.gz`。
+当前线上运行的应用功能基线为 PR #31 合并提交 `bc09ffc12be4338cbbacc7ce94354192e82d711a`，部署工具与文档基线为 PR #32 合并后的 `main@191c600ea72a387170ab4257b618c0c7b09d6894`。生产 JAR SHA-256 为 `e1cc805303b42691eae8ead74ab6be8234af71c059be99c268f01b6b6f2e1fb2`，Flyway 为 V35。候选 `/data/talent-platform/releases/staging/cdn-bc09ffc1-20260828-172006` 已通过 `activate-cdn-release.sh` 激活；激活前 JAR 和环境回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260828172402-2629519/`，数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260828-172010.sql.gz`，其 SHA-256 为 `e642e67b661e6894f627246f11c8e8f054d1f549dd208ce5e9ccad776245f13e`。
+
+### 2026-08-28 上传票据回收与提交进度部署记录
+
+- GitHub：成果提交与上传进度功能 PR [#31](https://github.com/Heart1ess1/talent-development-platform/pull/31) 已合并，功能提交为 `bc09ffc12be4338cbbacc7ce94354192e82d711a`；CDN 缓存就绪检查兼容性修复 PR [#32](https://github.com/Heart1ess1/talent-development-platform/pull/32) 已合并，当前 `main` 为 `191c600ea72a387170ab4257b618c0c7b09d6894`。
+- 功能范围：成果提交弹窗增加逐文件进度和统一状态；提交期间锁定交互；OSS 直传使用进度事件；上传或最终登记失败时自动废弃本次未消费票据；新增本人未消费票据的幂等删除接口；票据上限提示改为中文。
+- 构建校验：前端 35 项测试、TypeScript 检查、CDN 生产构建及生产依赖审计通过，未发现已知生产依赖漏洞；后端 127 项测试通过。生产 JAR SHA-256 为 `e1cc805303b42691eae8ead74ab6be8234af71c059be99c268f01b6b6f2e1fb2`。
+- 备份与回退：部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260828-172010.sql.gz`，SHA-256 为 `e642e67b661e6894f627246f11c8e8f054d1f549dd208ce5e9ccad776245f13e`；激活前 JAR 和环境材料位于 `/data/talent-platform/releases/history/cdn-activation-20260828172402-2629519/`。
+- 发布材料：75 个静态文件已同步至公共资源 OSS；候选目录为 `/data/talent-platform/releases/staging/cdn-bc09ffc1-20260828-172006`，CDN 探针为 `https://static.yryhx.cn/assets/index-JiKyknqF.js`。
+- 生产校验：应用健康状态为 `UP`，MySQL、应用和 Nginx 容器均正常；Flyway 成功校验 35 个迁移且无需新增迁移；部署后日志无 `ERROR` 或 `Exception`；公网首页已引用新资源，未登录删除上传票据接口返回 401，CDN 探针返回 200、`text/javascript` 和 `max-age=31104000`，生产就绪检查返回 `ready: true`。
+- OSS 业务冒烟：私有 OSS 签名上传、下载和删除清理全链路通过，临时任务、附件、票据和 OSS 对象均已清理。
+- 待人工复核：内置浏览器建立生产页面会话时超时，因此员工成果提交弹窗的生产视觉效果尚未形成浏览器证据；需使用真实员工账号上传一个小文件，确认进度条、提交中锁定和成功状态显示正常。
 
 ### 2026-08-19 人员台账列宽调整部署记录
 
