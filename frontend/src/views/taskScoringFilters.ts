@@ -1,8 +1,8 @@
 export interface TaskScoringEmployeeFilters {
   keyword:string
+  batchId:number|string|''
+  businessUnitId:number|string|''
   classId:number|string|''
-  classPositionId:number|string|''
-  submissionStatus:''|'SUBMITTED'|'NOT_SUBMITTED'
   scoringStatus:string
 }
 
@@ -16,13 +16,12 @@ export function filterTaskScoringEmployees(rows:any[],filters:TaskScoringEmploye
   const keyword=filters.keyword.trim().toLowerCase()
   return rows.filter(row=>{
     const matchesKeyword=!keyword||[
-      row.employee_name,row.employee_no,row.class_name,row.class_position_name
+      row.employee_name,row.employee_no,row.batch_name,row.business_unit_name,row.class_name
     ].some(value=>String(value||'').toLowerCase().includes(keyword))
-    const submitted=Boolean(row.submission_id)
     return matchesKeyword
+      && (!filters.batchId||String(row.batch_id)===String(filters.batchId))
+      && (!filters.businessUnitId||String(row.business_unit_id)===String(filters.businessUnitId))
       && (!filters.classId||String(row.class_id)===String(filters.classId))
-      && (!filters.classPositionId||String(row.class_position_id)===String(filters.classPositionId))
-      && (!filters.submissionStatus||(filters.submissionStatus==='SUBMITTED'?submitted:!submitted))
       && (!filters.scoringStatus||assignmentScoringState(row)===filters.scoringStatus)
   })
 }

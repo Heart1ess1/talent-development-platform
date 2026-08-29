@@ -13,7 +13,7 @@ const canManage=computed(()=>auth.can('task:manage'))
 const loading=ref(false),tasks=ref<any[]>([]),selectedTask=ref<any>(),taskDrawer=ref(false),detailLoading=ref(false)
 const reviewerOptions=ref<any[]>([]),selectedReviewerIds=ref<number[]>([]),savingReviewers=ref(false)
 const filters=reactive({keyword:'',status:String(route.query.status||'')})
-const employeeFilters=reactive<TaskScoringEmployeeFilters>({keyword:'',classId:'',classPositionId:'',submissionStatus:'',scoringStatus:''})
+const employeeFilters=reactive<TaskScoringEmployeeFilters>({keyword:'',batchId:'',businessUnitId:'',classId:'',scoringStatus:''})
 const submissionDialog=ref(false),submissionLoading=ref(false),submission=ref<any>(),scoring=ref(false)
 const scoreForm=reactive<any>({decision:'APPROVE',score:null,comment:''})
 const previewDialog=ref(false),previewType=ref<'PDF'|'IMAGE'|'TEXT'|'HTML'|'UNSUPPORTED'>('UNSUPPORTED'),previewUrl=ref(''),previewContent=ref(''),previewName=ref('')
@@ -29,9 +29,10 @@ const statusOptions=[
 const filteredTasks=computed(()=>!filters.status?tasks.value:tasks.value.filter(row=>row.scoring_status===filters.status))
 const taskEmployees=computed<any[]>(()=>selectedTask.value?.assignments||[])
 const filteredTaskEmployees=computed(()=>filterTaskScoringEmployees(taskEmployees.value,employeeFilters))
+const employeeBatchOptions=computed(()=>taskScoringFilterOptions(taskEmployees.value,'batch_id','batch_name'))
+const employeeBusinessUnitOptions=computed(()=>taskScoringFilterOptions(taskEmployees.value,'business_unit_id','business_unit_name'))
 const employeeClassOptions=computed(()=>taskScoringFilterOptions(taskEmployees.value,'class_id','class_name'))
-const employeeClassPositionOptions=computed(()=>taskScoringFilterOptions(taskEmployees.value,'class_position_id','class_position_name'))
-const hasEmployeeFilters=computed(()=>Boolean(employeeFilters.keyword.trim()||employeeFilters.classId||employeeFilters.classPositionId||employeeFilters.submissionStatus||employeeFilters.scoringStatus))
+const hasEmployeeFilters=computed(()=>Boolean(employeeFilters.keyword.trim()||employeeFilters.batchId||employeeFilters.businessUnitId||employeeFilters.classId||employeeFilters.scoringStatus))
 const metrics=computed(()=>({
   total:tasks.value.length,
   myPending:tasks.value.reduce((sum,row)=>sum+Number(row.my_pending_count||0),0),
@@ -51,7 +52,7 @@ function assignmentStatus(row:any){
 }
 
 async function load(){loading.value=true;try{tasks.value=(await api.get<any,Envelope<any[]>>('/task-scoring/tasks',{params:{keyword:filters.keyword||undefined}})).data}finally{loading.value=false}}
-function resetEmployeeFilters(){Object.assign(employeeFilters,{keyword:'',classId:'',classPositionId:'',submissionStatus:'',scoringStatus:''})}
+function resetEmployeeFilters(){Object.assign(employeeFilters,{keyword:'',batchId:'',businessUnitId:'',classId:'',scoringStatus:''})}
 async function openTask(row:any){if(selectedTask.value?.id!==row.id)resetEmployeeFilters();taskDrawer.value=true;detailLoading.value=true;try{selectedTask.value=(await api.get<any,Envelope<any>>(`/task-scoring/tasks/${row.id}`)).data;selectedReviewerIds.value=selectedTask.value.reviewers.map((item:any)=>Number(item.id))}finally{detailLoading.value=false}}
 async function loadReviewerOptions(){if(canManage.value)reviewerOptions.value=(await api.get<any,Envelope<any[]>>('/task-scoring/reviewer-options')).data}
 async function saveReviewers(){
@@ -121,10 +122,10 @@ onBeforeUnmount(clearPreview)
         <TaskAttachmentsPanel v-if="selectedTask.attachments?.length" :items="selectedTask.attachments" title="任务评分参考资料" description="员工收到的任务附件快照"/>
         <section class="reviewer-panel"><div><h3>任务评分人</h3><p>评分开始后名单锁定；所有评分人通过后取一位小数平均分。</p></div><div v-if="canManage" class="reviewer-editor"><el-select v-model="selectedReviewerIds" multiple filterable collapse-tags collapse-tags-tooltip :disabled="selectedTask.reviewerLocked" placeholder="可暂不设置"><el-option v-for="item in reviewerOptions" :key="item.id" :label="`${item.display_name}（${roleLabel(item.role)}）`" :value="item.id"/></el-select><el-button type="primary" :loading="savingReviewers" :disabled="selectedTask.reviewerLocked" @click="saveReviewers">保存评分人</el-button></div><div v-else class="reviewer-tags"><el-tag v-for="item in selectedTask.reviewers" :key="item.id">{{item.display_name}}</el-tag><span v-if="!selectedTask.reviewers.length">尚未分配</span></div></section>
         <section class="employee-filters">
-          <el-input v-model="employeeFilters.keyword" :prefix-icon="Search" clearable placeholder="搜索员工姓名、工号、班级或职务"/>
+          <el-input v-model="employeeFilters.keyword" :prefix-icon="Search" clearable placeholder="搜索员工姓名、工号、批次、板块或班级"/>
+          <el-select v-model="employeeFilters.batchId" clearable filterable placeholder="全部批次"><el-option v-for="item in employeeBatchOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
+          <el-select v-model="employeeFilters.businessUnitId" clearable filterable placeholder="全部板块"><el-option v-for="item in employeeBusinessUnitOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
           <el-select v-model="employeeFilters.classId" clearable filterable placeholder="全部班级"><el-option v-for="item in employeeClassOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
-          <el-select v-model="employeeFilters.classPositionId" clearable filterable placeholder="全部班级职务"><el-option v-for="item in employeeClassPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
-          <el-select v-model="employeeFilters.submissionStatus" clearable filterable placeholder="全部提交状态"><el-option label="未提交" value="NOT_SUBMITTED"/><el-option label="已提交" value="SUBMITTED"/></el-select>
           <el-select v-model="employeeFilters.scoringStatus" clearable filterable placeholder="全部评分状态"><el-option label="未提交" value="NOT_SUBMITTED"/><el-option label="待分配评分人" value="UNASSIGNED"/><el-option label="待评分" value="PENDING"/><el-option label="评分完成" value="APPROVED"/><el-option label="已退回" value="RETURNED"/><el-option label="已逾期" value="OVERDUE"/></el-select>
           <el-button :icon="Refresh" :disabled="!hasEmployeeFilters" @click="resetEmployeeFilters">重置</el-button>
           <span>显示 {{filteredTaskEmployees.length}} / {{taskEmployees.length}} 人</span>
