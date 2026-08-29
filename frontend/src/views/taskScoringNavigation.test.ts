@@ -23,5 +23,7 @@ describe('task scoring workbench navigation',()=>{
     expect(scoring).toContain('开始评分')
     expect(scoring).toContain('reviewerIds')
     expect(scoring).toContain('/task-scoring/submissions/')
+    expect(scoring).toContain('employeeFilters')
+    expect(scoring).not.toContain('max-height="560"')
   })
 })
