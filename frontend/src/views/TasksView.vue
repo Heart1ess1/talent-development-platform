@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed, nextTick, onMounted, reactive, ref, watch} from 'vue'
+import {computed, onMounted, reactive, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {
@@ -29,12 +29,12 @@ const route = useRoute()
 const router = useRouter()
 const employee = computed(() => auth.user?.role === 'EMPLOYEE')
 const canManage = computed(() => auth.can('task:manage'))
-const canReview = computed(() => auth.can('task:review'))
+const canScore = computed(() => auth.can('task:score'))
 const trackingMode = computed(() => !employee.value && (route.path === '/training-plans/tracking' || !canManage.value))
 
 const tasks = ref<any[]>([])
 const assignments = ref<any[]>([])
-const pendingReviews = ref<any[]>([])
+const reviewerOptions = ref<any[]>([])
 const batches = ref<any[]>([])
 const businessUnits = ref<any[]>([])
 const stations = ref<any[]>([])
@@ -44,7 +44,7 @@ const plans = ref<any[]>([])
 const planTasks = ref<any[]>([])
 const selectedPlanId = ref<number | null>(null)
 const dialog = ref(false)
-const submissionMode = ref<'SUBMIT' | 'RESUBMIT' | 'VIEW' | 'REVIEW'>('VIEW')
+const submissionMode = ref<'SUBMIT' | 'RESUBMIT' | 'VIEW'>('VIEW')
 const selected = ref<any>()
 const files = ref<any[]>([])
 const submitting = ref(false)
@@ -80,10 +80,9 @@ const dispatchPreview = reactive<any>({
   taskTitles: []
 })
 
-const manualDispatch = reactive<any>({title: '', description: '', requirements: '', deadline: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null})
-const dispatch = reactive<any>({planTaskIds: [], taskTitle: '', deadlineMode: 'OFFSET', baseDate: new Date().toISOString().slice(0, 10), offsetDays: 7, deadlineDate: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null})
+const manualDispatch = reactive<any>({title: '', description: '', requirements: '', deadline: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null, reviewerIds: []})
+const dispatch = reactive<any>({planTaskIds: [], taskTitle: '', deadlineMode: 'OFFSET', baseDate: new Date().toISOString().slice(0, 10), offsetDays: 7, deadlineDate: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null, reviewerIds: []})
 const submit = reactive({content: ''})
-const review = reactive<any>({decision: 'APPROVE', comment: '', score: null})
 const taskDetail = reactive<any>({title: '', description: '', requirements: '', deadline: '', attachments: []})
 
 type SubmissionFileStatus='WAITING'|'UPLOADING'|'WAITING_SUBMIT'|'SUCCESS'|'FAILED'|'CANCELLED'
@@ -134,6 +133,17 @@ function warnSubmissionFileLimit(){
 
 function submissionErrorMessage(error:any){
   return error?.response?.data?.message||error?.message||'上传失败，请重试'
+}
+
+function reviewerNames(ids:any[]){
+  if(!ids?.length)return '暂不设置，后续可在任务评分页面配置'
+  return ids.map(id=>reviewerOptions.value.find(item=>item.id===id)?.display_name).filter(Boolean).join('、')
+}
+
+function employeeTaskStatusLabel(row:any){
+  if(row.status==='PENDING_REVIEW'&&!Number(row.reviewer_count))return '待分配评分人'
+  if(row.status==='PENDING_REVIEW')return `待评分 ${Number(row.submitted_review_count||0)}/${Number(row.reviewer_count||0)}`
+  return statusLabel(row.status)
 }
 
 const selectedPlan = computed(() => plans.value.find(item => item.id === selectedPlanId.value))
@@ -225,17 +235,15 @@ const progressMetrics = computed(() => ({
 async function load() {
   tasks.value = (await api.get<any, Envelope<any[]>>('/tasks')).data
   assignments.value = (await api.get<any, Envelope<any[]>>('/assignments')).data
-  pendingReviews.value = canReview.value
-    ? (await api.get<any, Envelope<any[]>>('/assignments/pending-review')).data
-    : []
   if (!canManage.value) return
-  const [batchResponse, classValues, classPositionValues, businessUnitOptions, stationResponse, planResponse] = await Promise.all([
+  const [batchResponse, classValues, classPositionValues, businessUnitOptions, stationResponse, planResponse, reviewersResponse] = await Promise.all([
     api.get<any, Envelope<any[]>>('/batches'),
     loadDictionaryValues('CLASS'),
     loadDictionaryValues('CLASS_POSITION'),
     loadEnabledBusinessUnits(),
     api.get<any, Envelope<any[]>>('/stations'),
-    api.get<any, Envelope<any[]>>('/training-plans')
+    api.get<any, Envelope<any[]>>('/training-plans'),
+    api.get<any, Envelope<any[]>>('/task-scoring/reviewer-options')
   ])
   batches.value = batchResponse.data
   classOptions.value = classValues
@@ -243,6 +251,7 @@ async function load() {
   businessUnits.value = businessUnitOptions
   stations.value = stationResponse.data
   plans.value = planResponse.data.filter(item => item.enabled === true || item.enabled === 1)
+  reviewerOptions.value = reviewersResponse.data
   if (selectedPlanId.value && !plans.value.some(item => item.id === selectedPlanId.value)) {
     selectedPlanId.value = null
   }
@@ -278,7 +287,7 @@ async function dispatchManualTask() {
       })
     }
     ElMessage.success(`任务已下发给 ${response.data.assignedEmployees} 人${manualFiles.value.length?`，并上传 ${manualFiles.value.length} 个附件`:''}`)
-    Object.assign(manualDispatch, {title: '', description: '', requirements: '', deadline: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null})
+    Object.assign(manualDispatch, {title: '', description: '', requirements: '', deadline: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null, reviewerIds: []})
     manualFiles.value=[]
     await load()
     router.push('/training-plans/tracking')
@@ -319,7 +328,7 @@ async function dispatchPlanTasks() {
   }
 }
 
-async function open(row: any, mode: 'SUBMIT' | 'RESUBMIT' | 'VIEW' | 'REVIEW') {
+async function open(row: any, mode: 'SUBMIT' | 'RESUBMIT' | 'VIEW') {
   selected.value = row
   submissionMode.value = mode
   if (mode === 'SUBMIT' || mode === 'RESUBMIT') {
@@ -327,7 +336,6 @@ async function open(row: any, mode: 'SUBMIT' | 'RESUBMIT' | 'VIEW' | 'REVIEW') {
     files.value = []
     submissionStage.value = 'IDLE'
   }
-  if (mode === 'REVIEW') Object.assign(review, {decision: 'APPROVE', comment: '', score: null})
   history.value = (await api.get<any, Envelope<any[]>>(`/assignments/${row.id}/submissions`)).data
   dialog.value = true
 }
@@ -399,18 +407,6 @@ async function doSubmit() {
   }
 }
 
-async function doReview() {
-  if (submissionMode.value !== 'REVIEW') return
-  if (review.decision === 'APPROVE' && (!Number.isInteger(review.score) || review.score < 0 || review.score > 100)) {
-    ElMessage.error('请填写 0 到 100 的整数评分')
-    return
-  }
-  await api.post(`/submissions/${history.value[0].id}/review`, review)
-  dialog.value = false
-  await load()
-  if (progressDialog.value) await refreshTaskProgress()
-}
-
 function statusLabel(status: string) {
   return ({NOT_SUBMITTED: '未提交', PENDING_REVIEW: '待审核', APPROVED: '已通过', RETURNED: '已退回', OVERDUE: '已逾期'} as Record<string, string>)[status] || status
 }
@@ -468,10 +464,6 @@ async function deleteTask(task: any) {
   await api.delete(`/tasks/${task.id}`)
   ElMessage.success('任务已删除')
   await load()
-}
-
-async function reviewAssignment(row: any) {
-  await open(row, 'REVIEW')
 }
 
 function saveBlob(blob: Blob, filename: string) {
@@ -630,10 +622,6 @@ onMounted(async () => {
   selectedPlanId.value = Number.isFinite(planId) && plans.value.some(item => item.id === planId)
     ? planId
     : plans.value[0]?.id || null
-  if (route.query.focus === 'pending-review') {
-    await nextTick()
-    document.getElementById('pending-task-reviews')?.scrollIntoView({behavior: 'smooth', block: 'start'})
-  }
 })
 </script>
 
@@ -644,12 +632,13 @@ onMounted(async () => {
         <span class="eyebrow">{{employee?'培养任务 · 我的任务':trackingMode?'培养计划 · 任务跟踪':'培养计划 · 任务下发'}}</span>
         <h1>{{employee?'我的任务':trackingMode?'任务跟踪':'任务下发'}}</h1>
         <p v-if="employee">查看任务说明与附件、提交成果，并跟踪审核结果。</p>
-        <p v-else-if="trackingMode">集中查看任务覆盖、完成进度与待审核成果，及时发现培养阻塞。</p>
+        <p v-else-if="trackingMode">集中查看任务覆盖、提交状态与评分进度；实际评分统一在任务评分页面完成。</p>
         <p v-else>从已启用计划批量下发标准任务，也可快速创建带附件的临时任务。</p>
       </div>
       <div class="task-head-actions">
         <el-button v-if="canManage&&trackingMode" :icon="Plus" type="primary" @click="router.push('/tasks')">任务下发</el-button>
         <el-button v-if="canManage&&!trackingMode" :icon="Connection" @click="router.push('/training-plans/tracking')">任务跟踪</el-button>
+        <el-button v-if="canScore&&trackingMode" :icon="Document" type="primary" @click="router.push('/task-scoring')">任务评分</el-button>
         <el-button :icon="Refresh" @click="load">刷新</el-button>
       </div>
     </header>
@@ -664,7 +653,7 @@ onMounted(async () => {
       <template v-else>
         <article class="task-summary-card blue"><span class="summary-icon"><el-icon><Collection/></el-icon></span><div><small>{{trackingMode?'已下发任务':'可用计划'}}</small><strong>{{trackingMode?taskMetrics.total:plans.length}}</strong><span>{{trackingMode?'任务批次总量':'当前已启用'}}</span></div></article>
         <article class="task-summary-card violet"><span class="summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>覆盖人次</small><strong>{{taskMetrics.assigned}}</strong><span>累计任务分配</span></div></article>
-        <article class="task-summary-card amber"><span class="summary-icon"><el-icon><Document/></el-icon></span><div><small>待审核</small><strong>{{pendingReviews.length}}</strong><span>需要培训方处理</span></div></article>
+        <article class="task-summary-card amber"><span class="summary-icon"><el-icon><Document/></el-icon></span><div><small>待评分成果</small><strong>{{assignmentMetrics.pending}}</strong><span>前往任务评分页面处理</span></div></article>
         <article class="task-summary-card green"><span class="summary-icon"><el-icon><CircleCheck/></el-icon></span><div><small>完成率</small><strong>{{taskMetrics.completionRate}}%</strong><span>{{taskMetrics.approved}} 项已通过</span></div></article>
       </template>
     </section>
@@ -725,7 +714,14 @@ onMounted(async () => {
           </article>
 
           <article class="dispatch-step">
-            <div class="step-heading"><span>3</span><div><h3>选择下发对象</h3><p>按批次、班级、班级职务、所属板块和服务站组合筛选在职员工</p></div></div>
+            <div class="step-heading"><span>3</span><div><h3>选择评分人（可选）</h3><p>可选择多名非员工账号，全部通过后取平均分；也可下发后再配置</p></div></div>
+            <el-select v-model="dispatch.reviewerIds" multiple filterable collapse-tags collapse-tags-tooltip placeholder="暂不设置评分人" style="width:100%">
+              <el-option v-for="item in reviewerOptions" :key="item.id" :label="`${item.display_name}（${item.role}）`" :value="item.id"/>
+            </el-select>
+          </article>
+
+          <article class="dispatch-step">
+            <div class="step-heading"><span>4</span><div><h3>选择下发对象</h3><p>按批次、班级、班级职务、所属板块和服务站组合筛选在职员工</p></div></div>
             <div class="target-grid">
               <el-select v-model="dispatch.batchId" clearable filterable placeholder="按批次">
                 <el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/>
@@ -753,6 +749,7 @@ onMounted(async () => {
             <div><dt>培养计划</dt><dd>{{selectedPlan?.name||'未选择'}}</dd></div>
             <div><dt>任务数量</dt><dd>{{selectedPlanTasks.length}} 项</dd></div>
             <div><dt>下发对象</dt><dd>{{targetDescription}}</dd></div>
+            <div><dt>评分人</dt><dd>{{reviewerNames(dispatch.reviewerIds)}}</dd></div>
           </dl>
           <el-button type="primary" size="large" :loading="dispatchPreviewLoading" :disabled="!planDispatchReady" @click="previewPlanDispatch">预览并确认</el-button>
           <span class="safe-note">预览不会创建任务，可返回继续调整</span>
@@ -782,24 +779,13 @@ onMounted(async () => {
           <el-select v-model="manualDispatch.classPositionId" clearable filterable placeholder="按班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
           <el-select v-model="manualDispatch.businessUnitId" clearable filterable placeholder="按板块"><el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/></el-select>
           <el-select v-model="manualDispatch.stationId" clearable filterable placeholder="按服务站"><el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.reviewerIds" multiple filterable collapse-tags collapse-tags-tooltip placeholder="评分人（可选，可下发后配置）"><el-option v-for="item in reviewerOptions" :key="item.id" :label="`${item.display_name}（${item.role}）`" :value="item.id"/></el-select>
           <el-button type="primary" size="large" :loading="dispatching" :disabled="!manualDispatchReady" @click="dispatchManualTask">确认下发临时任务</el-button>
         </div>
       </div>
     </section>
 
     <template v-else-if="!employee">
-      <section v-if="canReview&&pendingReviews.length" id="pending-task-reviews" class="task-workspace pending-section">
-        <div class="task-workspace-head"><div><h2>待审核成果</h2><p>按提交时间排序，优先处理已等待较久的员工成果。</p></div><span class="result-count">{{pendingReviews.length}} 项待处理</span></div>
-        <el-table :data="pendingReviews">
-          <el-table-column prop="title" label="任务" min-width="210" show-overflow-tooltip/>
-          <el-table-column prop="employee_name" label="员工" min-width="110"/>
-          <el-table-column prop="employee_no" label="工号" min-width="120"/>
-          <el-table-column label="提交时间" min-width="170"><template #default="{row}">{{formatDate(row.submitted_at)}}</template></el-table-column>
-          <el-table-column label="截止时间" min-width="170"><template #default="{row}">{{formatDate(row.deadline)}}</template></el-table-column>
-          <el-table-column label="操作" width="90" fixed="right"><template #default="{row}"><el-button link type="primary" @click="reviewAssignment(row)">审核</el-button></template></el-table-column>
-        </el-table>
-      </section>
-
       <section class="task-workspace">
         <div class="task-workspace-head"><div><h2>任务执行台账</h2><p>查看任务覆盖、成果提交、附件资料与员工完成情况。</p></div><span class="result-count">共 {{filteredTasks.length}} 项</span></div>
         <div class="task-tabs">
@@ -814,6 +800,7 @@ onMounted(async () => {
             <template #default="{row}"><div class="task-name-cell"><strong @click="openTaskDetail(row)">{{row.title}}</strong><span>截止 {{formatDate(row.deadline)}}</span><TaskAttachmentsPanel v-if="row.attachments?.length" compact :items="row.attachments"/></div></template>
           </el-table-column>
           <el-table-column label="执行进度" min-width="210"><template #default="{row}"><div class="progress-cell"><strong>{{row.approved_count}} / {{row.assigned_count}} 完成</strong><el-progress :percentage="Number(row.assigned_count)?Math.round(Number(row.approved_count)/Number(row.assigned_count)*100):0" :stroke-width="6" :show-text="false"/><span>{{row.submitted_count}} 项已提交</span></div></template></el-table-column>
+          <el-table-column label="评分人" min-width="160"><template #default="{row}">{{row.reviewer_names||'待分配'}}</template></el-table-column>
           <el-table-column label="状态" width="105"><template #default="{row}"><el-tag :type="managerTaskStateType(row)">{{managerTaskStateLabel(row)}}</el-tag></template></el-table-column>
           <el-table-column label="操作" width="270" fixed="right"><template #default="{row}"><div class="task-actions"><el-button size="small" text @click="openTaskDetail(row)">详情</el-button><el-button size="small" text type="primary" @click="showTaskProgress(row)">员工进度</el-button><el-button v-if="canManage" size="small" text type="danger" @click="deleteTask(row)">删除</el-button></div></template></el-table-column>
         </el-table>
@@ -825,9 +812,10 @@ onMounted(async () => {
       <el-table :data="assignments" empty-text="暂无培养任务">
         <el-table-column label="任务" min-width="280"><template #default="{row}"><div class="task-name-cell"><strong @click="openTaskDetail(row)">{{row.title}}</strong><span>{{row.description}}</span><TaskAttachmentsPanel v-if="row.attachments?.length" compact :items="row.attachments"/></div></template></el-table-column>
         <el-table-column label="截止时间" min-width="170"><template #default="{row}">{{formatDate(row.deadline)}}</template></el-table-column>
-        <el-table-column label="状态" width="110"><template #default="{row}"><el-tag :type="statusTagType(row.status)">{{statusLabel(row.status)}}</el-tag></template></el-table-column>
-        <el-table-column prop="final_score" label="培训方评分" width="110"><template #default="{row}">{{row.final_score??'--'}}</template></el-table-column>
-        <el-table-column label="操作" width="145" fixed="right"><template #default="{row}"><el-button link @click="openTaskDetail(row)">详情</el-button><el-button v-if="['NOT_SUBMITTED','RETURNED'].includes(row.status)" link type="primary" @click="open(row,'SUBMIT')">提交成果</el-button><el-button v-else-if="row.status==='PENDING_REVIEW'" link @click="open(row,'RESUBMIT')">重新提交</el-button></template></el-table-column>
+        <el-table-column label="状态" min-width="150"><template #default="{row}"><el-tag :type="statusTagType(row.status)">{{employeeTaskStatusLabel(row)}}</el-tag></template></el-table-column>
+        <el-table-column prop="final_score" label="最终平均分" width="110"><template #default="{row}">{{row.final_score??'--'}}</template></el-table-column>
+        <el-table-column prop="review_comments" label="评分意见" min-width="180" show-overflow-tooltip><template #default="{row}">{{row.review_comments||'--'}}</template></el-table-column>
+        <el-table-column label="操作" width="165" fixed="right"><template #default="{row}"><el-button link @click="openTaskDetail(row)">详情</el-button><el-button v-if="['NOT_SUBMITTED','RETURNED'].includes(row.status)" link type="primary" @click="open(row,'SUBMIT')">提交成果</el-button><el-button v-else-if="row.status==='PENDING_REVIEW'&&!Number(row.submitted_review_count)" link @click="open(row,'RESUBMIT')">重新提交</el-button><span v-else-if="row.status==='PENDING_REVIEW'" class="no-submission">评分中</span></template></el-table-column>
       </el-table>
     </section>
 
@@ -841,6 +829,7 @@ onMounted(async () => {
         <el-descriptions-item label="培养计划">{{selectedPlan?.name}}</el-descriptions-item>
         <el-descriptions-item label="截止时间">{{formatDate(dispatchPreview.deadline)}}</el-descriptions-item>
         <el-descriptions-item label="任务内容">{{dispatchPreview.taskTitles?.join('、')}}</el-descriptions-item>
+        <el-descriptions-item label="评分人">{{reviewerNames(dispatchPreview.reviewerIds||[])}}</el-descriptions-item>
         <el-descriptions-item label="附件策略">计划附件将生成任务快照，后续模板调整不影响本次下发</el-descriptions-item>
       </el-descriptions>
       <template #footer><el-button @click="previewOpen=false">返回调整</el-button><el-button type="primary" :loading="dispatching" @click="dispatchPlanTasks">确认下发</el-button></template>
@@ -848,7 +837,7 @@ onMounted(async () => {
 
     <el-dialog
       v-model="dialog"
-      :title="submissionMode === 'SUBMIT' ? '提交成果' : submissionMode === 'RESUBMIT' ? '重新提交成果' : submissionMode === 'REVIEW' ? '审核成果' : '提交详情'"
+      :title="submissionMode === 'SUBMIT' ? '提交成果' : submissionMode === 'RESUBMIT' ? '重新提交成果' : '提交详情'"
       :close-on-click-modal="!submitting"
       :close-on-press-escape="!submitting"
       :show-close="!submitting"
@@ -895,22 +884,9 @@ onMounted(async () => {
           <el-table-column prop="size" label="大小" width="100"><template #default="scope">{{ scope.row.size ? `${Math.ceil(scope.row.size / 1024)} KB` : '--' }}</template></el-table-column>
           <el-table-column label="操作" width="140"><template #default="scope"><el-button link type="primary" :loading="previewLoading" @click="previewSubmissionFile(scope.row)">预览</el-button><el-button link type="primary" @click="downloadSubmissionFile(scope.row)">下载</el-button></template></el-table-column>
         </el-table>
-        <div v-if="submissionMode === 'REVIEW'" class="review-panel">
-          <div class="review-field">
-            <span class="review-label">审核结论</span>
-            <el-radio-group v-model="review.decision"><el-radio value="APPROVE">通过</el-radio><el-radio value="RETURN">退回</el-radio></el-radio-group>
-          </div>
-          <div v-if="review.decision === 'APPROVE'" class="review-field">
-            <span class="review-label">评分</span>
-            <el-input-number v-model="review.score" :min="0" :max="100" :precision="0" :controls="false" placeholder="必填，0-100" class="review-score" />
-            <span class="review-unit">分</span>
-          </div>
-          <el-input v-model="review.comment" type="textarea" :rows="3" placeholder="审核意见（退回时必填）" />
-        </div>
       </template>
       <template #footer>
         <el-button v-if="submissionMode === 'SUBMIT' || submissionMode === 'RESUBMIT'" type="primary" :loading="submitting" :disabled="submitting" @click="doSubmit">{{submitting?'提交中':'确认'}}</el-button>
-        <el-button v-else-if="submissionMode === 'REVIEW'" type="primary" @click="doReview">确认</el-button>
         <el-button v-else @click="dialog = false">关闭</el-button>
       </template>
     </el-dialog>
@@ -979,13 +955,13 @@ onMounted(async () => {
           <el-table-column prop="submitted_at" label="最近提交" min-width="160"><template #default="scope">{{formatDate(scope.row.submitted_at)}}</template></el-table-column>
           <el-table-column prop="status" label="完成状态" width="110"><template #default="scope"><el-tag :type="statusTagType(scope.row.status)">{{statusLabel(scope.row.status)}}</el-tag></template></el-table-column>
           <el-table-column label="文件" width="90"><template #default="scope"><span class="file-count">{{scope.row.submission_id ? `${scope.row.file_count || 0} 个附件` : '--'}}</span></template></el-table-column>
-          <el-table-column prop="final_score" label="评分" width="80" align="center"><template #default="scope"><strong class="score-value">{{scope.row.final_score ?? '--'}}</strong></template></el-table-column>
+          <el-table-column label="评分进度" width="110" align="center"><template #default="scope">{{scope.row.submitted_review_count||0}} / {{scope.row.reviewer_count||0}}</template></el-table-column>
+          <el-table-column prop="final_score" label="平均分" width="80" align="center"><template #default="scope"><strong class="score-value">{{scope.row.final_score ?? '--'}}</strong></template></el-table-column>
           <el-table-column label="操作" width="220" fixed="right">
             <template #default="scope">
               <div class="progress-row-actions">
                 <el-button v-if="scope.row.submission_id && Number(scope.row.file_count)" link type="primary" @click="previewEmployeeSubmission(scope.row)">预览</el-button>
                 <el-button v-if="scope.row.submission_id && Number(scope.row.file_count)" link :loading="downloadingAssignmentId===scope.row.id" @click="downloadEmployeeSubmissionFiles(scope.row)">下载</el-button>
-                <el-button v-if="canReview && scope.row.status==='PENDING_REVIEW'" link type="warning" @click="reviewAssignment(scope.row)">审核</el-button>
                 <span v-if="!scope.row.submission_id" class="no-submission">尚未提交</span>
                 <span v-else-if="!Number(scope.row.file_count)" class="no-submission">无附件</span>
               </div>

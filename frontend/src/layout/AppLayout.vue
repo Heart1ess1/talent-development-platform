@@ -81,7 +81,8 @@ const menus=computed<MenuItem[]>(()=>[
         {to:'/training-plans/tasks',label:'任务编排'},
         {to:'/tasks',label:'任务下发'}
       ]:[]),
-      {to:'/training-plans/tracking',label:'任务跟踪'}
+      {to:'/training-plans/tracking',label:'任务跟踪'},
+      {to:'/task-scoring',label:'任务评分',permission:'task:score'}
     ]}]
   ),
   {label:'综合评价',permission:'evaluation:view',children:evaluationChildren.value},

@@ -39,10 +39,11 @@ public class TaskController {
   private final TaskStatusService taskStatus;
   private final TaskAttachmentService taskAttachments;
   private final UploadTicketService uploadTickets;
+  private final TaskScoringService scoring;
 
   public TaskController(JdbcTemplate db, FileStorageService storage, PermissionService permissions, AuditService audit,
                         TaskStatusService taskStatus, TaskAttachmentService taskAttachments,
-                        UploadTicketService uploadTickets) {
+                        UploadTicketService uploadTickets, TaskScoringService scoring) {
     this.db = db;
     this.storage = storage;
     this.permissions = permissions;
@@ -50,6 +51,7 @@ public class TaskController {
     this.taskStatus = taskStatus;
     this.taskAttachments = taskAttachments;
     this.uploadTickets = uploadTickets;
+    this.scoring = scoring;
   }
 
   public record TaskRequest(@NotBlank String title, @NotBlank String description, String requirements,
@@ -57,7 +59,7 @@ public class TaskController {
   public record AssignRequest(@NotNull Long taskId, Long batchId, Long classId, Long classPositionId, Long businessUnitId, Long stationId) {}
   public record ManualDispatchRequest(@NotBlank String title, @NotBlank String description, String requirements,
                                       @NotNull LocalDateTime deadline, Long batchId, Long classId, Long classPositionId, Long businessUnitId,
-                                      Long stationId) {}
+                                      Long stationId, List<Long> reviewerIds) {}
   public record ManualDispatchResult(Long taskId, int assignedEmployees) {}
   public record PlanDispatchRequest(
       @NotNull Long planId,
@@ -71,14 +73,16 @@ public class TaskController {
       Long classId,
       Long classPositionId,
       Long businessUnitId,
-      Long stationId) {}
+      Long stationId,
+      List<Long> reviewerIds) {}
   public record PlanDispatchResult(int targetEmployees, int createdTasks, int createdAssignments) {}
   public record PlanDispatchPreview(
       int targetEmployees,
       int selectedTasks,
       int reusedTasks,
       LocalDateTime deadline,
-      List<String> taskTitles) {}
+      List<String> taskTitles,
+      List<Long> reviewerIds) {}
   public record ReviewRequest(@NotNull @Pattern(regexp = "APPROVE|RETURN") String decision, String comment,
                               @Min(0) @Max(100) Integer score) {}
   public record DirectUploadRequest(
@@ -96,12 +100,12 @@ public class TaskController {
     taskStatus.refreshOverdueAssignments();
     var u = SecurityUtils.current();
     if ("ALL".equals(u.dataScope())) {
-      var rows = db.queryForList("select t.id,t.title,t.description,t.requirements,t.deadline,u.display_name creator_name,(select count(*) from task_assignment a where a.task_id=t.id) assigned_count,(select count(*) from task_assignment a where a.task_id=t.id and a.status not in ('NOT_SUBMITTED','OVERDUE')) submitted_count,(select count(*) from task_assignment a where a.task_id=t.id and a.status='APPROVED') approved_count from challenge_task t join sys_user u on u.id=t.created_by order by t.id desc");
+      var rows = db.queryForList("select t.id,t.title,t.description,t.requirements,t.deadline,u.display_name creator_name,(select count(*) from task_assignment a where a.task_id=t.id) assigned_count,(select count(*) from task_assignment a where a.task_id=t.id and a.status not in ('NOT_SUBMITTED','OVERDUE')) submitted_count,(select count(*) from task_assignment a where a.task_id=t.id and a.status='APPROVED') approved_count,(select group_concat(su.display_name order by su.display_name separator '、') from task_reviewer tr join sys_user su on su.id=tr.reviewer_user_id where tr.task_id=t.id) reviewer_names,(select count(*) from task_reviewer tr where tr.task_id=t.id) reviewer_count from challenge_task t join sys_user u on u.id=t.created_by order by t.id desc");
       addAttachments(rows);
       return ApiResponse.ok(rows);
     }
     var scope = permissions.employeeFilter("e");
-    var rows = db.queryForList("select t.id,t.title,t.description,t.requirements,t.deadline,count(a.id) assigned_count,sum(a.status not in ('NOT_SUBMITTED','OVERDUE')) submitted_count,sum(a.status='APPROVED') approved_count from challenge_task t join task_assignment a on a.task_id=t.id join employee e on e.id=a.employee_id where 1=1" + scope.sql() + " group by t.id,t.title,t.description,t.requirements,t.deadline order by t.id desc", scope.args().toArray());
+    var rows = db.queryForList("select t.id,t.title,t.description,t.requirements,t.deadline,count(a.id) assigned_count,sum(a.status not in ('NOT_SUBMITTED','OVERDUE')) submitted_count,sum(a.status='APPROVED') approved_count,(select group_concat(su.display_name order by su.display_name separator '、') from task_reviewer tr join sys_user su on su.id=tr.reviewer_user_id where tr.task_id=t.id) reviewer_names,(select count(*) from task_reviewer tr where tr.task_id=t.id) reviewer_count from challenge_task t join task_assignment a on a.task_id=t.id join employee e on e.id=a.employee_id where 1=1" + scope.sql() + " group by t.id,t.title,t.description,t.requirements,t.deadline order by t.id desc", scope.args().toArray());
     addAttachments(rows);
     return ApiResponse.ok(rows);
   }
@@ -255,6 +259,7 @@ public class TaskController {
       assignedEmployees += db.update("insert ignore into task_assignment(task_id,employee_id,assigned_by) values(?,?,?)",
           taskId, employeeId, user.id());
     }
+    scoring.setReviewers(taskId, q.reviewerIds());
     var result = new ManualDispatchResult(taskId, assignedEmployees);
     audit.log("DISPATCH_MANUAL_TASK", "TASK", taskId, null, result);
     taskStatus.rescheduleNextDeadline();
@@ -277,7 +282,7 @@ public class TaskController {
       output.setAssignedAt(text(row.get("assigned_at")));
       output.setSubmittedAt(text(row.get("submitted_at")));
       output.setStatus(taskStatusLabel(text(row.get("status"))));
-      output.setScore(row.get("final_score") instanceof Number value ? value.intValue() : null);
+      output.setScore(row.get("final_score") instanceof Number value ? new java.math.BigDecimal(value.toString()) : null);
       output.setSubmissionVersion(row.get("submission_version") instanceof Number value ? value.intValue() : null);
       output.setFileCount(row.get("file_count") instanceof Number value ? value.intValue() : 0);
       output.setReviewComment(text(row.get("review_comment")));
@@ -357,16 +362,20 @@ public class TaskController {
     var employees = targetEmployees(q.batchId(), q.classId(), q.classPositionId(), q.businessUnitId(), q.stationId());
     var deadline = resolveDeadline(q);
     var u = SecurityUtils.current();
+    var reviewerIds = scoring.normalizeAndValidateReviewers(q.reviewerIds());
     int createdTasks = 0;
     int createdAssignments = 0;
     for (var planTask : planTasks) {
       String title = q.taskTitle() == null || q.taskTitle().isBlank()
           ? String.valueOf(planTask.get("title"))
           : q.taskTitle().trim();
-      createdTasks += db.update("insert ignore into challenge_task(title,description,requirements,deadline,created_by,training_plan_id,training_plan_task_id,source_base_date) values(?,?,?,?,?,?,?,?)",
+      int created = db.update("insert ignore into challenge_task(title,description,requirements,deadline,created_by,training_plan_id,training_plan_task_id,source_base_date) values(?,?,?,?,?,?,?,?)",
           title, planTask.get("description"), planTask.get("requirements"), deadline, u.id(), q.planId(), planTask.get("id"), deadline.toLocalDate());
+      createdTasks += created;
       Long taskId = db.queryForObject("select id from challenge_task where training_plan_task_id=? and source_base_date=?",
           Long.class, planTask.get("id"), deadline.toLocalDate());
+      if (created == 1) scoring.setReviewers(taskId, reviewerIds);
+      else scoring.requireCompatibleReviewers(taskId, reviewerIds);
       taskAttachments.snapshotPlanTaskAttachments(
           ((Number) planTask.get("id")).longValue(), taskId);
       for (Long employeeId : employees) {
@@ -399,12 +408,20 @@ public class TaskController {
             + placeholders + ") and source_base_date=?",
         Integer.class,
         existingArgs.toArray());
+    var reviewerIds = scoring.normalizeAndValidateReviewers(q.reviewerIds());
+    var existingTasks = db.queryForList(
+        "select id from challenge_task where training_plan_task_id in (" + placeholders + ") and source_base_date=?",
+        existingArgs.toArray());
+    for (var existing : existingTasks) {
+      scoring.requireCompatibleReviewers(((Number) existing.get("id")).longValue(), reviewerIds);
+    }
     return ApiResponse.ok(new PlanDispatchPreview(
         employees.size(),
         planTasks.size(),
         reusedTasks == null ? 0 : reusedTasks,
         deadline,
-        planTasks.stream().map(row -> String.valueOf(row.get("title"))).toList()));
+        planTasks.stream().map(row -> String.valueOf(row.get("title"))).toList(),
+        reviewerIds));
   }
 
   @GetMapping("/assignments")
@@ -420,7 +437,11 @@ public class TaskController {
     }
     String sql = "select a.id,a.task_id,a.employee_id,a.status,a.final_score,a.assigned_by,a.assigned_at,a.version,"
         + "t.title,t.description,t.requirements,t.deadline,e.name employee_name,e.employee_no,"
-        + "(select max(s.submission_version) from task_submission s where s.assignment_id=a.id) latest_version "
+        + "(select max(s.submission_version) from task_submission s where s.assignment_id=a.id) latest_version,"
+        + "(select count(*) from task_reviewer tr where tr.task_id=a.task_id) reviewer_count,"
+        + "(select group_concat(su.display_name order by su.display_name separator '、') from task_reviewer tr join sys_user su on su.id=tr.reviewer_user_id where tr.task_id=a.task_id) reviewer_names,"
+        + "(select count(*) from task_submission_review r join task_submission s on s.id=r.submission_id where s.assignment_id=a.id and s.submission_version=(select max(s2.submission_version) from task_submission s2 where s2.assignment_id=a.id) and r.status='SUBMITTED') submitted_review_count,"
+        + "coalesce((select group_concat(concat(u2.display_name,'：',coalesce(r.comment,'无意见')) order by u2.display_name separator '\n') from task_submission_review r join task_submission s on s.id=r.submission_id join sys_user u2 on u2.id=r.reviewer_user_id where s.assignment_id=a.id and s.submission_version=(select max(s2.submission_version) from task_submission s2 where s2.assignment_id=a.id) and s.status in ('APPROVED','RETURNED') and r.status='SUBMITTED'),(select s3.review_comment from task_submission s3 where s3.assignment_id=a.id order by s3.submission_version desc limit 1)) review_comments "
         + "from task_assignment a join challenge_task t on t.id=a.task_id join employee e on e.id=a.employee_id"
         + where + " order by t.deadline,a.id desc";
     var rows = db.queryForList(sql, args.toArray());
@@ -433,15 +454,8 @@ public class TaskController {
 
   @GetMapping("/assignments/pending-review")
   public ApiResponse<List<Map<String, Object>>> pendingReviewAssignments() {
-    permissions.require(Permissions.TASK_REVIEW);
     taskStatus.refreshOverdueAssignments();
-    var scope = permissions.employeeFilter("e");
-    String sql = "select a.id,a.assigned_at,t.id task_id,t.title,t.deadline,e.id employee_id,e.name employee_name,e.employee_no,"
-        + "s.id submission_id,s.submission_version,s.submitted_at "
-        + "from task_assignment a join challenge_task t on t.id=a.task_id join employee e on e.id=a.employee_id "
-        + "join task_submission s on s.assignment_id=a.id and s.status='PENDING_REVIEW' "
-        + "where a.status='PENDING_REVIEW'" + scope.sql() + " order by s.submitted_at asc";
-    return ApiResponse.ok(db.queryForList(sql, scope.args().toArray()));
+    return ApiResponse.ok(scoring.pendingForCurrentUser());
   }
 
   @GetMapping("/assignments/{id}/submissions")
@@ -468,11 +482,15 @@ public class TaskController {
     if ((content == null || content.isBlank()) && (files == null || files.isEmpty())) throw new BusinessException(400, "请填写说明或上传成果文件");
     if (files != null && files.size() > 5) throw new BusinessException(400, "单次最多上传 5 个文件");
     if ("PENDING_REVIEW".equals(assignmentStatus)) {
+      scoring.assertCanResubmit(id);
+      scoring.voidPendingSubmissionReviews(id);
       db.update("update task_submission set status='SUPERSEDED' where assignment_id=? and status='PENDING_REVIEW'", id);
     }
     Integer version = db.queryForObject("select coalesce(max(submission_version),0)+1 from task_submission where assignment_id=?", Integer.class, id);
     db.update("insert into task_submission(assignment_id,submission_version,content) values(?,?,?)", id, version, content);
     Long submissionId = db.queryForObject("select last_insert_id()", Long.class);
+    Long taskId = db.queryForObject("select task_id from task_assignment where id=?", Long.class, id);
+    scoring.initializeSubmissionReviews(submissionId, taskId);
     if (files != null) for (MultipartFile file : files) {
       validateFile(file);
       var stored = storage.store(file);
@@ -513,6 +531,8 @@ public class TaskController {
     }
     String assignmentStatus = String.valueOf(assignment.get("status"));
     if ("PENDING_REVIEW".equals(assignmentStatus)) {
+      scoring.assertCanResubmit(id);
+      scoring.voidPendingSubmissionReviews(id);
       db.update("update task_submission set status='SUPERSEDED' where assignment_id=? and status='PENDING_REVIEW'", id);
     }
     Integer version = db.queryForObject(
@@ -521,6 +541,8 @@ public class TaskController {
     db.update("insert into task_submission(assignment_id,submission_version,content) values(?,?,?)",
         id, version, request.content());
     Long submissionId = db.queryForObject("select last_insert_id()", Long.class);
+    Long taskId = db.queryForObject("select task_id from task_assignment where id=?", Long.class, id);
+    scoring.initializeSubmissionReviews(submissionId, taskId);
     for (UUID ticketId : ticketIds) {
       var upload = uploadTickets.consume(ticketId, "submission-file", id);
       validateFileMetadata(upload.originalName(), upload.size());
@@ -540,19 +562,7 @@ public class TaskController {
   @PostMapping("/submissions/{id}/review")
   @Transactional
   public ApiResponse<Void> review(@PathVariable Long id, @Valid @RequestBody ReviewRequest q) {
-    permissions.require(Permissions.TASK_REVIEW);
-    var u = SecurityUtils.current();
-    var submission = db.queryForMap("select s.assignment_id,s.status,a.employee_id from task_submission s join task_assignment a on a.id=s.assignment_id where s.id=?", id);
-    Long assignmentId = ((Number) submission.get("assignment_id")).longValue();
-    permissions.requireEmployee(((Number) submission.get("employee_id")).longValue());
-    if (!"PENDING_REVIEW".equals(submission.get("status"))) throw new BusinessException(400, "该版本已审核");
-    if (!"APPROVE".equals(q.decision()) && !"RETURN".equals(q.decision())) throw new BusinessException(400, "审核结论无效");
-    if ("APPROVE".equals(q.decision()) && q.score() == null) throw new BusinessException(400, "通过时必须评分");
-    if ("RETURN".equals(q.decision()) && (q.comment() == null || q.comment().isBlank())) throw new BusinessException(400, "退回时必须填写意见");
-    String state = "APPROVE".equals(q.decision()) ? "APPROVED" : "RETURNED";
-    db.update("update task_submission set status=?,reviewed_by=?,reviewed_at=now(),review_comment=?,score=? where id=?", state, u.id(), q.comment(), q.score(), id);
-    db.update("update task_assignment set status=?,final_score=?,version=version+1 where id=?", state, "APPROVED".equals(state) ? q.score() : null, assignmentId);
-    audit.log("REVIEW_TASK", "SUBMISSION", id, null, q);
+    scoring.submitReview(id, q.decision(), q.comment(), q.score());
     return ApiResponse.ok(null);
   }
 
@@ -632,7 +642,9 @@ public class TaskController {
     String sql = "select a.id,a.status,a.assigned_at,a.final_score,"
         + "e.id employee_id,e.name employee_name,e.employee_no,e.class_id,cls.label class_name,"
         + "e.class_position_id,cp.label class_position_name,"
-        + "s.id submission_id,s.submitted_at,s.status submission_status,s.submission_version,s.review_comment,"
+        + "s.id submission_id,s.submitted_at,s.status submission_status,s.submission_version,coalesce((select group_concat(concat(u2.display_name,'：',coalesce(r.comment,'无意见')) order by u2.display_name separator '\n') from task_submission_review r join sys_user u2 on u2.id=r.reviewer_user_id where r.submission_id=s.id and r.status='SUBMITTED'),s.review_comment) review_comment,"
+        + "(select count(*) from task_reviewer tr where tr.task_id=a.task_id) reviewer_count,"
+        + "(select count(*) from task_submission_review r where r.submission_id=s.id and r.status='SUBMITTED') submitted_review_count,"
         + "(select count(*) from stored_file f where f.submission_id=s.id) file_count "
         + "from task_assignment a join challenge_task t on t.id=a.task_id join employee e on e.id=a.employee_id "
         + "left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS' "
@@ -749,6 +761,7 @@ public class TaskController {
   }
 
   private void requireTaskReadAccess(Long taskId) {
+    if (scoring.canViewTask(taskId)) return;
     if ("ALL".equals(SecurityUtils.current().dataScope())) return;
     var scope = permissions.employeeFilter("e");
     var args = new ArrayList<Object>();

@@ -3,6 +3,7 @@ package com.talent.platform.task;
 import com.alibaba.excel.annotation.ExcelIgnoreUnannotated;
 import com.alibaba.excel.annotation.ExcelProperty;
 import lombok.Data;
+import java.math.BigDecimal;
 
 @Data
 @ExcelIgnoreUnannotated
@@ -23,7 +24,7 @@ public class TaskProgressExportRow {
   private String status;
 
   @ExcelProperty(value = "评分", index = 5)
-  private Integer score;
+  private BigDecimal score;
 
   @ExcelProperty(value = "最新版本", index = 6)
   private Integer submissionVersion;

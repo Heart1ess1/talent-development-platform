@@ -10,6 +10,7 @@ public final class Permissions {
   public static final String ATTENDANCE_MANAGE="attendance:manage";
   public static final String TASK_MANAGE="task:manage";
   public static final String TASK_REVIEW="task:review";
+  public static final String TASK_SCORE="task:score";
   public static final String EVALUATION_VIEW="evaluation:view";
   public static final String EVALUATION_SUBMIT="evaluation:submit";
   public static final String EVALUATION_MANAGE="evaluation:manage";

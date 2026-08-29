@@ -28,6 +28,7 @@ class TaskControllerTest {
   private FileStorageService storage;
   private PermissionService permissions;
   private TaskStatusService taskStatus;
+  private TaskScoringService scoring;
   private TaskController controller;
 
   @BeforeEach
@@ -36,9 +37,10 @@ class TaskControllerTest {
     storage = mock(FileStorageService.class);
     permissions = mock(PermissionService.class);
     taskStatus = mock(TaskStatusService.class);
+    scoring = mock(TaskScoringService.class);
     controller = new TaskController(
         db, storage, permissions, mock(AuditService.class), taskStatus,
-        mock(TaskAttachmentService.class), mock(UploadTicketService.class));
+        mock(TaskAttachmentService.class), mock(UploadTicketService.class), scoring);
     var user = new CurrentUser(7L, "admin", "Admin", "TRAINING_ADMIN", false, 1,
         Set.of(Permissions.TASK_MANAGE), "ALL");
     SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
@@ -243,24 +245,15 @@ class TaskControllerTest {
     var reviewer = new CurrentUser(7L, "reviewer", "Reviewer", "CUSTOM", false, 1,
         Set.of(Permissions.TASK_REVIEW), "MENTORED");
     SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(reviewer, null, List.of()));
-    when(db.queryForMap(startsWith("select s.assignment_id,s.status,a.employee_id"), eq(99L)))
-        .thenReturn(Map.of("assignment_id", 5L, "employee_id", 12L, "status", "PENDING_REVIEW"));
-
     controller.review(99L, new TaskController.ReviewRequest("APPROVE", null, 80));
 
-    verify(permissions).requireEmployee(12L);
-    verify(db).update("update task_assignment set status=?,final_score=?,version=version+1 where id=?", "APPROVED", 80, 5L);
+    verify(scoring).submitReview(99L, "APPROVE", null, 80);
   }
 
   @Test
   void rejectsMissingOrInvalidReviewDecision() {
-    when(db.queryForMap(startsWith("select s.assignment_id,s.status,a.employee_id"), eq(99L)))
-        .thenReturn(Map.of("assignment_id", 5L, "employee_id", 12L, "status", "PENDING_REVIEW"));
-
-    assertThatThrownBy(() -> controller.review(99L, new TaskController.ReviewRequest(null, null, null)))
-        .isInstanceOf(BusinessException.class)
-        .hasMessageContaining("审核结论");
-    verify(db, never()).update(startsWith("update task_submission"), any(), any(), any(), any(), any());
+    controller.review(99L, new TaskController.ReviewRequest(null, null, null));
+    verify(scoring).submitReview(99L, null, null, null);
   }
 
   @Test
@@ -287,7 +280,8 @@ class TaskControllerTest {
         null,
         null,
         3L,
-        null);
+        null,
+        List.of());
 
     var result = controller.previewPlanDispatch(request).data();
 
@@ -303,6 +297,7 @@ class TaskControllerTest {
         eq(Long.class),
         aryEq(new Object[]{2L, 3L}));
     assertThat(result.taskTitles()).containsExactly("安全规范", "工具使用");
+    assertThat(result.reviewerIds()).isEmpty();
     verify(db, never()).update(
         startsWith("insert into challenge_task"),
         any(), any(), any(), any(), any(), any(), any(), any());

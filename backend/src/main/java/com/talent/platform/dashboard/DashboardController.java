@@ -299,9 +299,9 @@ public class DashboardController {
     result.put("operations", Map.of("task", task, "course", course, "exam", exam, "evaluation", evaluation));
 
     var queue = new ArrayList<Map<String, Object>>();
-    if (user.can(Permissions.TASK_REVIEW)) queue.add(queueItem("TASK_REVIEW", "审核任务成果",
-        "员工提交后应及时反馈，避免阻塞下一轮任务", number(task.get("pending_review")).longValue(),
-        "/tasks?focus=pending-review", "WARNING"));
+    if (user.can(Permissions.TASK_SCORE)) queue.add(queueItem("TASK_REVIEW", "评分任务成果",
+        "仅处理分配给你的成果评分", pendingTaskScores(user.id()),
+        "/task-scoring?status=MY_PENDING", "WARNING"));
     if (user.can(Permissions.EXAM_MANAGE)) {
       queue.add(queueItem("EXAM_REVIEW", "批阅主观题",
           "完成主观题评分后才能形成正式考试成绩", number(exam.get("pending_review")).longValue(),
@@ -433,7 +433,7 @@ public class DashboardController {
                                   Map<String, Object> evaluation, String month,
                                   PermissionService.ScopeFilter scope) {
     long count = 0;
-    if (user.can(Permissions.TASK_REVIEW)) count += number(task.get("pending_review")).longValue();
+    if (user.can(Permissions.TASK_SCORE)) count += pendingTaskScores(user.id());
     if (user.can(Permissions.EXAM_MANAGE)) {
       count += number(exam.get("pending_review")).longValue();
       count += scopedCount("""
@@ -447,6 +447,16 @@ public class DashboardController {
           - number(evaluation.get("published_total")).longValue());
     }
     return count;
+  }
+
+  private long pendingTaskScores(Long userId) {
+    Integer count = db.queryForObject("""
+        select count(*)
+        from task_submission_review r
+        join task_submission s on s.id=r.submission_id
+        where r.reviewer_user_id=? and r.status='PENDING' and s.status='PENDING_REVIEW'
+        """, Integer.class, userId);
+    return count == null ? 0 : count.longValue();
   }
 
   private long pendingManualScores(CurrentUser user, String month, PermissionService.ScopeFilter scope) {

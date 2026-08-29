@@ -21,7 +21,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 ### 核心业务链路
 
 1. 管理员维护批次、服务站、导师和员工；员工创建/导入时会同时创建 `EMPLOYEE` 账号。
-2. 培训管理员安排课程、签到、培养计划和闯关任务；员工提交成果，具备审核权限的人员审核。
+2. 培训管理员安排课程、签到、培养计划和闯关任务，并为任务配置评分人；员工提交成果后，由被分配的非员工账号在独立任务评分工作台评分。
 3. 考试管理员维护题库、客观题试卷和考试计划；员工交卷后立即自动计分，管理员即时可见，员工在整场考试结束后收到自动下发结果。
 4. 评价方案定义评分项和权重；考试、任务等数据参与月评，系统可生成月度/季度汇总并在发布后锁定。
 5. 所有登录态、访问范围和关键操作由安全与审计模块统一处理。
@@ -106,7 +106,9 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 
 | 文件 | 职责 |
 | --- | --- |
-| `task/TaskController.java` | 任务 CRUD、手动/培养计划下发、下发预览、任务附件、分配进度、员工带附件提交、审核与提交历史；负责访问范围与目标人员校验。 |
+| `task/TaskController.java` | 任务 CRUD、手动/培养计划下发、下发预览、任务附件、分配进度、员工带附件提交和提交历史；兼容审核入口统一委托任务评分服务。 |
+| `task/TaskScoringController.java` | 任务评分候选人、工作台、详情、评分人配置、本人评分和管理员重置接口。 |
+| `task/TaskScoringService.java` | 任务评分核心规则：范围授权、评分人快照、名单锁定、退回结束、多评分人平均分、同轮信息隐藏和发布后重置限制。 |
 | `task/TaskAttachmentService.java` | 任务资料上传、列表、删除、共享存储引用，以及计划任务附件在下发时生成独立快照。 |
 | `task/TaskStatusService.java` | 在启动、任务变动后计算最近截止时间并安排定时任务；把逾期未提交分配固化为 `OVERDUE` 和 0 分。 |
 | `task/TaskSchedulingConfiguration.java` | 提供任务状态服务使用的 Spring `TaskScheduler`。 |
@@ -179,6 +181,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `db/migration/V23__course_material_learning.sql` | 增加课件预览会话、员工学习次数和累计学习时长记录。 |
 | `db/migration/V24__object_upload_ticket.sql` | 增加 OSS 客户端直传票据、用途/归属绑定、有效期和单次消费状态。 |
 | `db/migration/V35__employee_gender_and_class_position.sql` | 增加员工性别和班级职务字段、班级职务字典关联及查询索引。 |
+| `db/migration/V36__task_scoring_reviewers.sql` | 增加任务评分人和逐提交评分记录，把任务最终分与提交得分调整为支持一位小数。 |
 
 ## 5. 前端结构
 
@@ -224,7 +227,8 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `styles/training-plans.css` | 计划管理和任务编排共享的响应式页面布局与视觉规范。 |
 | `utils/trainingPlan.ts` | 培养计划类型、启用判断、业务状态和日期显示规则。 |
 | `components/TaskAttachmentsPanel.vue` | 任务附件文件名展示、上传、删除、下载，以及 PDF、图片、文本和 DOCX 安全预览。 |
-| `views/TasksView.vue` | 管理侧任务下发和任务跟踪、员工侧我的任务、任务附件、提交/重提、审核、进度明细和筛选。 |
+| `views/TasksView.vue` | 管理侧任务下发和只读任务跟踪、员工侧我的任务、任务附件、提交/重提、评分状态、进度明细和筛选。 |
+| `views/TaskScoringView.vue` | 非员工任务评分工作台：任务筛选、评分人配置、员工成果与附件查看、逐评分人进度、本人评分和管理员重置。 |
 | `storageTransfer.ts` | 查询存储能力，在 OSS 模式执行受 Policy 限制、支持字节进度和失败票据回收的直传与完成确认，在本地模式回退 multipart 上传。 |
 | `views/evaluation/EvaluationWorkbenchView.vue` | 按月份展示方案覆盖、发布进度、缺失汇总和跨任务/考试/人工评价的待办入口。 |
 | `views/evaluation/EvaluationAssignmentsView.vue` | 管理员先选择导师、站点或培训任务，再按全员、批次或板块统一配置多名评分人，并查看自动展开后的覆盖进度。 |
@@ -279,6 +283,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `security/SecurityUtilsTest.java` | 当前登录用户读取工具。 |
 | `station/StationChangeRequestControllerTest.java` | 调站历史、拒绝原因、过期申请并发保护和审批统计。 |
 | `task/TaskControllerTest.java` | 任务接口的主要权限与业务分支。 |
+| `task/TaskScoringServiceTest.java` | 任务评分身份边界、平均分、退回、同轮信息隐藏、评分人锁定和月度发布后重置限制。 |
 | `task/TaskStatusServiceTest.java` | 逾期任务刷新与截止时间调度计算。 |
 | `training/TrainingPlanControllerTest.java` | 培养计划和计划任务的管理接口。 |
 | `user/AvatarControllerTest.java` | 头像图片真实性校验、替换和旧文件清理。 |

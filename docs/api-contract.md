@@ -214,7 +214,7 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/tasks/{id}` | 登录，按数据范围过滤 | 查询任务详情 | 路径 `id` | 任务完整内容 |
 | `PUT` | `/api/v1/tasks/{id}` | `task:manage` | 编辑任务完整内容 | `title`、`description`、`requirements`、`deadline` | 空 |
 | `POST` | `/api/v1/assignments/assign` | `task:manage` | 分配任务 | `taskId`，以及 `batchId`、`businessUnitId`、`stationId` 至少一类 | 新增分配数量 |
-| `POST` | `/api/v1/tasks/dispatch-manual` | `task:manage` | 手动创建并下发任务 | `title`、`description`、`requirements`、`deadline`，以及可组合的 `batchId`、`businessUnitId`、`stationId` | `taskId`、`assignedEmployees` |
+| `POST` | `/api/v1/tasks/dispatch-manual` | `task:manage` | 手动创建并下发任务 | `title`、`description`、`requirements`、`deadline`、可选 `reviewerIds`，以及可组合的 `batchId`、`businessUnitId`、`stationId` | `taskId`、`assignedEmployees` |
 | `GET` | `/api/v1/tasks/{id}/progress` | 登录，按数据范围过滤 | 查询任务对应员工的完成情况 | 路径 `id` | 下发日期、提交日期、状态、评分、最新提交 ID 和附件数量 |
 | `GET` | `/api/v1/tasks/{id}/progress/export` | 登录，按数据范围过滤 | 导出任务提交情况 | 路径 `id` | Excel，包含员工、时间、状态、评分、提交版本、附件数量和审核意见 |
 | `GET` | `/api/v1/tasks/{id}/submissions/archive` | 登录，按数据范围过滤 | 打包导出任务全部员工提交文件 | 路径 `id` | ZIP，按“员工姓名（工号）/提交版本”分目录保存说明与附件 |
@@ -226,16 +226,30 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/task-attachments/{id}` | 登录，按任务数据范围过滤 | 预览或下载任务附件 | 可选 `inline` | 本地模式返回文件流；OSS 模式鉴权后 302 到 5 分钟签名 URL |
 | `DELETE` | `/api/v1/tasks/{id}` | `task:manage` | 删除无提交记录的任务 | 路径 `id` | 空 |
 | `GET` | `/api/v1/assignments` | 登录，按数据范围过滤 | 查询任务分配 | 可选 `status` | 分配列表 |
-| `GET` | `/api/v1/assignments/pending-review` | `task:review`，按数据范围过滤 | 查询待审核任务 | 无 | 待审核的任务分配与最新提交信息 |
+| `GET` | `/api/v1/assignments/pending-review` | `task:score` 且本人是评分人 | 兼容查询本人待评分任务 | 无 | 当前账号被分配且尚未评分的任务与最新提交信息 |
 | `GET` | `/api/v1/assignments/{id}/submissions` | 登录，按任务员工范围校验 | 查询提交历史 | 路径 `id` | 提交版本和附件列表 |
 | `POST` | `/api/v1/assignments/{id}/submission-files/upload-ticket` | 员工本人且任务可提交 | 为成果文件申请 OSS 直传票据 | `originalName`、`contentType`、`size` | 上传票据 |
 | `POST` | `/api/v1/assignments/{id}/submissions/direct` | 员工本人且任务可提交 | 使用已上传票据提交或重提任务 | `content`、最多 5 个 `uploadTicketIds` | 提交 ID |
 | `POST` | `/api/v1/assignments/{id}/submissions` | 角色 `EMPLOYEE`，本人任务 | 提交任务成果 | `multipart/form-data` 字段 `content`、`files` | 提交 ID |
-| `GET` | `/api/v1/files/{id}` | 登录，按任务员工范围校验 | 下载单个提交附件 | 路径 `id` | 本地模式返回文件流；OSS 模式鉴权后 302 到 5 分钟签名 URL |
+| `GET` | `/api/v1/files/{id}` | 登录；任务数据范围内人员、全局评分管理角色或该任务评分人 | 下载单个提交附件 | 路径 `id` | 本地模式返回文件流；OSS 模式鉴权后 302 到 5 分钟签名 URL |
 | `GET` | `/api/v1/submissions/{id}/files/archive` | 登录，按任务员工范围校验 | 下载单名员工单次提交资料 | 路径 `id` | ZIP，包含提交说明与全部附件 |
-| `POST` | `/api/v1/submissions/{id}/review` | `task:review` | 审核任务提交 | `decision=APPROVE|RETURN`、`comment`、`score` | 空 |
+| `POST` | `/api/v1/submissions/{id}/review` | `task:score` 且本人是评分人 | 旧审核兼容入口，统一调用任务评分服务 | `decision=APPROVE|RETURN`、`comment`、通过时必填整数 `score` | 空 |
 
-任务提交允许 `NOT_SUBMITTED`、`RETURNED` 与截止前的 `PENDING_REVIEW` 重新提交；系统维护最近一项未提交任务的截止时间定时器，在截止时间到达时立即将仍未提交的分配固化为 `OVERDUE` 并记 0 分，服务启动和任务变更后会自动重排该定时器。审核接口同时校验 `task:review` 权限和提交员工的数据范围。单次最多上传 5 个附件，文件扩展名限制为 `pdf`、`doc`、`docx`、`xls`、`xlsx`、`ppt`、`pptx`、`png`、`jpg`、`jpeg`、`zip`。
+任务提交允许 `NOT_SUBMITTED`、`RETURNED` 与截止前的 `PENDING_REVIEW` 重新提交；首名评分人提交评分后禁止员工主动重提。系统维护最近一项未提交任务的截止时间定时器，在截止时间到达时立即将仍未提交的分配固化为 `OVERDUE` 并记 0 分，服务启动和任务变更后会自动重排该定时器。单次最多上传 5 个附件，文件扩展名限制为 `pdf`、`doc`、`docx`、`xls`、`xlsx`、`ppt`、`pptx`、`png`、`jpg`、`jpeg`、`zip`。
+
+## 任务评分
+
+| 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
+|---|---|---|---|---|---|
+| `GET` | `/api/v1/task-scoring/reviewer-options` | `task:manage` | 查询可选评分人 | 无 | 全部启用的非员工账号 |
+| `GET` | `/api/v1/task-scoring/tasks` | `task:score` | 查询评分工作台 | 可选 `status`、`keyword` | 培训管理员/管理员/超级管理员返回全部任务，导师/服务站负责人只返回本人负责评分的任务 |
+| `GET` | `/api/v1/task-scoring/tasks/{taskId}` | `task:score`，按评分任务范围校验 | 查询任务评分详情 | 路径 `taskId` | 评分人、员工提交、评分进度、任务附件和最终分数 |
+| `PUT` | `/api/v1/tasks/{taskId}/reviewers` | `task:manage` | 设置或清空任务评分人 | `reviewerIds` | 空；首名评分人提交后名单锁定 |
+| `GET` | `/api/v1/task-scoring/submissions/{submissionId}` | `task:score`，按评分任务范围校验 | 查询单次提交评分详情 | 路径 `submissionId` | 成果说明、附件和逐评分人进度；本轮结束前隐藏他人分数与意见 |
+| `POST` | `/api/v1/task-scoring/submissions/{submissionId}/reviews` | `task:score` 且本人是该任务评分人 | 提交本人评分 | `decision=APPROVE|RETURN`、`comment`、通过时必填整数 `score` | 空 |
+| `POST` | `/api/v1/task-scoring/submissions/{submissionId}/reset` | `task:manage` | 重置该员工本轮全部评分 | 路径 `submissionId` | 空；对应截止月份月度评价已发布时禁止重置 |
+
+任务评分人按任务统一配置，历史任务不会自动补评分人。没有评分人时员工仍可提交，状态显示“待分配评分人”；配置后为当前待评分提交创建评分记录。任一评分人退回会立即结束本轮并作废其他未完成评分，员工重提后生成新一轮；全部评分人通过后按整数分算术平均并四舍五入保留一位小数，写入提交和任务分配最终得分。培训管理员、管理员和超级管理员可查看全部任务并配置评分人，但只有被分配者可以评分；导师和服务站负责人只可查看、评分分配给自己的任务。
 
 ## 综合评价
 
@@ -375,7 +389,7 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/training-plans/{planId}/tasks/{taskId}/attachments/upload-ticket` | `task:manage` | 为计划任务附件申请 OSS 直传票据 | `originalName`、`contentType`、`size` | 上传票据 |
 | `POST` | `/api/v1/training-plans/{planId}/tasks/{taskId}/attachments/upload-complete/{ticketId}` | `task:manage` | 校验 OSS 对象并创建计划附件 | 路径参数 | 附件 ID |
 | `DELETE` | `/api/v1/training-plans/{planId}/tasks/{taskId}/attachments/{attachmentId}` | `task:manage` | 删除计划任务附件 | 路径参数 | 空 |
-| `POST` | `/api/v1/tasks/dispatch-plan/preview` | `task:manage` | 预览计划任务下发 | 与正式下发相同 | 覆盖人数、任务数、复用数、截止时间和任务名称 |
-| `POST` | `/api/v1/tasks/dispatch-plan` | `task:manage` | 从计划下发选定任务并生成附件快照 | `planId`、`planTaskIds`、可选 `taskTitle`、`deadlineMode`，以及可组合的 `batchId`、`businessUnitId`、`stationId` | `targetEmployees`、`createdTasks`、`createdAssignments` |
+| `POST` | `/api/v1/tasks/dispatch-plan/preview` | `task:manage` | 预览计划任务下发 | 与正式下发相同 | 覆盖人数、任务数、复用数、截止时间、任务名称和评分人 |
+| `POST` | `/api/v1/tasks/dispatch-plan` | `task:manage` | 从计划下发选定任务并生成附件快照 | `planId`、`planTaskIds`、可选 `taskTitle`、可选 `reviewerIds`、`deadlineMode`，以及可组合的 `batchId`、`businessUnitId`、`stationId` | `targetEmployees`、`createdTasks`、`createdAssignments` |
 
-培养计划新建后默认为草稿，至少编排一项任务才允许启用。培养计划编排任务标题、任务说明、成果要求、附件和执行顺序，不包含人员与截止时间；计划任务应在“任务下发”页面按需下发。已产生下发记录的计划只能停用，不能删除；已下发的计划任务也不能删除，以保证历史可追溯。目标人员不支持逐人指定，可按 `batchId`（批次）、`businessUnitId`（所属板块）、`stationId`（服务站）组合筛选 `ACTIVE` 员工；同时填写多个条件时按交集匹配。机动车和城轨属于板块基础数据，不作为服务站处理。`taskTitle` 可选，留空时使用每个计划任务的名称，填写后作为本次下发任务的统一名称。`deadlineMode` 支持：`OFFSET`（`baseDate + offsetDays`）和 `ABSOLUTE`（`deadlineDate`）；均在当日 `23:59:59` 截止。下发结果关联 `training_plan_task_id`，同一计划任务和截止日期会复用任务，避免重复分配。计划附件在下发时复制为任务附件快照，后续模板附件调整不会影响已下发任务。
+培养计划新建后默认为草稿，至少编排一项任务才允许启用。培养计划编排任务标题、任务说明、成果要求、附件和执行顺序，不包含人员与截止时间；计划任务应在“任务下发”页面按需下发。已产生下发记录的计划只能停用，不能删除；已下发的计划任务也不能删除，以保证历史可追溯。目标人员不支持逐人指定，可按 `batchId`（批次）、`businessUnitId`（所属板块）、`stationId`（服务站）组合筛选 `ACTIVE` 员工；同时填写多个条件时按交集匹配。机动车和城轨属于板块基础数据，不作为服务站处理。`taskTitle` 可选，留空时使用每个计划任务的名称，填写后作为本次下发任务的统一名称。`deadlineMode` 支持：`OFFSET`（`baseDate + offsetDays`）和 `ABSOLUTE`（`deadlineDate`）；均在当日 `23:59:59` 截止。下发结果关联 `training_plan_task_id`，同一计划任务和截止日期会复用任务，避免重复分配；复用任务已有不同评分人配置时拒绝静默覆盖，并提示到任务评分页面处理。计划附件在下发时复制为任务附件快照，后续模板附件调整不会影响已下发任务。
