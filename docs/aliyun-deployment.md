@@ -19,7 +19,17 @@
 | 网站合规页脚 | 已随 `main@d0fde6c2` 部署；登录页及登录后所有业务页面统一展示 `湘ICP备2026035229号-1`，并链接工信部备案系统 `https://beian.miit.gov.cn/`；公安备案号待审核完成后再加入，不展示占位号 |
 | CDN/ESA | `static.yryhx.cn` 已启用中国内地“图片小文件”CDN；源站为私有 ACL 的公共静态资源 OSS Bucket，同账号私有回源、HTTPS、HTTP→HTTPS、TLS 1.2/1.3、Gzip 和长期缓存均已验证；OSS 写入 `immutable`，CDN 可能规范化为不少于 30 天的 `max-age`；不启用 ESA 等非必要增值服务 |
 
-当前线上运行的应用功能基线为任务评分工作台 PR #34 合并提交 `2ffd548f5e67e9d99c3b0c8e248b067dfa69a3ca`。生产 JAR SHA-256 为 `89aab0f016b800364acf20f25c2865cac8aade984ab5d354c8476f08e4f68424`，Flyway 为 V36。候选 `/data/talent-platform/releases/staging/cdn-task-scoring-2ffd548f-20260829-1441` 已通过 `activate-cdn-release.sh` 激活；激活前 JAR 和环境回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260829144312-2774473/`，数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260829-144103.sql.gz`，其 SHA-256 为 `ba51135b79d20b017311fca0cb35d8ba9e8c3315310569fb77167965f5594530`。
+当前线上运行的应用功能基线为任务评分详情布局与员工筛选 PR #36 合并提交 `a3d1acbea688cfadef8f1f650b9ededcb7db0fe7`。生产 JAR SHA-256 为 `8333c304e98545c1a5d01d8269d76984c3d2f28e8e982974d00c796f782849d3`，Flyway 保持 V36。候选 `/data/talent-platform/releases/staging/cdn-task-scoring-layout-a3d1acbe-20260829-1552` 已通过 `activate-cdn-release.sh` 激活；激活前 JAR 和环境回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260829155409-2783710/`，数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260829-155223.sql.gz`，其 SHA-256 为 `e4d036b5a113e74df3f1ef8f9feaed610d74e7dad74a8aecc06f0abee67f0834`。
+
+### 2026-08-29 任务评分详情显示与员工筛选部署记录
+
+- GitHub：任务评分详情优化 PR [#36](https://github.com/Heart1ess1/talent-development-platform/pull/36) 已合并，功能提交为 `5c773e989334f3ff1fcbff7be54bc50008aa7c75`，合并后的生产基线为 `main@a3d1acbea688cfadef8f1f650b9ededcb7db0fe7`。
+- 功能范围：取消员工表格 560 px 固定高度，改由详情抽屉自然滚动；增加姓名、工号、班级、班级职务关键字搜索，以及班级、班级职务、提交状态和评分状态组合筛选；后端评分详情补充员工班级与班级职务字段。
+- 构建校验：前端 40 项测试、TypeScript 检查和 CDN 生产构建通过；后端 134 项测试及生产 JAR 打包通过。生产 JAR SHA-256 为 `8333c304e98545c1a5d01d8269d76984c3d2f28e8e982974d00c796f782849d3`。
+- 备份与回退：部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260829-155223.sql.gz`，SHA-256 为 `e4d036b5a113e74df3f1ef8f9feaed610d74e7dad74a8aecc06f0abee67f0834`；激活前回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260829155409-2783710/`，其中旧 JAR SHA-256 为 `89aab0f016b800364acf20f25c2865cac8aade984ab5d354c8476f08e4f68424`。
+- 发布材料：77 个静态资源已同步至公共资源 OSS；候选目录为 `/data/talent-platform/releases/staging/cdn-task-scoring-layout-a3d1acbe-20260829-1552`，CDN 主资源为 `https://static.yryhx.cn/assets/index-CnBXGK7H.js`。激活期间出现两次短暂 502，脚本重试后恢复 `UP`。
+- 生产校验：应用、MySQL 和 Nginx 容器正常；Flyway 保持 V36；`/task-scoring` 返回 200，未登录访问任务评分 API 返回 401；部署后日志未发现 `ERROR` 或 `Exception`；公网首页已引用新 CDN 主资源，任务评分分块返回 200 和 `max-age=31104000`，OSS 原始地址匿名访问返回 403，生产就绪检查为 `ready: true`。
+- 待人工复核：内置浏览器可以打开正式站点登录页，但没有已登录会话；需使用管理员或评分人账号进入任务评分详情，目视确认员工表格展示范围、抽屉滚动和组合筛选交互。
 
 ### 2026-08-29 任务评分人与独立评分工作台部署记录
 
