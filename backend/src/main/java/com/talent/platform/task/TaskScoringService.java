@@ -235,11 +235,15 @@ public class TaskScoringService {
 
   private List<Map<String, Object>> assignmentRows(Long taskId) {
     var rows = db.queryForList("""
-        select a.id,a.status,a.final_score,a.assigned_at,e.id employee_id,e.name employee_name,e.employee_no,
+        select a.id,a.status,a.final_score,a.assigned_at,
+          e.id employee_id,e.name employee_name,e.employee_no,
+          e.class_id,cls.label class_name,e.class_position_id,cp.label class_position_name,
           s.id submission_id,s.submission_version,s.content,s.status submission_status,s.submitted_at,s.score,
           (select count(*) from stored_file f where f.submission_id=s.id) file_count
         from task_assignment a
         join employee e on e.id=a.employee_id
+        left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS'
+        left join dictionary_item cp on cp.id=e.class_position_id and cp.type_code='CLASS_POSITION'
         left join task_submission s on s.id=(select s2.id from task_submission s2 where s2.assignment_id=a.id order by s2.submission_version desc limit 1)
         where a.task_id=? order by e.employee_no,e.id
         """, taskId);
