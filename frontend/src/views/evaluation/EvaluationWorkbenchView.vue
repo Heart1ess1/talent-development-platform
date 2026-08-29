@@ -15,7 +15,7 @@ const completion=computed(()=>overview.value.totalEmployees?Math.round(overview.
 const actions=computed(()=>[
   ...(canManage.value?[{title:'未分配评分人的任务',description:'先明确导师、站点或培训评分人，再开始本月评价',count:overview.value.unassignedRatingTasks,to:'/evaluation/assignments',icon:Setting}]:[]),
   {title:'待提交人工评分',description:'导师、站点或培训方评分尚未完成',count:overview.value.pendingManualScores,to:'/evaluation/monthly',icon:EditPen},
-  {title:'待审核任务成果',description:'先审核任务并给分，系统会自动进入月评',count:overview.value.pendingTaskReviews,to:'/training-plans/tracking?focus=pending-review',icon:Document},
+  {title:'待评分任务成果',description:'完成分配给你的任务评分，系统会自动进入月评',count:overview.value.pendingTaskReviews,to:'/task-scoring?status=MY_PENDING',icon:Document},
   {title:'遗留主观题阅卷',description:'历史主观题完成阅卷后等待考试结束自动下发',count:overview.value.pendingExamReviews,to:'/exams/results?focus=review',icon:List}
 ])
 

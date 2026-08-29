@@ -20,6 +20,7 @@ public class PermissionService {
   }
   public Set<String> permissions(String role){
     var p=new LinkedHashSet<String>();p.add(Permissions.EMPLOYEE_READ);p.add(Permissions.EVALUATION_VIEW);
+    if(!"EMPLOYEE".equals(role))p.add(Permissions.TASK_SCORE);
     if(List.of("MENTOR","STATION_MANAGER","TRAINING_ADMIN").contains(role))p.add(Permissions.EVALUATION_SUBMIT);
     if(List.of("TRAINING_ADMIN","ADMIN","SUPER_ADMIN").contains(role))p.addAll(List.of(Permissions.EMPLOYEE_UPDATE,Permissions.EMPLOYEE_EXPORT,Permissions.COURSE_MANAGE,Permissions.ATTENDANCE_MANAGE,Permissions.TASK_MANAGE,Permissions.TASK_REVIEW,Permissions.EVALUATION_MANAGE,Permissions.EXAM_MANAGE));
     if(List.of("ADMIN","SUPER_ADMIN").contains(role))p.addAll(List.of(Permissions.EMPLOYEE_WRITE,Permissions.USER_EMPLOYEE_MANAGE,Permissions.USER_OPS_ROLE_MANAGE,Permissions.MASTER_MANAGE,Permissions.AUDIT_READ));

@@ -20,6 +20,7 @@ const routes=[
     {path:'training-plans/manage',component:()=>import('@/views/TrainingPlanManagementView.vue'),meta:{permission:'task:manage'}},
     {path:'training-plans/tasks',component:()=>import('@/views/TrainingPlanTasksView.vue'),meta:{permission:'task:manage'}},
     {path:'training-plans/tracking',component:()=>import('@/views/TasksView.vue')},
+    {path:'task-scoring',component:()=>import('@/views/TaskScoringView.vue'),meta:{permission:'task:score'}},
     {path:'tasks',component:()=>import('@/views/TasksView.vue')},
     {path:'evaluation',redirect:()=>useAuthStore().user?.role==='EMPLOYEE'?'/evaluation/results':'/evaluation/workbench'},
     {path:'evaluation/workbench',component:()=>import('@/views/evaluation/EvaluationWorkbenchView.vue'),meta:{permission:'evaluation:view'}},

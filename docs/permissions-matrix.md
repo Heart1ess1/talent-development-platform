@@ -27,6 +27,7 @@
 | `attendance:manage` | 签到补录、签到导入 | 否 | 否 | 否 | 是 | 是 | 是 |
 | `task:manage` | 创建和分配闯关任务 | 否 | 否 | 否 | 是 | 是 | 是 |
 | `task:review` | 审核任务提交 | 否 | 否 | 否 | 是 | 是 | 是 |
+| `task:score` | 进入任务评分工作台；实际评分仍要求本人被配置为评分人 | 否 | 是 | 是 | 是 | 是 | 是 |
 | `evaluation:view` | 查看评价、汇总和评价页面 | 是 | 是 | 是 | 是 | 是 | 是 |
 | `evaluation:submit` | 提交角色对应的月度评价项 | 否 | 是 | 是 | 是 | 否 | 否 |
 | `evaluation:manage` | 评分方案、加扣分、汇总生成和发布 | 否 | 否 | 否 | 是 | 是 | 是 |
@@ -48,6 +49,8 @@
 - 评分人范围配置需要 `evaluation:manage`；全员、批次、板块规则只会选择与评分项角色匹配的启用账号，匹配优先级为板块、批次、全员，已发布月份保持锁定。
 - `EMPLOYEE` 的课程签到接口要求角色必须是 `EMPLOYEE`。
 - `EMPLOYEE` 的任务提交接口要求角色必须是 `EMPLOYEE`，且只能提交本人任务。
+- 任务评分人只能选择启用的非员工账号。`TRAINING_ADMIN`、`ADMIN`、`SUPER_ADMIN` 可以查看全部任务并配置评分人，但不能评分未分配给自己的任务；`MENTOR`、`STATION_MANAGER` 只可查看和评分分配给自己的任务。
+- `task:review` 仅为旧入口兼容权限，不能绕过任务评分人绑定；新旧评分接口统一按 `task:score` 和 `task_reviewer` 关系校验。
 - 员工开考和考试答题要求角色必须是 `EMPLOYEE`，且考试已发布、在开放时间内、本人已被分配且次数未用完。
 - 考试答卷查看允许 `exam:manage` 用户查看；否则只允许考生本人查看。
 - 月度评价明细 `/evaluation/monthly/detail` 不允许 `EMPLOYEE` 直接查看，员工只能查看已发布结果。
@@ -79,7 +82,8 @@
 | 培养计划 / 计划管理 | `/training-plans/manage` | 需要 `task:manage`；维护计划信息、复制、启停与删除。 |
 | 培养计划 / 任务编排 | `/training-plans/tasks` | 需要 `task:manage`；维护任务内容、附件与执行顺序。旧地址 `/training-plans` 自动跳转到计划管理。 |
 | 培养计划 / 任务下发 | `/tasks` | 管理侧需要 `task:manage`；员工侧显示“我的任务”，只访问本人任务。 |
-| 培养计划 / 任务跟踪 | `/training-plans/tracking` | 已登录，按员工数据范围查询任务执行情况；审核操作额外需要 `task:review`。 |
+| 培养计划 / 任务跟踪 | `/training-plans/tracking` | 已登录，按员工数据范围查询任务执行情况；评分人、评分进度和最终分数均为只读信息。 |
+| 培养计划 / 任务评分 | `/task-scoring` | `task:score`；全局评分管理角色查看全部任务，导师和服务站负责人只查看本人评分任务，评分操作还必须校验本人被分配。 |
 | 综合评价 / 评价工作台 | `/evaluation/workbench` | `evaluation:view`；员工自动转到“我的评价”。 |
 | 综合评价 / 评分任务 | `/evaluation/assignments` | `evaluation:manage`；选择导师/站点/培训任务，按全员、批次或板块统一配置多名评分人并查询覆盖进度。 |
 | 综合评价 / 评分任务详情 | `/evaluation/assignments/:id` | `evaluation:manage`；只读查看员工任务的匹配依据、每位评分人的提交和个人分数。 |

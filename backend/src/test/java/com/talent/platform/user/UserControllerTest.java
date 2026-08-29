@@ -33,6 +33,14 @@ class UserControllerTest {
     verify(db).update(eq("update sys_user set role=?,version=version+1,security_version=security_version+1 where id=?"),eq("EMPLOYEE"),eq(2L));
   }
 
+  @Test void accountWithUnfinishedScoringTaskCannotBeDisabled(){
+    authenticate("SUPER_ADMIN");
+    when(db.queryForObject(eq("select role from sys_user where id=?"),eq(String.class),eq(3L))).thenReturn("MENTOR");
+    when(db.queryForObject(contains("from task_reviewer tr"),eq(Integer.class),eq(3L))).thenReturn(1);
+    assertThatThrownBy(()->controller.enabled(3L,new UserController.EnableRequest(false)))
+        .isInstanceOf(BusinessException.class).hasMessageContaining("未完成的任务评分");
+  }
+
   @Test void accountWithoutEmployeeProfileCannotBecomeEmployeeRole(){
     authenticate("SUPER_ADMIN");
     when(db.queryForObject(eq("select role from sys_user where id=?"),eq(String.class),eq(2L))).thenReturn("MENTOR");

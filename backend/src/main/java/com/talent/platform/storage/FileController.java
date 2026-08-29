@@ -1,6 +1,6 @@
 package com.talent.platform.storage;
 
-import com.talent.platform.security.PermissionService;
+import com.talent.platform.task.TaskScoringService;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -20,24 +20,24 @@ import java.time.Duration;
 public class FileController {
   private final JdbcTemplate db;
   private final FileStorageService storage;
-  private final PermissionService permissions;
+  private final TaskScoringService scoring;
 
-  public FileController(JdbcTemplate db, FileStorageService storage, PermissionService permissions) {
+  public FileController(JdbcTemplate db, FileStorageService storage, TaskScoringService scoring) {
     this.db = db;
     this.storage = storage;
-    this.permissions = permissions;
+    this.scoring = scoring;
   }
 
   @GetMapping("/{id}")
   public ResponseEntity<?> download(@PathVariable Long id) {
     var file = db.queryForMap("""
-        select f.*,a.employee_id
+        select f.*,a.employee_id,s.id submission_id
         from stored_file f
         join task_submission s on s.id=f.submission_id
         join task_assignment a on a.id=s.assignment_id
         where f.id=?
         """, id);
-    permissions.requireEmployee(((Number) file.get("employee_id")).longValue());
+    scoring.requireSubmissionRead(((Number) file.get("submission_id")).longValue());
     String name = String.valueOf(file.get("original_name"));
     Object rawContentType = file.get("content_type");
     String contentType = rawContentType == null

@@ -44,7 +44,7 @@ function editable(component:ScoreComponent){
   if(component.code!=='TRAINING')return true
   return component.canEvaluate===true||(component.requiredCount===1&&!component.breakdown?.length)
 }
-function jump(component:ScoreComponent){router.push(component.code==='EXAM'?'/exams/results':'/training-plans/tracking?focus=pending-review')}
+function jump(component:ScoreComponent){router.push(component.code==='EXAM'?'/exams/results':'/task-scoring?status=MY_PENDING')}
 function candidateProgress(row:Candidate){return row.enabledCount?Math.round(row.completedCount*100/row.enabledCount):0}
 function chooseCandidate(id:number){selected.value=id}
 
