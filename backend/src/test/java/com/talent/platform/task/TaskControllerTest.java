@@ -29,6 +29,7 @@ class TaskControllerTest {
   private PermissionService permissions;
   private TaskStatusService taskStatus;
   private TaskScoringService scoring;
+  private TaskReviewerScopeService reviewerScopes;
   private TaskController controller;
 
   @BeforeEach
@@ -38,9 +39,10 @@ class TaskControllerTest {
     permissions = mock(PermissionService.class);
     taskStatus = mock(TaskStatusService.class);
     scoring = mock(TaskScoringService.class);
+    reviewerScopes = mock(TaskReviewerScopeService.class);
     controller = new TaskController(
         db, storage, permissions, mock(AuditService.class), taskStatus,
-        mock(TaskAttachmentService.class), mock(UploadTicketService.class), scoring);
+        mock(TaskAttachmentService.class), mock(UploadTicketService.class), scoring, reviewerScopes);
     var user = new CurrentUser(7L, "admin", "Admin", "TRAINING_ADMIN", false, 1,
         Set.of(Permissions.TASK_MANAGE), "ALL");
     SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
@@ -281,7 +283,8 @@ class TaskControllerTest {
         null,
         3L,
         null,
-        List.of());
+        List.of(),
+        null);
 
     var result = controller.previewPlanDispatch(request).data();
 

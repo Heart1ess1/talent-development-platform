@@ -107,8 +107,9 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | 文件 | 职责 |
 | --- | --- |
 | `task/TaskController.java` | 任务 CRUD、手动/培养计划下发、下发预览、任务附件、分配进度、员工带附件提交和提交历史；兼容审核入口统一委托任务评分服务。 |
-| `task/TaskScoringController.java` | 任务评分候选人、工作台、详情、评分人配置、本人评分和管理员重置接口。 |
-| `task/TaskScoringService.java` | 任务评分核心规则：范围授权、评分人快照、名单锁定、退回结束、多评分人平均分、同轮信息隐藏和发布后重置限制。 |
+| `task/TaskScoringController.java` | 任务评分候选人、工作台、详情、评分范围查询/预览/整套保存、本人评分和管理员重置接口。 |
+| `task/TaskScoringService.java` | 任务评分核心规则：按员工所属范围授权、退回结束、多评分人平均分、同轮信息隐藏和发布后重置限制。 |
+| `task/TaskReviewerScopeService.java` | 批次/板块/班级交集匹配、全量覆盖与重叠校验、逐范围锁定、评分人同步、历史统一评分兼容和下发范围预览。 |
 | `task/TaskAttachmentService.java` | 任务资料上传、列表、删除、共享存储引用，以及计划任务附件在下发时生成独立快照。 |
 | `task/TaskStatusService.java` | 在启动、任务变动后计算最近截止时间并安排定时任务；把逾期未提交分配固化为 `OVERDUE` 和 0 分。 |
 | `task/TaskSchedulingConfiguration.java` | 提供任务状态服务使用的 Spring `TaskScheduler`。 |
