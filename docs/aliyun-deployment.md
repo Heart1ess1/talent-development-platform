@@ -19,7 +19,18 @@
 | 网站合规页脚 | 已随 `main@d0fde6c2` 部署；登录页及登录后所有业务页面统一展示 `湘ICP备2026035229号-1`，并链接工信部备案系统 `https://beian.miit.gov.cn/`；公安备案号待审核完成后再加入，不展示占位号 |
 | CDN/ESA | `static.yryhx.cn` 已启用中国内地“图片小文件”CDN；源站为私有 ACL 的公共静态资源 OSS Bucket，同账号私有回源、HTTPS、HTTP→HTTPS、TLS 1.2/1.3、Gzip 和长期缓存均已验证；OSS 写入 `immutable`，CDN 可能规范化为不少于 30 天的 `max-age`；不启用 ESA 等非必要增值服务 |
 
-当前线上运行的应用功能基线为任务评分范围 PR #40 合并提交 `6870f8c2551dd85b8d961f5eb2da3b17914e88b1`。生产 JAR SHA-256 为 `b1b3ef556aadd2aba7845b4951b2ef888e7acad932c89a435805cf8c3d921863`，Flyway 已升级至 V37。候选 `/data/talent-platform/releases/staging/cdn-6870f8c2-20260902-1553` 已通过 `activate-cdn-release.sh` 激活；激活前 JAR 和环境回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260902155659-3433074/`，部署前数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260902-155238.sql.gz`，其 SHA-256 为 `07e7af16d600db0a5c2634621afee756f484377f58d506c169c8d4dec69e8ef1`。
+当前线上运行的应用功能基线为任务评分详情布局 PR #42 合并提交 `ce09edcd1770439a3492f50fdfbcbc48380b586c`。生产 JAR SHA-256 为 `29e7259eb03462515ad1933e309cb9cb77594ebf23b2a58ddc20555e201755e1`，Flyway 保持 V37。候选 `/data/talent-platform/releases/staging/cdn-ce09edcd-20260902-1640` 已通过 `activate-cdn-release.sh` 激活；激活前 JAR 和环境回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260902164657-3439939/`，部署前数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260902-164057.sql.gz`，其 SHA-256 为 `4b63416ba31249edc3c18e7169f2a095f51eb5a407fda28015bad109d2741c58`。
+
+### 2026-09-02 任务评分详情宽度与员工归属列调整部署记录
+
+- GitHub：任务评分详情布局 PR [#42](https://github.com/Heart1ess1/talent-development-platform/pull/42) 已合并，功能提交为 `96d04dee`，合并后的生产基线为 `main@ce09edcd1770439a3492f50fdfbcbc48380b586c`。
+- 功能范围：任务评分详情抽屉由 `min(1120px, 96vw)` 加宽为 `min(1400px, 98vw)`，改善右侧操作列和员工表格显示；员工表格将原“班级 / 职务”“评分范围”拆分为“批次、板块、班级、评分人”四列，便于直接核对每名员工的归属和评分责任。
+- 构建校验：前端 43 项测试、TypeScript 检查和 CDN 生产构建通过；后端 138 项测试及生产 JAR 打包通过。生产 JAR SHA-256 为 `29e7259eb03462515ad1933e309cb9cb77594ebf23b2a58ddc20555e201755e1`。
+- 备份与回退：部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260902-164057.sql.gz`，SHA-256 为 `4b63416ba31249edc3c18e7169f2a095f51eb5a407fda28015bad109d2741c58`；激活前回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260902164657-3439939/`。
+- 发布材料：79 个静态资源已同步至公共资源 OSS；候选目录为 `/data/talent-platform/releases/staging/cdn-ce09edcd-20260902-1640`，CDN 主资源为 `https://static.yryhx.cn/assets/index-C1U3_6zU.js`。激活期间出现三次短暂 502，脚本重试后恢复 `UP`。
+- 数据复核：Flyway 保持 V37，任务 12 仍由两条范围完整覆盖 66 人且无空范围；陈立青负责 `2025 / 机动车板块 / 机动车班` 36 人，原 30 条已完成评分完整保留；朱小红负责 `2025 / 城轨板块 / 城轨班` 30 人，并在本次发布前后实际完成 4 条评分，当前剩余 26 条待评分。范围匹配、评分记录范围和评分人成员一致性错误均为 0。
+- 生产校验：应用、MySQL 和 Nginx 容器正常，健康状态 `UP`；新 CDN 主资源返回 200、`text/javascript` 和 `max-age=31104000`，OSS 原始地址匿名访问返回 403，未登录评分范围接口返回 401，生产就绪检查为 `ready: true`，部署后日志未发现 `ERROR` 或 `Exception`。
+- 待人工复核：本次已完成代码、构建、接口、数据和生产运行验收；登录后的弹窗宽度及四列视觉效果仍需使用真实管理员或评分人账号目视确认。
 
 ### 2026-09-02 任务评分范围与平均分排序部署记录
 
