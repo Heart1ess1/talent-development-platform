@@ -6,6 +6,8 @@ export interface TaskScoringEmployeeFilters {
   scoringStatus:string
 }
 
+export type TaskScoreSortOrder='ascending'|'descending'|null
+
 export function assignmentScoringState(row:any){
   if(row.status==='PENDING_REVIEW'&&!Number(row.reviewerCount))return 'UNASSIGNED'
   if(row.status==='PENDING_REVIEW')return 'PENDING'
@@ -23,6 +25,18 @@ export function filterTaskScoringEmployees(rows:any[],filters:TaskScoringEmploye
       && (!filters.businessUnitId||String(row.business_unit_id)===String(filters.businessUnitId))
       && (!filters.classId||String(row.class_id)===String(filters.classId))
       && (!filters.scoringStatus||assignmentScoringState(row)===filters.scoringStatus)
+  })
+}
+
+export function sortTaskScoringEmployees(rows:any[],order:TaskScoreSortOrder){
+  if(!order)return [...rows]
+  return [...rows].sort((left,right)=>{
+    const leftScore=left.final_score===null||left.final_score===undefined||left.final_score===''?null:Number(left.final_score)
+    const rightScore=right.final_score===null||right.final_score===undefined||right.final_score===''?null:Number(right.final_score)
+    if(leftScore===null&&rightScore===null)return 0
+    if(leftScore===null)return 1
+    if(rightScore===null)return -1
+    return order==='descending'?rightScore-leftScore:leftScore-rightScore
   })
 }
 

@@ -21,8 +21,10 @@ import {
 import {api, type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import TaskAttachmentsPanel from '@/components/TaskAttachmentsPanel.vue'
+import TaskReviewerScopeEditor from '@/components/TaskReviewerScopeEditor.vue'
 import {abandonUploadTickets,createUploadTicket,storageCapabilities,uploadWithStorageFallback} from '@/storageTransfer'
 import {loadDictionaryValues, loadEnabledBusinessUnits, type DictionaryOption} from '@/utils/masterData'
+import {reviewerScopePayload,type ReviewerScopeDraft,type ReviewerScopeMode} from '@/types/taskReviewerScope'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -79,6 +81,9 @@ const dispatchPreview = reactive<any>({
   deadline: '',
   taskTitles: []
 })
+const planReviewerMode=ref<ReviewerScopeMode>('NONE'),manualReviewerMode=ref<ReviewerScopeMode>('NONE')
+const planReviewerScopes=ref<ReviewerScopeDraft[]>([]),manualReviewerScopes=ref<ReviewerScopeDraft[]>([])
+const planScopePreview=ref<any>(),manualScopePreview=ref<any>()
 
 const manualDispatch = reactive<any>({title: '', description: '', requirements: '', deadline: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null, reviewerIds: []})
 const dispatch = reactive<any>({planTaskIds: [], taskTitle: '', deadlineMode: 'OFFSET', baseDate: new Date().toISOString().slice(0, 10), offsetDays: 7, deadlineDate: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null, reviewerIds: []})
@@ -138,6 +143,11 @@ function submissionErrorMessage(error:any){
 function reviewerNames(ids:any[]){
   if(!ids?.length)return '暂不设置，后续可在任务评分页面配置'
   return ids.map(id=>reviewerOptions.value.find(item=>item.id===id)?.display_name).filter(Boolean).join('、')
+}
+function reviewerScopeSummary(mode:ReviewerScopeMode,scopes:ReviewerScopeDraft[]){
+  if(mode==='NONE')return '暂不配置，后续可在任务评分页面设置'
+  const reviewers=new Set(scopes.flatMap(item=>item.reviewerIds))
+  return mode==='UNIFORM'?`统一评分人（${reviewers.size} 人）`:`${scopes.length} 个评分范围 / ${reviewers.size} 名评分人`
 }
 
 function employeeTaskStatusLabel(row:any){
@@ -269,6 +279,9 @@ async function loadPlanTasks() {
 
 async function dispatchManualTask() {
   if (!manualDispatchReady.value) return ElMessage.warning('请完整填写任务、截止时间和下发对象')
+  const previewResponse=await api.post<any,Envelope<any>>('/tasks/dispatch-manual/preview',manualDispatchPayload())
+  manualScopePreview.value=previewResponse.data.scopePreview
+  if(manualReviewerMode.value!=='NONE'&&!manualScopePreview.value.valid)return ElMessage.warning('评分范围存在未覆盖或重叠员工，请先调整')
   await ElMessageBox.confirm(
     `确认下发临时任务“${manualDispatch.title}”？系统将按所选批次、班级、板块和服务站组合筛选在职员工。`,
     '确认下发任务',
@@ -276,7 +289,7 @@ async function dispatchManualTask() {
   )
   dispatching.value = true
   try {
-    const response = await api.post<any, Envelope<any>>('/tasks/dispatch-manual', manualDispatch)
+    const response = await api.post<any, Envelope<any>>('/tasks/dispatch-manual', manualDispatchPayload())
     for(const item of manualFiles.value){
       const uploadUrl=`/tasks/${response.data.taskId}/attachments`
       await uploadWithStorageFallback({
@@ -288,6 +301,7 @@ async function dispatchManualTask() {
     }
     ElMessage.success(`任务已下发给 ${response.data.assignedEmployees} 人${manualFiles.value.length?`，并上传 ${manualFiles.value.length} 个附件`:''}`)
     Object.assign(manualDispatch, {title: '', description: '', requirements: '', deadline: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null, reviewerIds: []})
+    manualReviewerMode.value='NONE';manualReviewerScopes.value=[];manualScopePreview.value=undefined
     manualFiles.value=[]
     await load()
     router.push('/training-plans/tracking')
@@ -296,8 +310,14 @@ async function dispatchManualTask() {
   }
 }
 
+function manualDispatchPayload(){return {...manualDispatch,reviewerIds:undefined,reviewerScopes:reviewerScopePayload(manualReviewerScopes.value)}}
+async function previewManualReviewerScopes(){
+  if(!hasManualTarget.value)return ElMessage.warning('请先选择下发对象')
+  manualScopePreview.value=(await api.post<any,Envelope<any>>('/tasks/dispatch-manual/preview',manualDispatchPayload())).data.scopePreview
+}
+
 function planDispatchPayload() {
-  return {...dispatch, planId: selectedPlanId.value}
+  return {...dispatch,reviewerIds:undefined,reviewerScopes:reviewerScopePayload(planReviewerScopes.value), planId: selectedPlanId.value}
 }
 
 async function previewPlanDispatch() {
@@ -306,6 +326,7 @@ async function previewPlanDispatch() {
   try {
     const response = await api.post<any, Envelope<any>>('/tasks/dispatch-plan/preview', planDispatchPayload())
     Object.assign(dispatchPreview, response.data)
+    planScopePreview.value=response.data.scopePreview
     previewOpen.value = true
   } finally {
     dispatchPreviewLoading.value = false
@@ -321,12 +342,18 @@ async function dispatchPlanTasks() {
     ElMessage.success(`已向 ${response.data.targetEmployees} 人下发，新增 ${response.data.createdAssignments} 项任务分配`)
     dispatch.planTaskIds = []
     dispatch.taskTitle = ''
+    planReviewerMode.value='NONE';planReviewerScopes.value=[];planScopePreview.value=undefined
     await load()
     router.push('/training-plans/tracking')
   } finally {
     dispatching.value = false
   }
 }
+
+watch(planReviewerScopes,()=>{planScopePreview.value=undefined},{deep:true})
+watch(manualReviewerScopes,()=>{manualScopePreview.value=undefined},{deep:true})
+watch(()=>[dispatch.batchId,dispatch.classId,dispatch.classPositionId,dispatch.businessUnitId,dispatch.stationId],()=>{planScopePreview.value=undefined})
+watch(()=>[manualDispatch.batchId,manualDispatch.classId,manualDispatch.classPositionId,manualDispatch.businessUnitId,manualDispatch.stationId],()=>{manualScopePreview.value=undefined})
 
 async function open(row: any, mode: 'SUBMIT' | 'RESUBMIT' | 'VIEW') {
   selected.value = row
@@ -714,10 +741,8 @@ onMounted(async () => {
           </article>
 
           <article class="dispatch-step">
-            <div class="step-heading"><span>3</span><div><h3>选择评分人（可选）</h3><p>可选择多名非员工账号，全部通过后取平均分；也可下发后再配置</p></div></div>
-            <el-select v-model="dispatch.reviewerIds" multiple filterable collapse-tags collapse-tags-tooltip placeholder="暂不设置评分人" style="width:100%">
-              <el-option v-for="item in reviewerOptions" :key="item.id" :label="`${item.display_name}（${item.role}）`" :value="item.id"/>
-            </el-select>
+            <div class="step-heading"><span>3</span><div><h3>配置评分范围（可选）</h3><p>可统一设置，也可按批次、板块和班级的交集分别设置评分人</p></div></div>
+            <TaskReviewerScopeEditor v-model:mode="planReviewerMode" v-model="planReviewerScopes" :reviewer-options="reviewerOptions" :batches="batches" :business-units="businessUnits" :class-options="classOptions" :preview="planScopePreview" @preview="previewPlanDispatch"/>
           </article>
 
           <article class="dispatch-step">
@@ -749,7 +774,7 @@ onMounted(async () => {
             <div><dt>培养计划</dt><dd>{{selectedPlan?.name||'未选择'}}</dd></div>
             <div><dt>任务数量</dt><dd>{{selectedPlanTasks.length}} 项</dd></div>
             <div><dt>下发对象</dt><dd>{{targetDescription}}</dd></div>
-            <div><dt>评分人</dt><dd>{{reviewerNames(dispatch.reviewerIds)}}</dd></div>
+            <div><dt>评分配置</dt><dd>{{reviewerScopeSummary(planReviewerMode,planReviewerScopes)}}</dd></div>
           </dl>
           <el-button type="primary" size="large" :loading="dispatchPreviewLoading" :disabled="!planDispatchReady" @click="previewPlanDispatch">预览并确认</el-button>
           <span class="safe-note">预览不会创建任务，可返回继续调整</span>
@@ -779,7 +804,7 @@ onMounted(async () => {
           <el-select v-model="manualDispatch.classPositionId" clearable filterable placeholder="按班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
           <el-select v-model="manualDispatch.businessUnitId" clearable filterable placeholder="按板块"><el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/></el-select>
           <el-select v-model="manualDispatch.stationId" clearable filterable placeholder="按服务站"><el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/></el-select>
-          <el-select v-model="manualDispatch.reviewerIds" multiple filterable collapse-tags collapse-tags-tooltip placeholder="评分人（可选，可下发后配置）"><el-option v-for="item in reviewerOptions" :key="item.id" :label="`${item.display_name}（${item.role}）`" :value="item.id"/></el-select>
+          <div class="manual-scope-editor"><strong>评分范围（可选）</strong><TaskReviewerScopeEditor v-model:mode="manualReviewerMode" v-model="manualReviewerScopes" :reviewer-options="reviewerOptions" :batches="batches" :business-units="businessUnits" :class-options="classOptions" :preview="manualScopePreview" @preview="previewManualReviewerScopes"/></div>
           <el-button type="primary" size="large" :loading="dispatching" :disabled="!manualDispatchReady" @click="dispatchManualTask">确认下发临时任务</el-button>
         </div>
       </div>
@@ -800,7 +825,7 @@ onMounted(async () => {
             <template #default="{row}"><div class="task-name-cell"><strong @click="openTaskDetail(row)">{{row.title}}</strong><span>截止 {{formatDate(row.deadline)}}</span><TaskAttachmentsPanel v-if="row.attachments?.length" compact :items="row.attachments"/></div></template>
           </el-table-column>
           <el-table-column label="执行进度" min-width="210"><template #default="{row}"><div class="progress-cell"><strong>{{row.approved_count}} / {{row.assigned_count}} 完成</strong><el-progress :percentage="Number(row.assigned_count)?Math.round(Number(row.approved_count)/Number(row.assigned_count)*100):0" :stroke-width="6" :show-text="false"/><span>{{row.submitted_count}} 项已提交</span></div></template></el-table-column>
-          <el-table-column label="评分人" min-width="160"><template #default="{row}">{{row.reviewer_names||'待分配'}}</template></el-table-column>
+          <el-table-column label="评分范围" min-width="190"><template #default="{row}"><span v-if="row.reviewer_scope_count">{{row.reviewer_scope_count}} 个范围 / {{row.reviewer_count}} 名评分人</span><span v-else>待分配</span><br><small v-if="row.reviewer_names">{{row.reviewer_names}}</small></template></el-table-column>
           <el-table-column label="状态" width="105"><template #default="{row}"><el-tag :type="managerTaskStateType(row)">{{managerTaskStateLabel(row)}}</el-tag></template></el-table-column>
           <el-table-column label="操作" width="270" fixed="right"><template #default="{row}"><div class="task-actions"><el-button size="small" text @click="openTaskDetail(row)">详情</el-button><el-button size="small" text type="primary" @click="showTaskProgress(row)">员工进度</el-button><el-button v-if="canManage" size="small" text type="danger" @click="deleteTask(row)">删除</el-button></div></template></el-table-column>
         </el-table>
@@ -829,10 +854,11 @@ onMounted(async () => {
         <el-descriptions-item label="培养计划">{{selectedPlan?.name}}</el-descriptions-item>
         <el-descriptions-item label="截止时间">{{formatDate(dispatchPreview.deadline)}}</el-descriptions-item>
         <el-descriptions-item label="任务内容">{{dispatchPreview.taskTitles?.join('、')}}</el-descriptions-item>
-        <el-descriptions-item label="评分人">{{reviewerNames(dispatchPreview.reviewerIds||[])}}</el-descriptions-item>
+        <el-descriptions-item label="评分配置">{{reviewerScopeSummary(planReviewerMode,planReviewerScopes)}}</el-descriptions-item>
+        <el-descriptions-item v-if="planReviewerMode!=='NONE'" label="覆盖校验">已覆盖 {{dispatchPreview.scopePreview?.coveredEmployees||0}} / {{dispatchPreview.scopePreview?.targetEmployees||0}} 人；未覆盖 {{dispatchPreview.scopePreview?.uncoveredEmployees||0}} 人；重叠 {{dispatchPreview.scopePreview?.overlappingEmployees||0}} 人</el-descriptions-item>
         <el-descriptions-item label="附件策略">计划附件将生成任务快照，后续模板调整不影响本次下发</el-descriptions-item>
       </el-descriptions>
-      <template #footer><el-button @click="previewOpen=false">返回调整</el-button><el-button type="primary" :loading="dispatching" @click="dispatchPlanTasks">确认下发</el-button></template>
+      <template #footer><el-button @click="previewOpen=false">返回调整</el-button><el-button type="primary" :loading="dispatching" :disabled="planReviewerMode!=='NONE'&&!dispatchPreview.scopePreview?.valid" @click="dispatchPlanTasks">确认下发</el-button></template>
     </el-dialog>
 
     <el-dialog
@@ -1009,7 +1035,7 @@ onMounted(async () => {
 .plan-task-options{display:flex;flex-direction:column;gap:7px;margin-bottom:14px}.plan-task-option{display:flex;align-items:flex-start;gap:9px;padding:11px 12px;border:1px solid #e3e8ef;border-radius:9px;cursor:pointer;transition:.15s}.plan-task-option:hover,.plan-task-option.selected{border-color:#9dc6ed;background:#f7fbff}.plan-task-index{display:grid;flex:0 0 30px;height:30px;place-items:center;border-radius:8px;color:#397bbd;background:#eaf4ff;font-size:11px;font-weight:700}.plan-task-copy{display:flex;min-width:0;flex:1;flex-direction:column;gap:4px}.plan-task-copy strong{color:#344054;font-size:13px}.plan-task-copy small{overflow:hidden;color:#8c96a7;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.dispatch-empty{padding:28px;text-align:center;color:#9aa4b2;font-size:12px}
 .deadline-grid,.target-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.field-note{margin:10px 0 0;color:#8994a5;font-size:11px}
 .dispatch-review{position:sticky;top:18px;display:flex;min-height:380px;align-items:stretch;flex-direction:column;padding:25px 20px;border-left:1px solid #e8ecf2;background:linear-gradient(180deg,#f8fbff,#fff)}.review-icon{display:grid;width:46px;height:46px;place-items:center;border-radius:12px;color:#347cc5;background:#e8f3ff;font-size:22px}.dispatch-review h3{margin:13px 0 18px;font-size:15px}.dispatch-review dl{display:flex;flex:1;flex-direction:column;gap:14px;margin:0}.dispatch-review dl div{display:flex;flex-direction:column;gap:4px}.dispatch-review dt{color:#909aaa;font-size:11px}.dispatch-review dd{margin:0;color:#455166;font-size:12px;line-height:1.55}.safe-note{margin-top:9px;text-align:center;color:#9aa3b0;font-size:10px}
-.manual-workspace{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(260px,.75fr);gap:0}.manual-form,.manual-target{display:flex;flex-direction:column;gap:12px;padding:22px}.manual-target{border-left:1px solid #e8ecf2;background:#fafcff}.manual-title-grid{display:grid;grid-template-columns:1fr 240px;gap:10px}.manual-upload{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:13px;border:1px dashed #d4dde8;border-radius:9px;background:#fafcff}.manual-upload>div{display:flex;flex-direction:column;gap:4px}.manual-upload strong{font-size:12px}.manual-upload span{color:#929cab;font-size:10px}
+.manual-workspace{display:grid;grid-template-columns:1fr;gap:0}.manual-form,.manual-target{display:flex;flex-direction:column;gap:12px;padding:22px}.manual-target{border-top:1px solid #e8ecf2;background:#fafcff}.manual-title-grid{display:grid;grid-template-columns:1fr 240px;gap:10px}.manual-upload{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:13px;border:1px dashed #d4dde8;border-radius:9px;background:#fafcff}.manual-upload>div{display:flex;flex-direction:column;gap:4px}.manual-upload strong{font-size:12px}.manual-upload span{color:#929cab;font-size:10px}.manual-scope-editor{display:grid;gap:9px;padding:14px;border:1px solid #e3e9f0;border-radius:9px;background:#fff}.manual-scope-editor>strong{font-size:13px}
 .pending-section{margin-bottom:16px}.task-filter-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #edf0f4}.task-filter-bar .el-input{max-width:360px}.task-name-cell{display:flex;min-width:0;flex-direction:column;gap:5px;padding:3px 0}.task-name-cell>strong{overflow:hidden;color:#326fae;font-size:13px;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.task-name-cell>strong:hover{text-decoration:underline}.task-name-cell>span{overflow:hidden;color:#939dac;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.progress-cell{display:flex;flex-direction:column;gap:5px}.progress-cell strong{font-size:12px}.progress-cell span{color:#939dac;font-size:10px}.task-actions{display:flex;min-height:32px;align-items:center;gap:6px;white-space:nowrap}.task-actions .el-button{min-width:50px;margin:0;padding:6px 9px}
 .dispatch-preview-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:16px}.dispatch-preview-summary span{display:flex;align-items:baseline;justify-content:center;gap:5px;padding:13px;border-radius:9px;color:#738093;background:#f5f8fb;font-size:11px}.dispatch-preview-summary strong{color:#347cc5;font-size:21px}
 .form-stack{display:grid;gap:14px}.task-detail-form{padding:4px 0 18px}.pre-wrap{white-space:pre-wrap}.submission-heading{margin-bottom:8px;color:var(--el-text-color-regular);font-weight:600}.submission-content{margin:0 0 16px;white-space:pre-wrap}.review-panel{display:grid;gap:16px;margin-top:20px}.review-field{display:flex;min-height:32px;align-items:center;gap:14px}.review-label{width:64px;color:var(--el-text-color-regular)}.review-score{width:160px}.review-unit{color:var(--el-text-color-secondary)}

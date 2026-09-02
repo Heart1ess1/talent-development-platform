@@ -36,7 +36,7 @@ class UserControllerTest {
   @Test void accountWithUnfinishedScoringTaskCannotBeDisabled(){
     authenticate("SUPER_ADMIN");
     when(db.queryForObject(eq("select role from sys_user where id=?"),eq(String.class),eq(3L))).thenReturn("MENTOR");
-    when(db.queryForObject(contains("from task_reviewer tr"),eq(Integer.class),eq(3L))).thenReturn(1);
+    when(db.queryForObject(contains("from task_reviewer_scope_member"),eq(Integer.class),eq(3L))).thenReturn(1);
     assertThatThrownBy(()->controller.enabled(3L,new UserController.EnableRequest(false)))
         .isInstanceOf(BusinessException.class).hasMessageContaining("未完成的任务评分");
   }

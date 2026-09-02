@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest'
-import {assignmentScoringState,filterTaskScoringEmployees,taskScoringFilterOptions,type TaskScoringEmployeeFilters} from './taskScoringFilters'
+import {assignmentScoringState,filterTaskScoringEmployees,sortTaskScoringEmployees,taskScoringFilterOptions,type TaskScoringEmployeeFilters} from './taskScoringFilters'
 
 const rows=[
   {employee_name:'张三',employee_no:'001',batch_id:25,batch_name:'2025届',business_unit_id:10,business_unit_name:'制造板块',class_id:1,class_name:'一班',status:'NOT_SUBMITTED',reviewerCount:2},
@@ -24,5 +24,18 @@ describe('task scoring employee filters',()=>{
     expect(taskScoringFilterOptions(rows,'batch_id','batch_name')).toEqual([{id:25,label:'2025届'},{id:26,label:'2026届'}])
     expect(taskScoringFilterOptions(rows,'business_unit_id','business_unit_name')).toEqual([{id:10,label:'制造板块'},{id:20,label:'售后板块'}])
     expect(taskScoringFilterOptions(rows,'class_id','class_name')).toEqual([{id:1,label:'一班'},{id:2,label:'二班'}])
+  })
+
+  it('sorts final scores in descending, ascending and default order',()=>{
+    const scoredRows=[
+      {employee_no:'001',final_score:80},
+      {employee_no:'002',final_score:null},
+      {employee_no:'003',final_score:'90'},
+      {employee_no:'004',final_score:80}
+    ]
+    expect(sortTaskScoringEmployees(scoredRows,'descending').map(row=>row.employee_no)).toEqual(['003','001','004','002'])
+    expect(sortTaskScoringEmployees(scoredRows,'ascending').map(row=>row.employee_no)).toEqual(['001','004','003','002'])
+    expect(sortTaskScoringEmployees(scoredRows,null).map(row=>row.employee_no)).toEqual(['001','002','003','004'])
+    expect(scoredRows.map(row=>row.employee_no)).toEqual(['001','002','003','004'])
   })
 })

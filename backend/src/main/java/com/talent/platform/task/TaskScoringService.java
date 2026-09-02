@@ -23,11 +23,14 @@ public class TaskScoringService {
   private final JdbcTemplate db;
   private final PermissionService permissions;
   private final AuditService audit;
+  private final TaskReviewerScopeService reviewerScopes;
 
-  public TaskScoringService(JdbcTemplate db, PermissionService permissions, AuditService audit) {
+  public TaskScoringService(JdbcTemplate db, PermissionService permissions, AuditService audit,
+                            TaskReviewerScopeService reviewerScopes) {
     this.db = db;
     this.permissions = permissions;
     this.audit = audit;
+    this.reviewerScopes = reviewerScopes;
   }
 
   public boolean isGlobalViewer() {
@@ -44,93 +47,18 @@ public class TaskScoringService {
         """);
   }
 
-  public List<Long> normalizeAndValidateReviewers(Collection<Long> requested) {
-    var ids = new ArrayList<>(new LinkedHashSet<>(requested == null ? List.of() : requested));
-    if (ids.isEmpty()) return ids;
-    String marks = String.join(",", Collections.nCopies(ids.size(), "?"));
-    Integer count = db.queryForObject(
-        "select count(*) from sys_user where enabled=true and role<>'EMPLOYEE' and id in (" + marks + ")",
-        Integer.class, ids.toArray());
-    if (count == null || count != ids.size()) {
-      throw new BusinessException(400, "评分人中包含员工、已停用或不存在的账号");
-    }
-    return ids;
-  }
-
-  public List<Long> reviewerIds(Long taskId) {
-    return db.queryForList(
-        "select reviewer_user_id from task_reviewer where task_id=? order by reviewer_user_id",
-        Long.class, taskId);
-  }
-
-  public void requireCompatibleReviewers(Long taskId, Collection<Long> requested) {
-    var expected = normalizeAndValidateReviewers(requested);
-    var existing = reviewerIds(taskId);
-    if (!new LinkedHashSet<>(existing).equals(new LinkedHashSet<>(expected))) {
-      throw new BusinessException(409, "复用任务已有不同的评分人配置，请先到任务评分页面调整");
-    }
-  }
-
   @Transactional
   public void setReviewers(Long taskId, Collection<Long> requested) {
-    permissions.require(Permissions.TASK_MANAGE);
-    requireTask(taskId);
-    var reviewerIds = normalizeAndValidateReviewers(requested);
-    Integer submitted = db.queryForObject("""
-        select count(*)
-        from task_submission_review r
-        join task_submission s on s.id=r.submission_id
-        join task_assignment a on a.id=s.assignment_id
-        where a.task_id=? and r.status='SUBMITTED'
-        """, Integer.class, taskId);
-    if (submitted != null && submitted > 0) {
-      throw new BusinessException(409, "该任务已经产生评分，不能再调整评分人");
-    }
-    var before = reviewerIds(taskId);
-    db.update("delete from task_reviewer where task_id=?", taskId);
-    for (Long reviewerId : reviewerIds) {
-      db.update("insert into task_reviewer(task_id,reviewer_user_id,assigned_by) values(?,?,?)",
-          taskId, reviewerId, SecurityUtils.current().id());
-    }
-    synchronizePendingReviews(taskId, reviewerIds);
-    audit.log("SET_TASK_REVIEWERS", "TASK", taskId,
-        Map.of("reviewerIds", before), Map.of("reviewerIds", reviewerIds));
-  }
-
-  private void synchronizePendingReviews(Long taskId, List<Long> reviewerIds) {
-    var submissionIds = db.queryForList("""
-        select s.id
-        from task_submission s
-        join task_assignment a on a.id=s.assignment_id
-        where a.task_id=? and s.status='PENDING_REVIEW'
-          and s.submission_version=(select max(s2.submission_version) from task_submission s2 where s2.assignment_id=s.assignment_id)
-        """, Long.class, taskId);
-    for (Long submissionId : submissionIds) {
-      if (reviewerIds.isEmpty()) {
-        db.update("update task_submission_review set status='VOIDED' where submission_id=? and status='PENDING'",
-            submissionId);
-        continue;
-      }
-      String marks = String.join(",", Collections.nCopies(reviewerIds.size(), "?"));
-      var args = new ArrayList<Object>();
-      args.add(submissionId);
-      args.addAll(reviewerIds);
-      db.update("update task_submission_review set status='VOIDED' where submission_id=? and status='PENDING' and reviewer_user_id not in (" + marks + ")",
-          args.toArray());
-      for (Long reviewerId : reviewerIds) {
-        db.update("""
-            insert into task_submission_review(submission_id,reviewer_user_id,status)
-            values(?,?,'PENDING')
-            on duplicate key update status='PENDING',decision=null,score=null,comment=null,submitted_at=null
-            """, submissionId, reviewerId);
-      }
-    }
+    reviewerScopes.setUniformReviewers(taskId, requested);
   }
 
   public void initializeSubmissionReviews(Long submissionId, Long taskId) {
-    for (Long reviewerId : reviewerIds(taskId)) {
-      db.update("insert ignore into task_submission_review(submission_id,reviewer_user_id,status) values(?,?,'PENDING')",
-          submissionId, reviewerId);
+    Long assignmentId = db.queryForObject("select assignment_id from task_submission where id=?", Long.class, submissionId);
+    if (assignmentId == null) return;
+    Long scopeId = reviewerScopes.scopeIdForAssignment(assignmentId);
+    for (Long reviewerId : reviewerScopes.reviewerIdsForAssignment(assignmentId)) {
+      db.update("insert ignore into task_submission_review(submission_id,scoring_scope_id,reviewer_user_id,status) values(?,?,?,'PENDING')",
+          submissionId, scopeId, reviewerId);
     }
   }
 
@@ -176,14 +104,15 @@ public class TaskScoringService {
     var args = new ArrayList<Object>();
     String visibility = "";
     if (!isGlobalViewer()) {
-      visibility = " where exists(select 1 from task_reviewer mine where mine.task_id=t.id and mine.reviewer_user_id=?)";
+      visibility = " where exists(select 1 from task_reviewer_scope rs join task_reviewer_scope_member mine on mine.scope_id=rs.id where rs.task_id=t.id and rs.status='ACTIVE' and mine.reviewer_user_id=?)";
       args.add(user.id());
     }
     var rows = db.queryForList("""
         select t.id,t.title,t.description,t.requirements,t.deadline,t.created_at,u.display_name creator_name,
-          (select count(*) from task_reviewer tr where tr.task_id=t.id) reviewer_count,
-          (select group_concat(su.display_name order by su.display_name separator '、') from task_reviewer tr join sys_user su on su.id=tr.reviewer_user_id where tr.task_id=t.id) reviewer_names,
-          (select count(*) from task_reviewer tr where tr.task_id=t.id and tr.reviewer_user_id=?) my_reviewer,
+          (select count(distinct m.reviewer_user_id) from task_reviewer_scope rs join task_reviewer_scope_member m on m.scope_id=rs.id where rs.task_id=t.id and rs.status='ACTIVE') reviewer_count,
+          (select group_concat(distinct su.display_name order by su.display_name separator '、') from task_reviewer_scope rs join task_reviewer_scope_member m on m.scope_id=rs.id join sys_user su on su.id=m.reviewer_user_id where rs.task_id=t.id and rs.status='ACTIVE') reviewer_names,
+          (select count(*) from task_reviewer_scope rs join task_reviewer_scope_member m on m.scope_id=rs.id where rs.task_id=t.id and rs.status='ACTIVE' and m.reviewer_user_id=?) my_reviewer,
+          (select count(*) from task_reviewer_scope rs where rs.task_id=t.id and rs.status='ACTIVE') reviewer_scope_count,
           (select count(*) from task_assignment a where a.task_id=t.id) assignment_count,
           (select count(*) from task_assignment a where a.task_id=t.id and a.status='PENDING_REVIEW') pending_assignment_count,
           (select count(*) from task_assignment a where a.task_id=t.id and a.status='APPROVED') approved_count,
@@ -193,6 +122,7 @@ public class TaskScoringService {
         """ + visibility + " order by t.deadline desc,t.id desc", joinedArgs(user.id(), user.id(), args));
     String normalizedKeyword = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
     String normalizedStatus = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
+    if (!isGlobalViewer()) limitTaskListToCurrentReviewer(rows, user.id());
     for (var row : rows) row.put("scoring_status", scoringStatus(row));
     return rows.stream()
         .filter(row -> normalizedKeyword.isBlank()
@@ -200,6 +130,35 @@ public class TaskScoringService {
             || Objects.toString(row.get("reviewer_names"), "").toLowerCase(Locale.ROOT).contains(normalizedKeyword))
         .filter(row -> normalizedStatus.isBlank() || normalizedStatus.equals(row.get("scoring_status")))
         .toList();
+  }
+
+  private void limitTaskListToCurrentReviewer(List<Map<String, Object>> rows, Long userId) {
+    for (var row : rows) {
+      Long taskId = ((Number) row.get("id")).longValue();
+      var stats = db.queryForMap("""
+          select count(*) assignment_count,
+                 coalesce(sum(a.status='PENDING_REVIEW'),0) pending_assignment_count,
+                 coalesce(sum(a.status='APPROVED'),0) approved_count,
+                 (select count(*) from task_submission s join task_assignment own on own.id=s.assignment_id
+                    where own.task_id=? and exists(select 1 from task_reviewer_scope_member mine where mine.scope_id=own.scoring_scope_id and mine.reviewer_user_id=?)
+                    and s.submission_version=(select max(s2.submission_version) from task_submission s2 where s2.assignment_id=s.assignment_id)) submitted_count
+          from task_assignment a
+          where a.task_id=? and exists(select 1 from task_reviewer_scope_member mine where mine.scope_id=a.scoring_scope_id and mine.reviewer_user_id=?)
+          """, taskId, userId, taskId, userId);
+      row.putAll(stats);
+      var visible = reviewerScopes.visibleScopes(taskId, false);
+      var names = new TreeSet<String>();
+      var ids = new HashSet<Long>();
+      for (var scope : visible) {
+        for (var reviewer : (List<Map<String, Object>>) scope.get("reviewers")) {
+          ids.add(((Number) reviewer.get("id")).longValue());
+          names.add(String.valueOf(reviewer.get("display_name")));
+        }
+      }
+      row.put("reviewer_scope_count", visible.size());
+      row.put("reviewer_count", ids.size());
+      row.put("reviewer_names", String.join("、", names));
+    }
   }
 
   private Object[] joinedArgs(Long first, Long second, List<Object> rest) {
@@ -221,7 +180,15 @@ public class TaskScoringService {
   public Map<String, Object> taskDetail(Long taskId) {
     requireTaskView(taskId);
     var task = new LinkedHashMap<>(requireTask(taskId));
-    task.put("reviewers", reviewers(taskId));
+    var visibleScopes = reviewerScopes.visibleScopes(taskId, isGlobalViewer());
+    var visibleReviewers = new LinkedHashMap<Long, Map<String, Object>>();
+    for (var scope : visibleScopes) {
+      for (var reviewer : (List<Map<String, Object>>) scope.get("reviewers")) {
+        visibleReviewers.put(((Number) reviewer.get("id")).longValue(), reviewer);
+      }
+    }
+    task.put("reviewers", new ArrayList<>(visibleReviewers.values()));
+    task.put("reviewerScopes", visibleScopes);
     task.put("attachments", db.queryForList("""
         select a.id,a.original_name,a.content_type,a.size,a.created_at,u.display_name uploader_name
         from task_attachment a join sys_user u on u.id=a.uploaded_by
@@ -235,26 +202,29 @@ public class TaskScoringService {
 
   private List<Map<String, Object>> assignmentRows(Long taskId) {
     var rows = db.queryForList("""
-        select a.id,a.status,a.final_score,a.assigned_at,
+        select a.id,a.status,a.final_score,a.assigned_at,a.scoring_scope_id,
           e.id employee_id,e.name employee_name,e.employee_no,
-          e.batch_id,b.name batch_name,e.business_unit_id,bu.name business_unit_name,
-          e.class_id,cls.label class_name,e.class_position_id,cp.label class_position_name,
+          a.batch_id_snapshot batch_id,a.batch_name_snapshot batch_name,
+          a.business_unit_id_snapshot business_unit_id,a.business_unit_name_snapshot business_unit_name,
+          a.class_id_snapshot class_id,a.class_name_snapshot class_name,e.class_position_id,cp.label class_position_name,
+          concat(coalesce(rs.batch_name,'全部批次'),' / ',coalesce(rs.business_unit_name,'全部板块'),' / ',coalesce(rs.class_name,'全部班级')) scoring_scope_label,
+          (select group_concat(u.display_name order by u.display_name separator '、') from task_reviewer_scope_member m join sys_user u on u.id=m.reviewer_user_id where m.scope_id=a.scoring_scope_id) reviewer_names,
+          (select count(*) from task_reviewer_scope_member m where m.scope_id=a.scoring_scope_id) scope_reviewer_count,
           s.id submission_id,s.submission_version,s.content,s.status submission_status,s.submitted_at,s.score,
           (select count(*) from stored_file f where f.submission_id=s.id) file_count
         from task_assignment a
         join employee e on e.id=a.employee_id
-        left join talent_batch b on b.id=e.batch_id
-        left join business_unit bu on bu.id=e.business_unit_id
-        left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS'
+        left join task_reviewer_scope rs on rs.id=a.scoring_scope_id
         left join dictionary_item cp on cp.id=e.class_position_id and cp.type_code='CLASS_POSITION'
         left join task_submission s on s.id=(select s2.id from task_submission s2 where s2.assignment_id=a.id order by s2.submission_version desc limit 1)
-        where a.task_id=? order by e.employee_no,e.id
-        """, taskId);
+        where a.task_id=?
+        """ + (isGlobalViewer() ? "" : " and exists(select 1 from task_reviewer_scope_member mine where mine.scope_id=a.scoring_scope_id and mine.reviewer_user_id=" + SecurityUtils.current().id() + ")")
+        + " order by e.employee_no,e.id", taskId);
     for (var row : rows) {
       Long submissionId = row.get("submission_id") instanceof Number n ? n.longValue() : null;
       if (submissionId == null) {
         row.put("reviews", List.of());
-        row.put("reviewerCount", reviewerIds(taskId).size());
+        row.put("reviewerCount", number(row.get("scope_reviewer_count")));
         row.put("submittedReviewCount", 0);
         row.put("canScore", false);
         continue;
@@ -302,7 +272,7 @@ public class TaskScoringService {
         """, submissionId);
     if (rows.isEmpty()) throw new BusinessException(404, "提交记录不存在");
     var result = new LinkedHashMap<>(rows.get(0));
-    requireTaskView(((Number) result.get("task_id")).longValue());
+    requireSubmissionRead(submissionId);
     result.put("files", db.queryForList(
         "select id,original_name,size,content_type from stored_file where submission_id=? order by id", submissionId));
     result.put("reviews", visibleReviews(submissionId, Objects.toString(result.get("status"), "")));
@@ -312,14 +282,14 @@ public class TaskScoringService {
 
   public boolean canReadSubmission(Long submissionId) {
     var rows = db.queryForList("""
-        select a.task_id,a.employee_id
+        select a.id assignment_id,a.task_id,a.employee_id
         from task_submission s join task_assignment a on a.id=s.assignment_id where s.id=?
         """, submissionId);
     if (rows.isEmpty()) return false;
     var row = rows.get(0);
     if (isGlobalViewer()) return true;
-    Long taskId = ((Number) row.get("task_id")).longValue();
-    if (isReviewer(taskId, SecurityUtils.current().id())) return true;
+    Long assignmentId = ((Number) row.get("assignment_id")).longValue();
+    if (reviewerScopes.isReviewerForAssignment(assignmentId, SecurityUtils.current().id())) return true;
     try {
       permissions.requireEmployee(((Number) row.get("employee_id")).longValue());
       return true;
@@ -356,23 +326,22 @@ public class TaskScoringService {
       throw new BusinessException(400, "退回时必须填写意见");
     }
     var rows = db.queryForList("""
-        select s.assignment_id,s.status,a.task_id
+        select s.assignment_id,s.status,a.task_id,a.scoring_scope_id
         from task_submission s join task_assignment a on a.id=s.assignment_id
         where s.id=? for update
         """, submissionId);
     if (rows.isEmpty()) throw new BusinessException(404, "提交记录不存在");
     var submission = rows.get(0);
     if (!"PENDING_REVIEW".equals(submission.get("status"))) throw new BusinessException(409, "本轮评分已经结束");
-    Long taskId = ((Number) submission.get("task_id")).longValue();
     Long userId = SecurityUtils.current().id();
-    if (!isReviewer(taskId, userId)) throw new AccessDeniedException("只能评分分配给自己的任务");
+    Long assignmentId = ((Number) submission.get("assignment_id")).longValue();
+    if (!reviewerScopes.isReviewerForAssignment(assignmentId, userId)) throw new AccessDeniedException("只能评分分配给自己范围内的员工成果");
     int updated = db.update("""
         update task_submission_review
         set status='SUBMITTED',decision=?,score=?,comment=?,submitted_at=now()
         where submission_id=? and reviewer_user_id=? and status='PENDING'
         """, decision, "APPROVE".equals(decision) ? score : null, comment, submissionId, userId);
     if (updated == 0) throw new BusinessException(409, "评分已提交，不能重复修改");
-    Long assignmentId = ((Number) submission.get("assignment_id")).longValue();
     if ("RETURN".equals(decision)) {
       db.update("update task_submission_review set status='VOIDED' where submission_id=? and status='PENDING'", submissionId);
       db.update("update task_submission set status='RETURNED',reviewed_by=?,reviewed_at=now(),review_comment=?,score=null where id=?",
@@ -403,7 +372,7 @@ public class TaskScoringService {
   public void resetReview(Long submissionId) {
     permissions.require(Permissions.TASK_MANAGE);
     var rows = db.queryForList("""
-        select s.assignment_id,a.employee_id,t.deadline,s.status
+        select s.assignment_id,a.employee_id,a.scoring_scope_id,t.deadline,s.status
         from task_submission s
         join task_assignment a on a.id=s.assignment_id
         join challenge_task t on t.id=a.task_id
@@ -418,39 +387,37 @@ public class TaskScoringService {
         where employee_id=? and summary_type='MONTH' and period_key=? and status='PUBLISHED'
         """, Integer.class, row.get("employee_id"), month);
     if (published != null && published > 0) throw new BusinessException(409, "对应月份评价已发布，不能重置任务评分");
-    Integer reviewCount = db.queryForObject(
-        "select count(*) from task_submission_review where submission_id=?",
-        Integer.class, submissionId);
-    if (reviewCount == null || reviewCount == 0) throw new BusinessException(400, "该提交尚未配置评分人");
-    db.update("""
-        update task_submission_review
-        set status='PENDING',decision=null,score=null,comment=null,submitted_at=null
-        where submission_id=?
-        """, submissionId);
+    Long assignmentId = ((Number) row.get("assignment_id")).longValue();
+    Long scopeId = row.get("scoring_scope_id") instanceof Number value ? value.longValue() : null;
+    var activeReviewers = reviewerScopes.reviewerIdsForAssignment(assignmentId);
+    if (activeReviewers.isEmpty()) throw new BusinessException(400, "该提交尚未配置评分人");
+    db.update("update task_submission_review set status='VOIDED' where submission_id=?", submissionId);
+    for (Long reviewerId : activeReviewers) {
+      db.update("""
+          insert into task_submission_review(submission_id,scoring_scope_id,reviewer_user_id,status)
+          values(?,?,?,'PENDING')
+          on duplicate key update scoring_scope_id=values(scoring_scope_id),status='PENDING',decision=null,score=null,comment=null,submitted_at=null
+          """, submissionId, scopeId, reviewerId);
+    }
     db.update("update task_submission set status='PENDING_REVIEW',reviewed_by=null,reviewed_at=null,review_comment=null,score=null where id=?",
         submissionId);
     db.update("update task_assignment set status='PENDING_REVIEW',final_score=null,version=version+1 where id=?",
-        row.get("assignment_id"));
+        assignmentId);
     audit.log("RESET_TASK_SUBMISSION_SCORE", "TASK_SUBMISSION", submissionId,
         Map.of("status", row.get("status")), Map.of("status", "PENDING_REVIEW"));
   }
 
   public List<Map<String, Object>> reviewers(Long taskId) {
     return db.queryForList("""
-        select u.id,u.username,u.display_name,u.role,u.enabled,tr.assigned_at
-        from task_reviewer tr join sys_user u on u.id=tr.reviewer_user_id
-        where tr.task_id=? order by u.display_name,u.id
+        select distinct u.id,u.username,u.display_name,u.role,u.enabled
+        from task_reviewer_scope rs join task_reviewer_scope_member m on m.scope_id=rs.id
+        join sys_user u on u.id=m.reviewer_user_id
+        where rs.task_id=? and rs.status='ACTIVE' order by u.display_name,u.id
         """, taskId);
   }
 
   public boolean reviewerLocked(Long taskId) {
-    Integer count = db.queryForObject("""
-        select count(*) from task_submission_review r
-        join task_submission s on s.id=r.submission_id
-        join task_assignment a on a.id=s.assignment_id
-        where a.task_id=? and r.status='SUBMITTED'
-        """, Integer.class, taskId);
-    return count != null && count > 0;
+    return reviewerScopes.anyLocked(taskId);
   }
 
   private void requireTaskView(Long taskId) {
@@ -460,10 +427,7 @@ public class TaskScoringService {
   }
 
   private boolean isReviewer(Long taskId, Long userId) {
-    Integer count = db.queryForObject(
-        "select count(*) from task_reviewer where task_id=? and reviewer_user_id=?",
-        Integer.class, taskId, userId);
-    return count != null && count > 0;
+    return reviewerScopes.isReviewerForTask(taskId, userId);
   }
 
   private Map<String, Object> requireTask(Long taskId) {

@@ -15,12 +15,15 @@ import java.util.Map;
 @RequestMapping("/api/v1")
 public class TaskScoringController {
   private final TaskScoringService scoring;
+  private final TaskReviewerScopeService reviewerScopes;
 
-  public TaskScoringController(TaskScoringService scoring) {
+  public TaskScoringController(TaskScoringService scoring, TaskReviewerScopeService reviewerScopes) {
     this.scoring = scoring;
+    this.reviewerScopes = reviewerScopes;
   }
 
   public record ReviewerRequest(List<Long> reviewerIds) {}
+  public record ReviewerScopesRequest(List<TaskReviewerScopeService.ScopeRequest> scopes) {}
   public record ScoreRequest(
       @NotNull @Pattern(regexp = "APPROVE|RETURN") String decision,
       @Min(0) @Max(100) Integer score,
@@ -48,6 +51,27 @@ public class TaskScoringController {
   @PutMapping("/tasks/{taskId}/reviewers")
   public ApiResponse<Void> reviewers(@PathVariable Long taskId, @RequestBody ReviewerRequest request) {
     scoring.setReviewers(taskId, request.reviewerIds());
+    return ApiResponse.ok(null);
+  }
+
+  @GetMapping("/tasks/{taskId}/reviewer-scopes")
+  public ApiResponse<List<Map<String, Object>>> reviewerScopes(@PathVariable Long taskId) {
+    var detail = scoring.taskDetail(taskId);
+    @SuppressWarnings("unchecked")
+    var scopes = (List<Map<String, Object>>) detail.get("reviewerScopes");
+    return ApiResponse.ok(scopes);
+  }
+
+  @PostMapping("/tasks/{taskId}/reviewer-scopes/preview")
+  public ApiResponse<TaskReviewerScopeService.ScopePreview> previewReviewerScopes(
+      @PathVariable Long taskId, @RequestBody ReviewerScopesRequest request) {
+    return ApiResponse.ok(reviewerScopes.preview(taskId, request.scopes()));
+  }
+
+  @PutMapping("/tasks/{taskId}/reviewer-scopes")
+  public ApiResponse<Void> updateReviewerScopes(
+      @PathVariable Long taskId, @RequestBody ReviewerScopesRequest request) {
+    reviewerScopes.setScopes(taskId, request.scopes());
     return ApiResponse.ok(null);
   }
 

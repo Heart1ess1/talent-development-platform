@@ -20,13 +20,15 @@ import static org.mockito.Mockito.*;
 class TaskScoringServiceTest {
   private JdbcTemplate db;
   private PermissionService permissions;
+  private TaskReviewerScopeService reviewerScopes;
   private TaskScoringService service;
 
   @BeforeEach
   void setUp() {
     db = mock(JdbcTemplate.class);
     permissions = mock(PermissionService.class);
-    service = new TaskScoringService(db, permissions, mock(AuditService.class));
+    reviewerScopes = mock(TaskReviewerScopeService.class);
+    service = new TaskScoringService(db, permissions, mock(AuditService.class), reviewerScopes);
     authenticate("MENTOR", Set.of(Permissions.TASK_SCORE));
   }
 
@@ -40,12 +42,11 @@ class TaskScoringServiceTest {
     authenticate("ADMIN", Set.of(Permissions.TASK_SCORE, Permissions.TASK_MANAGE));
     when(db.queryForList(contains("where s.id=? for update"), eq(99L)))
         .thenReturn(List.of(Map.of("assignment_id", 5L, "status", "PENDING_REVIEW", "task_id", 3L)));
-    when(db.queryForObject(startsWith("select count(*) from task_reviewer"), eq(Integer.class), eq(3L), eq(7L)))
-        .thenReturn(0);
+    when(reviewerScopes.isReviewerForAssignment(5L, 7L)).thenReturn(false);
 
     assertThatThrownBy(() -> service.submitReview(99L, "APPROVE", null, 90))
         .isInstanceOf(AccessDeniedException.class)
-        .hasMessageContaining("分配给自己的任务");
+        .hasMessageContaining("自己范围内");
   }
 
   @Test
@@ -85,6 +86,8 @@ class TaskScoringServiceTest {
     submission.put("employee_id", 12L);
     submission.put("status", "PENDING_REVIEW");
     when(db.queryForList(startsWith("select s.id,s.assignment_id"), eq(99L))).thenReturn(List.of(submission));
+    when(db.queryForList(startsWith("select a.id assignment_id"), eq(99L)))
+        .thenReturn(List.of(Map.of("assignment_id", 5L, "task_id", 3L, "employee_id", 12L)));
     when(db.queryForList(startsWith("select id,original_name"), eq(99L))).thenReturn(List.of());
     var peer = new HashMap<String, Object>();
     peer.put("reviewer_user_id", 8L);
@@ -111,15 +114,12 @@ class TaskScoringServiceTest {
   @Test
   void refusesReviewerChangesAfterScoringStarts() {
     authenticate("ADMIN", Set.of(Permissions.TASK_SCORE, Permissions.TASK_MANAGE));
-    when(db.queryForList("select * from challenge_task where id=?", 3L)).thenReturn(List.of(Map.of("id", 3L)));
-    when(db.queryForObject(contains("role<>'EMPLOYEE' and id in"), eq(Integer.class), any(Object[].class)))
-        .thenReturn(1);
-    when(db.queryForObject(contains("where a.task_id=? and r.status='SUBMITTED'"), eq(Integer.class), eq(3L)))
-        .thenReturn(1);
+    doThrow(new BusinessException(409,"评分范围已开始评分，不能更换评分人"))
+        .when(reviewerScopes).setUniformReviewers(3L,List.of(7L));
 
     assertThatThrownBy(() -> service.setReviewers(3L, List.of(7L)))
         .isInstanceOf(BusinessException.class)
-        .hasMessageContaining("已经产生评分");
+        .hasMessageContaining("不能更换评分人");
   }
 
   @Test
@@ -141,8 +141,7 @@ class TaskScoringServiceTest {
   private void prepareAssignedPendingSubmission() {
     when(db.queryForList(contains("where s.id=? for update"), eq(99L)))
         .thenReturn(List.of(Map.of("assignment_id", 5L, "status", "PENDING_REVIEW", "task_id", 3L)));
-    when(db.queryForObject(startsWith("select count(*) from task_reviewer"), eq(Integer.class), eq(3L), eq(7L)))
-        .thenReturn(1);
+    when(reviewerScopes.isReviewerForAssignment(5L, 7L)).thenReturn(true);
   }
 
   private void authenticate(String role, Set<String> granted) {

@@ -49,8 +49,8 @@
 - 评分人范围配置需要 `evaluation:manage`；全员、批次、板块规则只会选择与评分项角色匹配的启用账号，匹配优先级为板块、批次、全员，已发布月份保持锁定。
 - `EMPLOYEE` 的课程签到接口要求角色必须是 `EMPLOYEE`。
 - `EMPLOYEE` 的任务提交接口要求角色必须是 `EMPLOYEE`，且只能提交本人任务。
-- 任务评分人只能选择启用的非员工账号。`TRAINING_ADMIN`、`ADMIN`、`SUPER_ADMIN` 可以查看全部任务并配置评分人，但不能评分未分配给自己的任务；`MENTOR`、`STATION_MANAGER` 只可查看和评分分配给自己的任务。
-- `task:review` 仅为旧入口兼容权限，不能绕过任务评分人绑定；新旧评分接口统一按 `task:score` 和 `task_reviewer` 关系校验。
+- 任务评分范围可按批次、板块、班级任意组合，范围内条件按交集匹配；评分人只能选择启用的非员工账号。`TRAINING_ADMIN`、`ADMIN`、`SUPER_ADMIN` 可以查看全部任务和范围并配置评分人，但不能评分未分配给自己的员工成果；`MENTOR`、`STATION_MANAGER` 只可查看本人范围及对应员工。
+- `task:review` 仅为旧入口兼容权限，不能绕过任务评分范围绑定；新旧评分接口统一按 `task:score`、员工分配记录的 `scoring_scope_id` 和范围成员关系校验。
 - 员工开考和考试答题要求角色必须是 `EMPLOYEE`，且考试已发布、在开放时间内、本人已被分配且次数未用完。
 - 考试答卷查看允许 `exam:manage` 用户查看；否则只允许考生本人查看。
 - 月度评价明细 `/evaluation/monthly/detail` 不允许 `EMPLOYEE` 直接查看，员工只能查看已发布结果。
