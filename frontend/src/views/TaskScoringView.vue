@@ -120,7 +120,7 @@ onBeforeUnmount(clearPreview)
       </el-table>
     </section>
 
-    <el-drawer v-model="taskDrawer" size="min(1120px,96vw)" class="scoring-drawer">
+    <el-drawer v-model="taskDrawer" size="min(1400px,98vw)" class="scoring-drawer">
       <template #header><div class="drawer-head"><div><small>任务评分详情</small><h2>{{selectedTask?.title}}</h2></div><el-tag v-if="selectedTask?.reviewerLocked" type="warning">评分人已锁定</el-tag></div></template>
       <div v-loading="detailLoading" v-if="selectedTask">
         <el-descriptions :column="2" border><el-descriptions-item label="截止时间">{{formatDate(selectedTask.deadline)}}</el-descriptions-item><el-descriptions-item label="成果人数">{{selectedTask.assignments?.length||0}}</el-descriptions-item><el-descriptions-item label="任务说明" :span="2">{{selectedTask.description}}</el-descriptions-item><el-descriptions-item label="成果要求" :span="2">{{selectedTask.requirements||'--'}}</el-descriptions-item></el-descriptions>
@@ -137,9 +137,11 @@ onBeforeUnmount(clearPreview)
         </section>
         <div class="employee-table-shell">
         <el-table :data="filteredTaskEmployees" empty-text="未找到符合条件的员工" @sort-change="handleEmployeeSort">
-          <el-table-column label="员工" min-width="150"><template #default="{row}"><strong>{{row.employee_name}}</strong><br><small>{{row.employee_no}}</small></template></el-table-column>
-          <el-table-column label="班级 / 职务" min-width="150"><template #default="{row}"><span>{{row.class_name||'未设置'}}</span><br><small>{{row.class_position_name||'未设置'}}</small></template></el-table-column>
-          <el-table-column label="评分范围" min-width="190"><template #default="{row}">{{row.scoring_scope_label||'待分配'}}<br><small>{{row.reviewer_names||'--'}}</small></template></el-table-column>
+          <el-table-column label="员工" min-width="145"><template #default="{row}"><strong>{{row.employee_name}}</strong><br><small>{{row.employee_no}}</small></template></el-table-column>
+          <el-table-column prop="batch_name" label="批次" min-width="90"><template #default="{row}">{{row.batch_name||'未设置'}}</template></el-table-column>
+          <el-table-column prop="business_unit_name" label="板块" min-width="120"><template #default="{row}">{{row.business_unit_name||'未设置'}}</template></el-table-column>
+          <el-table-column prop="class_name" label="班级" min-width="110"><template #default="{row}">{{row.class_name||'未设置'}}</template></el-table-column>
+          <el-table-column prop="reviewer_names" label="评分人" min-width="130"><template #default="{row}">{{row.reviewer_names||'待分配'}}</template></el-table-column>
           <el-table-column label="提交版本" width="110"><template #default="{row}">{{row.submission_id?`第 ${row.submission_version} 版`:'未提交'}}</template></el-table-column>
           <el-table-column label="提交时间" min-width="170"><template #default="{row}">{{formatDate(row.submitted_at)}}</template></el-table-column>
           <el-table-column label="评分状态" min-width="150"><template #default="{row}">{{assignmentStatus(row)}}</template></el-table-column>
