@@ -4,7 +4,7 @@
 
 ## 1. 当前状态与上线门槛
 
-截至 2026-08-29 的实机检查结果：
+截至 2026-09-02 的实机检查结果：
 
 | 项目 | 当前证据 |
 | --- | --- |
@@ -19,7 +19,18 @@
 | 网站合规页脚 | 已随 `main@d0fde6c2` 部署；登录页及登录后所有业务页面统一展示 `湘ICP备2026035229号-1`，并链接工信部备案系统 `https://beian.miit.gov.cn/`；公安备案号待审核完成后再加入，不展示占位号 |
 | CDN/ESA | `static.yryhx.cn` 已启用中国内地“图片小文件”CDN；源站为私有 ACL 的公共静态资源 OSS Bucket，同账号私有回源、HTTPS、HTTP→HTTPS、TLS 1.2/1.3、Gzip 和长期缓存均已验证；OSS 写入 `immutable`，CDN 可能规范化为不少于 30 天的 `max-age`；不启用 ESA 等非必要增值服务 |
 
-当前线上运行的应用功能基线为任务评分员工筛选 PR #38 合并提交 `259cf76d36af5ccac7278f7e9584329bff1a8309`。生产 JAR SHA-256 为 `5f130c847d16cdb5f91d3f457db53c84b1304b8491285552029a9e5f0a04d861`，Flyway 保持 V36。候选 `/data/talent-platform/releases/staging/cdn-task-scoring-filters-259cf76d-20260829-1610` 已通过 `activate-cdn-release.sh` 激活；激活前 JAR 和环境回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260829161234-2786631/`，数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260829-161045.sql.gz`，其 SHA-256 为 `bcf8bca15db29b5de63021c180f8ba4ccf1ac4573e06887121ba132f9c58d39c`。
+当前线上运行的应用功能基线为任务评分范围 PR #40 合并提交 `6870f8c2551dd85b8d961f5eb2da3b17914e88b1`。生产 JAR SHA-256 为 `b1b3ef556aadd2aba7845b4951b2ef888e7acad932c89a435805cf8c3d921863`，Flyway 已升级至 V37。候选 `/data/talent-platform/releases/staging/cdn-6870f8c2-20260902-1553` 已通过 `activate-cdn-release.sh` 激活；激活前 JAR 和环境回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260902155659-3433074/`，部署前数据库备份位于 `/data/talent-platform/backups/mysql/talent-platform-20260902-155238.sql.gz`，其 SHA-256 为 `07e7af16d600db0a5c2634621afee756f484377f58d506c169c8d4dec69e8ef1`。
+
+### 2026-09-02 任务评分范围与平均分排序部署记录
+
+- GitHub：任务评分范围 PR [#40](https://github.com/Heart1ess1/talent-development-platform/pull/40) 已合并，功能提交为 `ec9c11ac3aedaece406df71dc551a247c89e614d`，合并后的生产基线为 `main@6870f8c2551dd85b8d961f5eb2da3b17914e88b1`。
+- 功能范围：任务可按批次、板块、班级交集配置多条评分范围；保存时校验全量覆盖、范围互斥和评分人有效性；评分权限、成果读取与待评分队列按员工范围隔离；任务下发和任务评分页面支持统一或按范围配置；最终平均分列支持降序、升序和默认三态排序。
+- 构建校验：前端 43 项测试、TypeScript 检查和 CDN 生产构建通过；后端 138 项测试及生产 JAR 打包通过。生产 JAR SHA-256 为 `b1b3ef556aadd2aba7845b4951b2ef888e7acad932c89a435805cf8c3d921863`。
+- 备份与回退：部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260902-155238.sql.gz`，SHA-256 为 `07e7af16d600db0a5c2634621afee756f484377f58d506c169c8d4dec69e8ef1`；V37 执行后、任务 12 范围调整前再次备份为 `/data/talent-platform/backups/mysql/talent-platform-20260902-155919.sql.gz`，SHA-256 为 `5bdc2c928f749b39db4b911d0c70f7c9bb6dd2797d37a3ffe4a08239c6fb5be3`；激活前回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260902155659-3433074/`。
+- 发布材料：79 个静态资源已同步至公共资源 OSS；候选目录为 `/data/talent-platform/releases/staging/cdn-6870f8c2-20260902-1553`，CDN 主资源为 `https://static.yryhx.cn/assets/index-DFksoCEj.js`。激活期间出现三次短暂 502，脚本重试后恢复 `UP`。
+- 数据迁移：Flyway V37 `task reviewer scopes` 成功。任务 12“8月份售后学习月报收集”已配置两条范围：陈立青负责 `2025 / 机动车板块 / 机动车班` 36 人并完整继承原 30 条已完成评分；朱小红负责 `2025 / 城轨板块 / 城轨班` 30 人并生成 30 条待评分记录。范围覆盖错误、评分范围错配和评分人错配均为 0，操作日志为 `ADMIN_MIGRATE_TASK_REVIEWER_SCOPES`（记录 ID 1042）。
+- 生产校验：应用、MySQL 和 Nginx 容器正常，Flyway V37、健康状态 `UP`、生产 JAR 哈希和公网主资源均已核对；新 CDN 主资源返回 200、`text/javascript` 和 `max-age=31104000`，OSS 原始地址匿名访问返回 403，未登录评分范围接口返回 401，生产就绪检查为 `ready: true`，部署后日志未发现 `ERROR` 或 `Exception`。
+- 待人工复核：生产环境变量中的初始超级管理员密码已不是当前密码，内置浏览器又在加载页面时超时，因此已登录后的范围展示和平均分表头三态交互尚未形成视觉验收证据；不影响数据库、接口权限、构建和运行状态验收。
 
 ### 2026-08-29 任务评分员工筛选项调整部署记录
 
