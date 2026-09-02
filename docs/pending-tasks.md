@@ -4,10 +4,10 @@
 
 ## 当前基线
 
-- 最后核对日期：2026-08-29
-- GitHub：任务评分员工筛选 PR #38 已合并；远端 `main` 为 `259cf76d36af5ccac7278f7e9584329bff1a8309`，本次功能提交为 `cd1d057272387ea524c922dca73005c4faf28110`。
-- 云服务器：已激活任务评分员工筛选 CDN 生产 JAR，SHA-256 为 `5f130c847d16cdb5f91d3f457db53c84b1304b8491285552029a9e5f0a04d861`；部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260829-161045.sql.gz`，激活前回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260829161234-2786631/`。
-- 线上验收：应用健康状态为 `UP`，Flyway 保持 V36；MySQL、应用和 Nginx 容器均正常，生产就绪检查为 `ready: true`，任务评分页面返回 200、未登录任务评分 API 返回 401，新 CDN 主资源和任务评分分块均正常，OSS 原始地址匿名访问返回 403，部署后日志无 `ERROR` 或 `Exception`。历史未完成任务仍需管理员按实际职责配置评分人；任务评分详情的新布局与筛选交互、员工成果提交弹窗的生产视觉效果仍待使用真实账号复核。
+- 最后核对日期：2026-09-02
+- GitHub：任务评分范围 PR #40 已合并；远端 `main` 为 `6870f8c2551dd85b8d961f5eb2da3b17914e88b1`，本次功能提交为 `ec9c11ac3aedaece406df71dc551a247c89e614d`。
+- 云服务器：已激活任务评分范围 CDN 生产 JAR，SHA-256 为 `b1b3ef556aadd2aba7845b4951b2ef888e7acad932c89a435805cf8c3d921863`；部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260902-155238.sql.gz`，V37 后任务数据调整前备份为 `/data/talent-platform/backups/mysql/talent-platform-20260902-155919.sql.gz`，激活前回滚材料位于 `/data/talent-platform/releases/history/cdn-activation-20260902155659-3433074/`。
+- 线上验收：应用健康状态为 `UP`，Flyway 已升级至 V37；MySQL、应用和 Nginx 容器均正常，生产就绪检查为 `ready: true`，未登录评分范围接口返回 401，新 CDN 主资源正常，OSS 原始地址匿名访问返回 403，部署后日志无 `ERROR` 或 `Exception`。任务 12 已按两条范围完整覆盖 66 人：陈立青负责机动车范围 36 人并继承 30 条已完成评分，朱小红负责城轨范围 30 人并生成 30 条待评分记录；范围覆盖、评分记录范围和评分人成员一致性错误均为 0。已登录后的范围展示、平均分三态排序和成果提交弹窗视觉效果仍待使用真实账号复核。
 - 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、主站及 CDN HTTPS、正式 DNS 和每日本地备份均已投入使用；`static.yryhx.cn` 已通过 CDN 同账号私有 OSS 回源提供公共静态资源。
 
 “代码已合并”不等于“云端已上线”。只有部署任务取得服务器端版本、健康检查、迁移记录和业务冒烟证据后，才能将状态改为 `Done`。
