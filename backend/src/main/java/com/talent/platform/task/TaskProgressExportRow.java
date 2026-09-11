@@ -34,4 +34,10 @@ public class TaskProgressExportRow {
 
   @ExcelProperty(value = "审核意见", index = 8)
   private String reviewComment;
+  @ExcelProperty(value = "批次", index = 9)
+  private String batchName;
+  @ExcelProperty(value = "板块", index = 10)
+  private String businessUnitName;
+  @ExcelProperty(value = "班级", index = 11)
+  private String className;
 }

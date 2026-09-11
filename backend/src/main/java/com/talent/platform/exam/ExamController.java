@@ -39,11 +39,11 @@ public class ExamController {
   public record AnswerRequest(@NotNull Long questionId,JsonNode answer){} public record GradeRequest(@NotNull @DecimalMin("0") BigDecimal score,@Size(max=500) String comment){} public record EventRequest(@NotBlank @Pattern(regexp="BLUR|HIDDEN|EXIT_FULLSCREEN|RECONNECT") String type,@NotBlank @Size(max=64) String eventId,@Size(max=500) String detail){} public record RecoverViolationRequest(@NotBlank @Size(max=64) String eventId){} public record EventResult(int violationCount,int violationLimit,int violationGraceSeconds,Long violationDeadlineEpochMillis,boolean autoSubmitted,String status){} public record AttemptStatusResult(String status,int violationCount,int violationLimit,int violationGraceSeconds,Long violationDeadlineEpochMillis,long serverNowEpochMillis,long deadlineEpochMillis){}
 
   @GetMapping("/question-banks") public ApiResponse<List<Map<String,Object>>> questionBanks(){permissions.require(Permissions.EXAM_MANAGE);return ApiResponse.ok(db.queryForList("""
-      select b.id,b.name,b.description,b.enabled,b.created_at,
+      select b.id,b.name,b.description,b.enabled,b.created_at,b.folder_id,
              count(q.id) question_count,
              coalesce(sum(case when q.enabled then 1 else 0 end),0) enabled_count
       from exam_question_bank b left join question_bank q on q.bank_id=b.id
-      group by b.id,b.name,b.description,b.enabled,b.created_at order by b.id
+      group by b.id,b.name,b.description,b.enabled,b.created_at,b.folder_id order by b.id
       """));}
   @PostMapping("/question-banks") public ApiResponse<Long> createQuestionBank(@Valid @RequestBody QuestionBankRequest q){permissions.require(Permissions.EXAM_MANAGE);try{db.update("insert into exam_question_bank(name,description,enabled,created_by) values(?,?,true,?)",q.name().trim(),trim(q.description()),SecurityUtils.current().id());}catch(Exception e){throw new BusinessException(400,"题库名称已存在");}Long id=lastId();audit.log("CREATE_QUESTION_BANK","QUESTION_BANK",id,null,q);return ApiResponse.ok(id);}
   @PutMapping("/question-banks/{id}") public ApiResponse<Void> updateQuestionBank(@PathVariable Long id,@Valid @RequestBody QuestionBankRequest q){permissions.require(Permissions.EXAM_MANAGE);boolean enabled=q.enabled()==null||q.enabled();try{if(db.update("update exam_question_bank set name=?,description=?,enabled=? where id=?",q.name().trim(),trim(q.description()),enabled,id)==0)throw new BusinessException(404,"题库不存在");}catch(BusinessException e){throw e;}catch(Exception e){throw new BusinessException(400,"题库名称已存在");}audit.log("UPDATE_QUESTION_BANK","QUESTION_BANK",id,null,q);return ApiResponse.ok(null);}
@@ -304,11 +304,14 @@ public class ExamController {
     permissions.require(Permissions.EXAM_MANAGE);
     var scope = permissions.employeeFilter("e");
     StringBuilder sql = new StringBuilder("""
-        select e.name employee_name,coalesce(e.major,'') major,p.name exam_name,p.score_month,
+        select e.name employee_name,e.employee_no,b.name batch_name,bu.name business_unit_name,cls.label class_name,coalesce(e.major,'') major,p.name exam_name,p.score_month,
                a.attempt_no,a.objective_score,a.subjective_score,a.total_score,a.status,a.proctor_mode,a.submitted_at
         from exam_attempt a
         join employee e on e.id=a.employee_id
         join exam_plan p on p.id=a.plan_id
+        left join talent_batch b on b.id=e.batch_id
+        left join business_unit bu on bu.id=e.business_unit_id
+        left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS'
         where a.published=true
         """).append(scope.sql());
     var args = new ArrayList<Object>(scope.args());
@@ -335,6 +338,11 @@ public class ExamController {
     List<ResultExportRow> rows = db.query(sql.toString(), (rs,rowNum) -> {
       var row = new ResultExportRow();
       row.setEmployeeName(rs.getString("employee_name"));
+      row.setEmployeeNo(rs.getString("employee_no"));
+      row.setBatchName(rs.getString("batch_name"));
+      row.setBusinessUnitName(rs.getString("business_unit_name"));
+      row.setClassName(rs.getString("class_name"));
+
       row.setMajor(rs.getString("major"));
       row.setExamName(rs.getString("exam_name"));
       var scoreMonth = rs.getDate("score_month");

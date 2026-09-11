@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import {computed,onMounted,reactive,ref} from 'vue'
+import OrganizationFolders from '@/components/OrganizationFolders.vue'
+import {inFolder,type FolderSelection} from '@/utils/organizationFolder'
 import {useRouter} from 'vue-router'
 import {CircleCheck,Collection,Connection,CopyDocument,Delete,Document,EditPen,Plus,Refresh,Search,VideoPause,VideoPlay} from '@element-plus/icons-vue'
 import {ElMessage,ElMessageBox} from 'element-plus'
@@ -20,6 +22,7 @@ const loading=ref(false)
 const saving=ref(false)
 const keyword=ref('')
 const statusFilter=ref('ALL')
+const folderFilter=ref<FolderSelection>('ALL')
 const editorOpen=ref(false)
 const copyOpen=ref(false)
 const editing=ref<TrainingPlan|null>(null)
@@ -34,11 +37,12 @@ const summary=reactive<Summary>({
   dispatchedTasks:0
 })
 
+const folderPlans=computed(()=>plans.value.filter(plan=>inFolder(plan,folderFilter.value)))
 const statusTabs=computed(()=>[
-  {label:'全部计划',value:'ALL',count:plans.value.length},
-  {label:'已启用',value:'ACTIVE',count:plans.value.filter(item=>planStatus(item).key==='ACTIVE').length},
-  {label:'待编排',value:'DRAFT',count:plans.value.filter(item=>['DRAFT','INCOMPLETE'].includes(planStatus(item).key)).length},
-  {label:'已停用',value:'DISABLED',count:plans.value.filter(item=>planStatus(item).key==='DISABLED').length}
+  {label:'全部计划',value:'ALL',count:folderPlans.value.length},
+  {label:'已启用',value:'ACTIVE',count:folderPlans.value.filter(item=>planStatus(item).key==='ACTIVE').length},
+  {label:'待编排',value:'DRAFT',count:folderPlans.value.filter(item=>['DRAFT','INCOMPLETE'].includes(planStatus(item).key)).length},
+  {label:'已停用',value:'DISABLED',count:folderPlans.value.filter(item=>planStatus(item).key==='DISABLED').length}
 ])
 
 const filteredPlans=computed(()=>{
@@ -49,7 +53,7 @@ const filteredPlans=computed(()=>{
       ||(statusFilter.value==='DRAFT'&&['DRAFT','INCOMPLETE'].includes(state))
       ||state===statusFilter.value
     const matchesKeyword=!term||`${plan.name} ${plan.description||''} ${plan.creator_name||''}`.toLowerCase().includes(term)
-    return matchesStatus&&matchesKeyword
+    return matchesStatus&&matchesKeyword&&inFolder(plan,folderFilter.value)
   })
 })
 
@@ -179,8 +183,8 @@ onMounted(load)
   <div class="plan-module-page">
     <section class="plan-hero">
       <div>
-        <span class="eyebrow">培养计划 · 计划管理</span>
-        <h1>计划管理</h1>
+        <span class="eyebrow">闯关任务 · 任务管理</span>
+        <h1>任务管理</h1>
         <p>统一维护培养方案的基本信息和启停状态；任务内容请进入“任务编排”集中设计。</p>
       </div>
       <div class="hero-actions">
@@ -208,6 +212,7 @@ onMounted(load)
       </article>
     </section>
 
+    <OrganizationFolders v-model="folderFilter" domain="training-plans" :items="plans" @changed="load"/>
     <section class="plan-workspace">
       <div class="workspace-head">
         <div>

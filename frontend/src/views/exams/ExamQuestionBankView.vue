@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import {computed,onMounted,reactive,ref} from 'vue'
+import {computed,onMounted,reactive,ref,watch} from 'vue'
 import {ElMessage,ElMessageBox} from 'element-plus'
 import {Collection,Document,Download,Edit,FolderAdd,Plus,Search,Upload} from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
 import {parseJson,typeLabels} from './examUi'
 import {createEmptyQuestion,objectiveQuestionTypes,resetQuestionForType} from './questionEditor'
 import '@/styles/exam-center.css'
+import OrganizationFolders from '@/components/OrganizationFolders.vue'
+import {inFolder,type FolderSelection} from '@/utils/organizationFolder'
 
 type ImportResult={imported:number;errors:{row:number;field:string;message:string}[]}
 const banks=ref<any[]>([]),questions=ref<any[]>([]),activeBankId=ref<number>(),loading=ref(false)
+const folderFilter=ref<FolderSelection>('ALL')
+const visibleBanks=computed(()=>banks.value.filter(bank=>inFolder(bank,folderFilter.value)))
+watch(visibleBanks,items=>{if(!items.some(item=>item.id===activeBankId.value))activeBankId.value=items[0]?.id})
 const keyword=ref(''),typeFilter=ref(''),statusFilter=ref('')
 const bankDialog=ref(false),questionDialog=ref(false),importDialog=ref(false),saving=ref(false),importing=ref(false),importFile=ref<File>()
 const bank=reactive<any>({id:null,name:'',description:'',enabled:true})
@@ -17,7 +22,7 @@ const question=reactive<any>(createEmptyQuestion())
 const enabledBanks=computed(()=>banks.value.filter(x=>truthy(x.enabled)))
 const activeBank=computed(()=>banks.value.find(x=>x.id===activeBankId.value))
 const filteredQuestions=computed(()=>questions.value.filter(row=>{
-  const matchesBank=!activeBankId.value||row.bank_id===activeBankId.value
+  const matchesBank=visibleBanks.value.some(bank=>bank.id===row.bank_id)&&(!activeBankId.value||row.bank_id===activeBankId.value)
   const matchesKeyword=!keyword.value||`${row.stem} ${row.bank_name}`.toLowerCase().includes(keyword.value.trim().toLowerCase())
   const matchesType=!typeFilter.value||row.question_type===typeFilter.value
   const matchesStatus=!statusFilter.value||(statusFilter.value==='ENABLED'?truthy(row.enabled):!truthy(row.enabled))
@@ -40,7 +45,7 @@ async function load(){
       api.get<any,Envelope<any[]>>('/exams/questions')
     ])
     banks.value=bankRes.data;questions.value=questionRes.data
-    if(!activeBankId.value&&banks.value.length)activeBankId.value=banks.value[0].id
+    if(!visibleBanks.value.some(item=>item.id===activeBankId.value))activeBankId.value=visibleBanks.value[0]?.id
   }finally{loading.value=false}
 }
 function openBank(row?:any){Object.assign(bank,row?{id:row.id,name:row.name,description:row.description||'',enabled:truthy(row.enabled)}:{id:null,name:'',description:'',enabled:true});bankDialog.value=true}
@@ -118,16 +123,17 @@ onMounted(load)
       <article class="exam-summary-card amber"><span class="exam-summary-icon"><el-icon><Document/></el-icon></span><div><small>已停用</small><strong>{{summary.disabled}}</strong><span>保留历史记录</span></div></article>
     </section>
 
+    <OrganizationFolders v-model="folderFilter" domain="question-banks" :items="banks" @changed="load"/>
     <section class="exam-split-workspace" v-loading="loading">
       <aside class="exam-selector">
-        <div class="exam-selector-head"><div><h2>题库目录</h2><span>{{banks.length}} 个题库</span></div><el-button link type="primary" :icon="FolderAdd" @click="openBank()">新建</el-button></div>
+        <div class="exam-selector-head"><div><h2>题库目录</h2><span>{{visibleBanks.length}} 个题库</span></div><el-button link type="primary" :icon="FolderAdd" @click="openBank()">新建</el-button></div>
         <div class="exam-selector-list">
-          <button v-for="item in banks" :key="item.id" :class="{active:activeBankId===item.id}" @click="activeBankId=item.id">
+          <button v-for="item in visibleBanks" :key="item.id" :class="{active:activeBankId===item.id}" @click="activeBankId=item.id">
             <span class="selector-icon"><el-icon><Collection/></el-icon></span>
             <span class="selector-copy"><strong>{{item.name}}</strong><small>{{item.question_count}} 题 · {{item.enabled_count}} 可用</small></span>
             <el-tag size="small" :type="truthy(item.enabled)?'success':'info'" effect="plain">{{truthy(item.enabled)?'启用':'停用'}}</el-tag>
           </button>
-          <el-empty v-if="!banks.length" :image-size="70" description="暂无题库"/>
+          <el-empty v-if="!visibleBanks.length" :image-size="70" description="暂无题库"/>
         </div>
       </aside>
 

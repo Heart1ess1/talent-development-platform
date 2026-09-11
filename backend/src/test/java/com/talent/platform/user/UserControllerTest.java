@@ -9,6 +9,24 @@ class UserControllerTest {
   @BeforeEach void setUp(){db=mock(JdbcTemplate.class);encoder=mock(PasswordEncoder.class);when(encoder.encode(anyString())).thenReturn("hash");when(db.queryForObject(eq("select last_insert_id()"),eq(Long.class))).thenReturn(10L);controller=new UserController(db,encoder,permissionService,mock(AuditService.class));}
   @AfterEach void clear(){SecurityContextHolder.clearContext();}
 
+  @Test void accountListJoinsPersonnelByUserIdAndPreservesRoleScope(){
+    authenticate("ADMIN");
+    controller.list(null);
+    var sql=org.mockito.ArgumentCaptor.forClass(String.class);
+    var args=org.mockito.ArgumentCaptor.forClass(Object[].class);
+    verify(db).queryForList(sql.capture(),args.capture());
+    assertThat(sql.getValue()).contains("left join employee e on e.user_id=u.id",
+        "e.employee_no", "b.name batch_name", "bu.name business_unit_name", "cls.label class_name",
+        "where u.role in", "group by sms.user_id");
+    assertThat(args.getValue()).contains("EMPLOYEE").doesNotContain("SUPER_ADMIN", "ADMIN");
+  }
+
+  @Test void accountListCannotRequestUnauthorizedRoles(){
+    authenticate("ADMIN");
+    assertThat(controller.list("SUPER_ADMIN").data()).isEmpty();
+    verifyNoInteractions(db);
+  }
+
   @Test void adminCanCreateOperationalRoles(){
     authenticate("ADMIN");
     var result=controller.create(new UserController.UserRequest("mentor1","导师一","MENTOR",null));

@@ -12,6 +12,7 @@ import {reviewerScopePayload,scopeMode,type ReviewerScopeDraft,type ReviewerScop
 
 const auth=useAuthStore(),route=useRoute(),router=useRouter()
 const canManage=computed(()=>auth.can('task:manage'))
+const exportingScores=ref(false)
 const loading=ref(false),tasks=ref<any[]>([]),selectedTask=ref<any>(),taskDrawer=ref(false),detailLoading=ref(false)
 const reviewerOptions=ref<any[]>([]),reviewerScopeMode=ref<ReviewerScopeMode>('NONE'),reviewerScopeDrafts=ref<ReviewerScopeDraft[]>([]),reviewerScopePreview=ref<any>(),savingReviewers=ref(false)
 const filters=reactive({keyword:'',status:String(route.query.status||'')})
@@ -80,6 +81,15 @@ async function resetScore(){
   ElMessage.success('本轮评分已重置');submissionDialog.value=false;await Promise.all([openTask({id:selectedTask.value.id}),load()])
 }
 function saveBlob(blob:Blob,name:string){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
+async function exportScores(){
+  if(!selectedTask.value||detailLoading.value)return
+  const task=selectedTask.value
+  exportingScores.value=true
+  try{
+    const blob=await api.get<any,Blob>(`/task-scoring/tasks/${task.id}/export`,{responseType:'blob'})
+    saveBlob(blob,`${task.title||'任务'}-任务成绩.xlsx`)
+  }finally{exportingScores.value=false}
+}
 async function downloadFile(file:any){const blob=await api.get<any,Blob>(`/files/${file.id}`,{responseType:'blob'});saveBlob(blob,file.original_name)}
 function clearPreview(){if(previewUrl.value)URL.revokeObjectURL(previewUrl.value);previewUrl.value='';previewContent.value='';previewType.value='UNSUPPORTED'}
 async function previewFile(file:any){
@@ -101,7 +111,7 @@ onBeforeUnmount(clearPreview)
 <template>
   <div class="scoring-page">
     <header class="scoring-head">
-      <div><span>培养计划 · 任务评分</span><h1>任务评分</h1><p>查看分配给你的任务并独立评分；管理员可以查看全部任务，但只能评分分配给自己的成果。</p></div>
+      <div><span>闯关任务 · 任务评分</span><h1>任务评分</h1><p>查看分配给你的任务并独立评分；管理员可以查看全部任务，但只能评分分配给自己的成果。</p></div>
       <div><el-button :icon="ArrowLeft" @click="router.push('/training-plans/tracking')">任务跟踪</el-button><el-button :icon="Refresh" @click="load">刷新</el-button></div>
     </header>
 
@@ -135,6 +145,7 @@ onBeforeUnmount(clearPreview)
           <el-button :icon="Refresh" :disabled="!hasEmployeeFilters" @click="resetEmployeeFilters">重置</el-button>
           <span>显示 {{filteredTaskEmployees.length}} / {{taskEmployees.length}} 人</span>
         </section>
+        <div class="score-export-toolbar"><span>导出本任务可见范围内全部人员的成绩，包含未完成评分人员。</span><el-button type="primary" plain :icon="Download" :loading="exportingScores" :disabled="detailLoading||!taskEmployees.length" @click="exportScores">导出任务成绩</el-button></div>
         <div class="employee-table-shell">
         <el-table :data="filteredTaskEmployees" empty-text="未找到符合条件的员工" @sort-change="handleEmployeeSort">
           <el-table-column label="员工" min-width="145"><template #default="{row}"><strong>{{row.employee_name}}</strong><br><small>{{row.employee_no}}</small></template></el-table-column>
@@ -168,6 +179,7 @@ onBeforeUnmount(clearPreview)
 </template>
 
 <style scoped>
+.score-export-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}.score-export-toolbar>span{color:#7f8a9a;font-size:12px}
 .scoring-page{padding:24px 28px 36px;color:#344054}.scoring-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.scoring-head>div:last-child{display:flex;gap:10px}.scoring-head span{color:#3979c3;font-size:12px;font-weight:700}.scoring-head h1{margin:5px 0;font-size:27px}.scoring-head p,.reviewer-panel p{margin:0;color:#8490a3;font-size:12px}.metric-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:20px 0}.metric-grid article{padding:17px 19px;border:1px solid #e5eaf1;border-radius:11px;background:#fff}.metric-grid small,.metric-grid strong{display:block}.metric-grid small{color:#8792a4}.metric-grid strong{margin-top:7px;font-size:25px}.metric-grid .amber strong{color:#d48a1f}.metric-grid .red strong{color:#d45555}.metric-grid .blue strong{color:#3979c3}.metric-grid .green strong{color:#319269}.scoring-panel{overflow:hidden;border:1px solid #e5eaf1;border-radius:12px;background:#fff}.toolbar{display:flex;gap:10px;padding:16px;border-bottom:1px solid #edf0f4}.toolbar .el-input{max-width:360px}.toolbar .el-select{width:180px}.task-cell strong,.task-cell small{display:block}.task-cell small{margin-top:5px;color:#8a96a8}.drawer-head{display:flex;width:100%;align-items:center;justify-content:space-between}.drawer-head small{color:#3979c3}.drawer-head h2{margin:4px 0 0}.reviewer-panel{display:grid;grid-template-columns:minmax(220px,.6fr) minmax(360px,1fr);gap:20px;align-items:end;padding:18px;margin:16px 0;border:1px solid #e6ebf2;border-radius:10px;background:#f8fafc}.reviewer-panel h3{margin:0 0 5px}.reviewer-editor{display:flex;gap:9px}.reviewer-editor .el-select{flex:1}.reviewer-tags{display:flex;gap:8px;flex-wrap:wrap}.submission-title{display:flex;align-items:center;justify-content:space-between}.submission-title strong,.submission-title small{display:block}.submission-title small{margin-top:4px;color:#8a96a8}.submission-content{padding:13px;border-radius:8px;background:#f5f7fa;white-space:pre-wrap}.review-list{display:grid;gap:8px}.review-list article{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px;border:1px solid #e7ebf1;border-radius:8px}.review-list strong,.review-list p{margin:0}.review-list p{margin-top:4px;color:#7d899a;font-size:12px}.reviewer-avatar{display:grid;width:36px;height:36px;place-items:center;border-radius:9px;color:#3979c3;background:#eaf3ff}.score-form{display:grid;gap:12px;padding:16px;margin-top:16px;border-radius:9px;background:#f7faff}.score-form h3{margin:0}.score-form .el-input-number{width:180px}.preview-frame{width:100%;height:68vh;border:0}.preview-image{display:block;max-width:100%;max-height:68vh;margin:auto}.preview-html,.preview-text{max-height:68vh;padding:20px;overflow:auto;white-space:pre-wrap}.preview-html :deep(img){max-width:100%}@media(max-width:900px){.metric-grid{grid-template-columns:repeat(2,1fr)}.reviewer-panel{grid-template-columns:1fr}}@media(max-width:620px){.scoring-page{padding:16px 12px}.scoring-head{flex-direction:column}.metric-grid{grid-template-columns:1fr}.toolbar{flex-direction:column}.toolbar .el-input,.toolbar .el-select{width:100%;max-width:none}}
 .employee-filters{display:grid;grid-template-columns:minmax(230px,1.6fr) repeat(4,minmax(130px,1fr)) auto auto;gap:8px;align-items:center;padding:12px;margin-bottom:10px;border:1px solid #e7ebf1;border-radius:9px;background:#f8fafc}.employee-filters>span{color:#7f8a9a;font-size:12px;white-space:nowrap}.employee-table-shell{overflow:hidden;border:1px solid #e6eaf0;border-radius:9px}.employee-table-shell small{color:#8a96a8}:global(.scoring-drawer .el-drawer__body){overflow-y:auto}@media(max-width:1060px){.employee-filters{grid-template-columns:repeat(3,minmax(150px,1fr))}.employee-filters>span{justify-self:end}}@media(max-width:900px){.employee-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.employee-filters{grid-template-columns:1fr}.employee-filters>span{justify-self:start}}
 .reviewer-panel.scope-config{display:block}.scope-config-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}.scope-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}.scope-summary article{display:grid;gap:5px;padding:12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff}.scope-summary article span{color:#475467}.scope-summary article small{color:#8490a3}.scoring-panel small{color:#8a96a8}

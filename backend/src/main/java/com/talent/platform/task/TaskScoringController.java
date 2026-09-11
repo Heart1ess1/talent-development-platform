@@ -48,6 +48,22 @@ public class TaskScoringController {
     return ApiResponse.ok(scoring.taskDetail(taskId));
   }
 
+  @GetMapping("/task-scoring/tasks/{taskId}/export")
+  public void exportScores(@PathVariable Long taskId, jakarta.servlet.http.HttpServletResponse response)
+      throws java.io.IOException {
+    // Reuse the detail authorization and reviewer scope filtering.
+    var detail = scoring.taskDetail(taskId);
+    @SuppressWarnings("unchecked")
+    var assignments = (List<Map<String, Object>>) detail.get("assignments");
+    String title = java.util.Objects.toString(detail.get("title"), "任务");
+    var rows = assignments.stream().map(row -> TaskScoreExportRow.from(title, row)).toList();
+    response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''"
+        + java.net.URLEncoder.encode(title + "-任务成绩.xlsx", java.nio.charset.StandardCharsets.UTF_8));
+    com.alibaba.excel.EasyExcel.write(response.getOutputStream(), TaskScoreExportRow.class)
+        .sheet("任务成绩").doWrite(rows);
+  }
+
   @PutMapping("/tasks/{taskId}/reviewers")
   public ApiResponse<Void> reviewers(@PathVariable Long taskId, @RequestBody ReviewerRequest request) {
     scoring.setReviewers(taskId, request.reviewerIds());

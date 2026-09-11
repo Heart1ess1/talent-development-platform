@@ -1,4 +1,5 @@
 export type TrainingPlan = {
+  folder_id?: number | null
   id: number
   name: string
   description?: string | null

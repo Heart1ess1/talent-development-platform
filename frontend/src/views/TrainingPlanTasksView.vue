@@ -214,12 +214,12 @@ onMounted(async()=>{
   <div class="plan-module-page orchestration-page">
     <section class="plan-hero">
       <div>
-        <span class="eyebrow">培养计划 · 任务编排</span>
+        <span class="eyebrow">闯关任务 · 任务编排</span>
         <h1>任务编排</h1>
         <p>按照实际培养路径设计任务内容、附件与先后顺序；下发时再确定目标人员和截止时间。</p>
       </div>
       <div class="hero-actions">
-        <el-button :icon="Back" @click="router.push('/training-plans/manage')">返回计划管理</el-button>
+        <el-button :icon="Back" @click="router.push('/training-plans/manage')">返回任务管理</el-button>
         <el-button type="primary" :icon="Plus" :disabled="!selectedPlan" @click="openCreate">新增任务</el-button>
       </div>
     </section>
@@ -276,7 +276,7 @@ onMounted(async()=>{
                 <h2>{{selectedPlan.name}}</h2>
                 <el-tag :type="planStatus(selectedPlan).type">{{planStatus(selectedPlan).label}}</el-tag>
               </div>
-              <p>{{selectedPlan.description||'尚未填写计划说明，可返回计划管理补充。'}}</p>
+              <p>{{selectedPlan.description||'尚未填写计划说明，可返回任务管理补充。'}}</p>
             </div>
             <div class="canvas-actions">
               <el-button :icon="isPlanEnabled(selectedPlan)?VideoPause:VideoPlay" @click="togglePlan">

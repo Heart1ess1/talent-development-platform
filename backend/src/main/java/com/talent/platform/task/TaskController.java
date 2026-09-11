@@ -294,6 +294,10 @@ public class TaskController {
       var output = new TaskProgressExportRow();
       output.setEmployeeName(text(row.get("employee_name")));
       output.setEmployeeNo(text(row.get("employee_no")));
+      output.setBatchName(text(row.get("batch_name")));
+      output.setBusinessUnitName(text(row.get("business_unit_name")));
+      output.setClassName(text(row.get("class_name")));
+
       output.setAssignedAt(text(row.get("assigned_at")));
       output.setSubmittedAt(text(row.get("submitted_at")));
       output.setStatus(taskStatusLabel(text(row.get("status"))));
@@ -321,6 +325,7 @@ public class TaskController {
     args.addAll(scope.args());
     var submissions = db.queryForList("""
         select s.id,s.submission_version,s.content,s.submitted_at,
+               a.batch_name_snapshot batch_name,a.business_unit_name_snapshot business_unit_name,a.class_name_snapshot class_name,
                e.name employee_name,e.employee_no
         from task_submission s
         join task_assignment a on a.id=s.assignment_id
@@ -336,6 +341,7 @@ public class TaskController {
   public void exportSubmissionArchive(@PathVariable Long id, HttpServletResponse response) throws IOException {
     var rows = db.queryForList("""
         select s.id,s.assignment_id,s.submission_version,s.content,s.submitted_at,
+               a.batch_name_snapshot batch_name,a.business_unit_name_snapshot business_unit_name,a.class_name_snapshot class_name,
                e.name employee_name,e.employee_no,t.title task_title
         from task_submission s
         join task_assignment a on a.id=s.assignment_id
@@ -685,8 +691,8 @@ public class TaskController {
     args.add(taskId);
     args.addAll(scope.args());
     String sql = "select a.id,a.status,a.assigned_at,a.final_score,"
-        + "e.id employee_id,e.name employee_name,e.employee_no,e.class_id,cls.label class_name,"
-        + "e.class_position_id,cp.label class_position_name,"
+        + "e.id employee_id,e.name employee_name,e.employee_no,a.class_id_snapshot class_id,a.class_name_snapshot class_name,"
+        + "a.batch_name_snapshot batch_name,a.business_unit_name_snapshot business_unit_name,e.class_position_id,cp.label class_position_name,"
         + "s.id submission_id,s.submitted_at,s.status submission_status,s.submission_version,coalesce((select group_concat(concat(u2.display_name,'：',coalesce(r.comment,'无意见')) order by u2.display_name separator '\n') from task_submission_review r join sys_user u2 on u2.id=r.reviewer_user_id where r.submission_id=s.id and r.status='SUBMITTED'),s.review_comment) review_comment,"
         + "(select count(*) from task_reviewer_scope_member m where m.scope_id=a.scoring_scope_id) reviewer_count,"
         + "(select count(*) from task_submission_review r where r.submission_id=s.id and r.status='SUBMITTED') submitted_review_count,"
@@ -756,6 +762,12 @@ public class TaskController {
           }
           zip.closeEntry();
         }
+        putZipText(zip, folder + "人员信息.txt",
+            "姓名：" + text(submission.get("employee_name")) + "\n"
+            + "工号：" + text(submission.get("employee_no")) + "\n"
+            + "批次：" + text(submission.get("batch_name")) + "\n"
+            + "板块：" + text(submission.get("business_unit_name")) + "\n"
+            + "班级：" + text(submission.get("class_name")) + "\n");
       }
     }
   }

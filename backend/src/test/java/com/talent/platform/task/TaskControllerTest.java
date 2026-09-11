@@ -156,7 +156,10 @@ class TaskControllerTest {
     when(db.queryForList(contains("from task_assignment a join challenge_task t"), aryEq(new Object[]{5L})))
         .thenReturn(List.of(new HashMap<>(Map.of(
             "employee_name", "新员工1",
-            "employee_no", "employee",
+            "employee_no", "001234567890",
+            "batch_name", "2026届",
+            "business_unit_name", "售后",
+            "class_name", "一班",
             "status", "APPROVED",
             "final_score", 90,
             "file_count", 2))));
@@ -169,7 +172,13 @@ class TaskControllerTest {
     assertThat(response.getContentType())
         .isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     assertThat(response.getHeader("Content-Disposition")).contains(".xlsx");
-    assertThat(response.getContentAsByteArray()).isNotEmpty();
+    try (var book = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new ByteArrayInputStream(response.getContentAsByteArray()))) {
+      var row = book.getSheetAt(0).getRow(1);
+      assertThat(row.getCell(1).getStringCellValue()).isEqualTo("001234567890");
+      assertThat(row.getCell(9).getStringCellValue()).isEqualTo("2026届");
+      assertThat(row.getCell(10).getStringCellValue()).isEqualTo("售后");
+      assertThat(row.getCell(11).getStringCellValue()).isEqualTo("一班");
+    }
   }
 
   @Test
@@ -197,6 +206,9 @@ class TaskControllerTest {
       assertThat(entry).isNotNull();
       assertThat(entry.getName()).isEqualTo("新员工1（employee）/第2版/提交说明.txt");
       assertThat(new String(zip.readAllBytes())).isEqualTo("提交说明");
+      assertThat(zip.getNextEntry().getName()).endsWith("人员信息.txt");
+      assertThat(new String(zip.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8))
+          .contains("工号：employee", "批次：", "板块：", "班级：");
     }
   }
 

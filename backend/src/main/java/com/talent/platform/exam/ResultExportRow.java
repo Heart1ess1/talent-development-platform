@@ -38,4 +38,12 @@ public class ResultExportRow {
 
     @ExcelProperty("提交时间")
     private String submittedAt;
+    @ExcelProperty("工号")
+    private String employeeNo;
+    @ExcelProperty("批次")
+    private String batchName;
+    @ExcelProperty("板块")
+    private String businessUnitName;
+    @ExcelProperty("班级")
+    private String className;
 }

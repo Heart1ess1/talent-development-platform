@@ -656,7 +656,7 @@ onMounted(async () => {
   <div class="task-module-page">
     <header class="task-page-head">
       <div>
-        <span class="eyebrow">{{employee?'培养任务 · 我的任务':trackingMode?'培养计划 · 任务跟踪':'培养计划 · 任务下发'}}</span>
+        <span class="eyebrow">{{employee?'培养任务 · 我的任务':trackingMode?'闯关任务 · 任务跟踪':'闯关任务 · 任务下发'}}</span>
         <h1>{{employee?'我的任务':trackingMode?'任务跟踪':'任务下发'}}</h1>
         <p v-if="employee">查看任务说明与附件、提交成果，并跟踪审核结果。</p>
         <p v-else-if="trackingMode">集中查看任务覆盖、提交状态与评分进度；实际评分统一在任务评分页面完成。</p>

@@ -75,9 +75,9 @@ const menus=computed<MenuItem[]>(()=>[
   {label:isEmployee.value?'课程学习':'课程管理',children:courseChildren.value},
   ...(isEmployee.value
     ?[{to:'/tasks',label:'我的任务'}]
-    :[{label:'培养计划',children:[
+    :[{label:'闯关任务',children:[
       ...(auth.can('task:manage')?[
-        {to:'/training-plans/manage',label:'计划管理'},
+        {to:'/training-plans/manage',label:'任务管理'},
         {to:'/training-plans/tasks',label:'任务编排'},
         {to:'/tasks',label:'任务下发'}
       ]:[]),

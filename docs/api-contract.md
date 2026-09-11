@@ -397,3 +397,27 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/tasks/dispatch-plan` | `task:manage` | 从计划下发选定任务并生成附件快照 | `planId`、`planTaskIds`、可选 `taskTitle`、可选 `reviewerScopes`、`deadlineMode`，以及可组合的 `batchId`、`classId`、`businessUnitId`、`stationId`；旧 `reviewerIds` 兼容统一评分人 | `targetEmployees`、`createdTasks`、`createdAssignments` |
 
 培养计划新建后默认为草稿，至少编排一项任务才允许启用。培养计划编排任务标题、任务说明、成果要求、附件和执行顺序，不包含人员与截止时间；计划任务应在“任务下发”页面按需下发。已产生下发记录的计划只能停用，不能删除；已下发的计划任务也不能删除，以保证历史可追溯。目标人员不支持逐人指定，可按 `batchId`（批次）、`classId`（班级）、`businessUnitId`（所属板块）、`stationId`（服务站）组合筛选 `ACTIVE` 员工；同时填写多个条件时按交集匹配。任务分配会固化批次、板块、班级 ID 和名称快照。`taskTitle` 可选，留空时使用每个计划任务的名称，填写后作为本次下发任务的统一名称。`deadlineMode` 支持：`OFFSET`（`baseDate + offsetDays`）和 `ABSOLUTE`（`deadlineDate`）；均在当日 `23:59:59` 截止。下发结果关联 `training_plan_task_id`，同一计划任务和截止日期会复用任务，避免重复分配；复用任务已有不同评分范围配置时拒绝静默覆盖，并提示到任务评分页面处理。计划附件在下发时复制为任务附件快照，后续模板附件调整不会影响已下发任务。
+
+### 人员相关导出字段约定
+
+人员台账、任务提交情况、考试成绩、任务成绩导出均包含工号、批次、板块、班级；工号按文本写入，保留前导零。台账和考试成绩使用当前档案归属，任务导出使用下发时的归属快照。任务资料 ZIP（整任务及单次提交）在每个提交版本目录附带 `人员信息.txt`，记录上述字段。
+
+`GET /api/v1/task-scoring/tasks/{taskId}/export`：沿用任务评分详情的访问权限及评分范围过滤，返回任务成绩 Excel，包含任务名称、人员信息、评分人、提交版本/时间、评分状态、已评分/应评分人数及最终平均分。导出本任务可见范围内全部人员，不受详情页临时筛选或排序影响；未评分保留空分数，零分保留数值 0。
+
+### 账号管理与人员台账关联
+
+`GET /api/v1/users` 通过 `employee.user_id = sys_user.id` 读取人员台账，增加 `employee_id`、`employee_no`、`employee_name`、`batch_id/batch_name`、`business_unit_id/business_unit_name`、`class_id/class_name` 字段。未关联档案的账号保留在列表中，人员字段为空；原有账号角色可见范围与操作权限保持不变。
+
+账号管理页面支持姓名、工号、用户名、人员归属及服务站关键词搜索，支持角色、启停状态、批次、板块、班级和台账关联状态组合筛选。筛选在完整的授权账号列表上执行后再分页，重置清空全部条件，启停操作后保留条件并重新加载数据。启停仅控制账号登录状态，不修改人员档案在职状态。
+
+### 计划与题库文件夹
+
+新增一级文件夹，两个模块独立管理：`domain=training-plans` 使用 `task:manage`，`domain=question-banks` 使用 `exam:manage`。模块内授权管理员共享分类，文件夹不构成新的数据权限范围。
+
+- `GET /api/v1/organization-folders/{domain}`：文件夹列表及内容数量。
+- `POST /api/v1/organization-folders/{domain}`：新建，正文 `{name}`，名称去除首尾空格，最多 80 字符，模块内不可重名。
+- `PUT /api/v1/organization-folders/{domain}/{id}`：重命名，正文 `{name}`。
+- `DELETE /api/v1/organization-folders/{domain}/{id}`：仅删除文件夹，原内容通过外键 `ON DELETE SET NULL` 回到未分类。
+- `PUT /api/v1/organization-folders/{domain}/items`：批量移动，正文 `{itemIds, folderId}`；`folderId=null` 表示移出文件夹。每次最多 500 项，事务内校验全部内容与目标文件夹，任一不存在则拒绝整批操作。
+
+计划列表、题库列表新增 `folder_id`。历史和新建内容默认未分类；页面提供全部、未分类、自定义文件夹，支持与原搜索/状态筛选组合。计划下的任务、已下发任务、题库内题目及组卷引用关系保持不变。数据库迁移为 `V38__organization_folders.sql`。

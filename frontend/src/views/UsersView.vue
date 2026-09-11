@@ -23,7 +23,9 @@ import {useAuthStore} from '@/stores/auth'
 import {avatarUrl,nameInitial} from '@/utils/avatar'
 import {ROLE_LABELS as roleLabels,roleLabel,type Role} from '@/utils/role'
 
-type UserRow={
+import {filterAccounts,accountFilterOptions,type AccountFilters,type AccountPersonnel} from './userFilters'
+
+type UserRow=AccountPersonnel&{
   id:number
   username:string
   display_name:string
@@ -54,11 +56,7 @@ const formRef=ref<FormInstance>()
 const page=ref(1)
 const pageSize=ref(10)
 
-const filters=reactive<{keyword:string;role:''|Role;enabled:''|'enabled'|'disabled'}>({
-  keyword:'',
-  role:'',
-  enabled:''
-})
+const filters=reactive<AccountFilters>({keyword:'',role:'',enabled:'',batchId:'',businessUnitId:'',classId:'',linked:''})
 const form=reactive<{username:string;displayName:string;role:Role;stationIds:number[]}>({
   username:'',
   displayName:'',
@@ -105,22 +103,12 @@ const stats=computed(()=>({
   admin:rows.value.filter(row=>['ADMIN','SUPER_ADMIN','TRAINING_ADMIN'].includes(row.role)).length,
   pending:rows.value.filter(row=>row.must_change_password).length
 }))
-const filteredRows=computed(()=>{
-  const keyword=filters.keyword.trim().toLowerCase()
-  return rows.value.filter(row=>{
-    const matchesKeyword=!keyword
-      || row.username.toLowerCase().includes(keyword)
-      || row.display_name.toLowerCase().includes(keyword)
-      || (row.station_names||'').toLowerCase().includes(keyword)
-    const matchesRole=!filters.role||row.role===filters.role
-    const matchesStatus=!filters.enabled
-      || (filters.enabled==='enabled'&&row.enabled)
-      || (filters.enabled==='disabled'&&!row.enabled)
-    return matchesKeyword&&matchesRole&&matchesStatus
-  })
-})
+const filteredRows=computed(()=>filterAccounts(rows.value,filters))
+const batchOptions=computed(()=>accountFilterOptions(rows.value,'batch_id','batch_name'))
+const businessUnitOptions=computed(()=>accountFilterOptions(rows.value,'business_unit_id','business_unit_name'))
+const classOptions=computed(()=>accountFilterOptions(rows.value,'class_id','class_name'))
 const pagedRows=computed(()=>filteredRows.value.slice((page.value-1)*pageSize.value,page.value*pageSize.value))
-const hasFilters=computed(()=>Boolean(filters.keyword||filters.role||filters.enabled))
+const hasFilters=computed(()=>Object.values(filters).some(Boolean))
 
 watch(filters,()=>{page.value=1})
 watch(()=>form.role,role=>{
@@ -146,7 +134,7 @@ async function load(){
 }
 
 function resetFilters(){
-  Object.assign(filters,{keyword:'',role:'',enabled:''})
+  Object.assign(filters,{keyword:'',role:'',enabled:'',batchId:'',businessUnitId:'',classId:'',linked:''})
 }
 
 function openCreate(){
@@ -396,7 +384,7 @@ onMounted(load)
             class="search-input"
             clearable
             :prefix-icon="Search"
-            placeholder="搜索姓名、用户名或服务站"
+            placeholder="搜索姓名、工号、用户名或人员归属"
           />
           <el-select v-model="filters.role" clearable filterable placeholder="全部角色">
             <el-option v-for="(label,role) in roleLabels" :key="role" :label="label" :value="role"/>
@@ -405,6 +393,10 @@ onMounted(load)
             <el-option label="正常启用" value="enabled"/>
             <el-option label="已停用" value="disabled"/>
           </el-select>
+          <el-select v-model="filters.batchId" clearable filterable placeholder="全部批次"><el-option v-for="item in batchOptions" :key="item.id" :value="item.id" :label="item.label"/></el-select>
+          <el-select v-model="filters.businessUnitId" clearable filterable placeholder="全部板块"><el-option v-for="item in businessUnitOptions" :key="item.id" :value="item.id" :label="item.label"/></el-select>
+          <el-select v-model="filters.classId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :value="item.id" :label="item.label"/></el-select>
+          <el-select v-model="filters.linked" clearable filterable placeholder="全部关联状态"><el-option label="已关联人员台账" value="linked"/><el-option label="未关联人员台账" value="unlinked"/></el-select>
           <el-button v-if="hasFilters" @click="resetFilters">重置</el-button>
         </div>
       </div>
@@ -435,6 +427,10 @@ onMounted(load)
           </template>
         </el-table-column>
 
+        <el-table-column label="工号" min-width="145"><template #default="{row}">{{row.employee_no||'—'}}</template></el-table-column>
+        <el-table-column label="批次" min-width="100"><template #default="{row}">{{row.batch_name||(row.has_employee_profile?'未设置':'未关联台账')}}</template></el-table-column>
+        <el-table-column label="板块" min-width="120"><template #default="{row}">{{row.business_unit_name||'—'}}</template></el-table-column>
+        <el-table-column label="班级" min-width="110"><template #default="{row}">{{row.class_name||'—'}}</template></el-table-column>
         <el-table-column label="角色" min-width="150">
           <template #default="{row}">
             <div class="role-cell">
@@ -651,7 +647,7 @@ onMounted(load)
 .card-heading>div:first-child{display:flex;align-items:baseline;gap:10px;flex-shrink:0}
 .card-heading h2{margin:0;color:#1e293b;font-size:17px}
 .card-heading span{color:#8a96a8;font-size:12px}
-.filters{display:flex;align-items:center;justify-content:flex-end;gap:9px;min-width:0}
+.filters{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:9px;min-width:0;flex:1;max-width:1050px}
 .filters .search-input{width:280px}
 .filters :deep(.el-select){width:138px}
 .filters :deep(.el-input__wrapper){min-height:36px;border-radius:8px;box-shadow:0 0 0 1px #dfe5ee inset}
