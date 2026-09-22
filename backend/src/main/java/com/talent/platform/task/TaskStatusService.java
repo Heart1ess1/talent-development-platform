@@ -33,14 +33,14 @@ public class TaskStatusService {
   public int refreshOverdueAssignments() {
     return db.update("update task_assignment a join challenge_task t on t.id=a.task_id "
         + "set a.status='OVERDUE',a.final_score=0,a.version=a.version+1 "
-        + "where a.status='NOT_SUBMITTED' and t.deadline<now()");
+        + "where a.status in ('NOT_SUBMITTED','RETURNED') and t.deadline<now()");
   }
 
   public synchronized void rescheduleNextDeadline() {
     refreshOverdueAssignments();
     if (nextDeadlineJob != null) nextDeadlineJob.cancel(false);
     Object value = db.queryForObject("select min(t.deadline) from task_assignment a "
-        + "join challenge_task t on t.id=a.task_id where a.status='NOT_SUBMITTED' and t.deadline>now()", Object.class);
+        + "join challenge_task t on t.id=a.task_id where a.status in ('NOT_SUBMITTED','RETURNED') and t.deadline>now()", Object.class);
     LocalDateTime deadline = asLocalDateTime(value);
     nextDeadlineJob = deadline == null ? null : scheduler.schedule(this::rescheduleNextDeadline,
         Instant.from(deadline.atZone(ZONE)));

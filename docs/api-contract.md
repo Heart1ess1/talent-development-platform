@@ -111,6 +111,21 @@ Authorization: Bearer <token>
 - 管理员通过 `PUT /api/v1/employees/{id}` 直接改变或取消服务站分配时，后端会写入一条已生效的 `station_change_request`，不能绕过历史轨迹。
 - 前端旧 `/employees` 地址只做路由重定向，不是新的 API，也不再对应独立人员台账页面。
 
+### 人员培养画像
+
+| 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/v1/employees/{id}/portrait/overview` | `employee:portrait:view`，按员工范围校验 | 培养画像概览 | 路径 `id` | 员工摘要、六项指标、任务/课程/考试/评价图表、数据获取时间 |
+| `GET` | `/api/v1/employees/{id}/portrait/courses` | 同上 | 参训场次或课件阅读 | `type=SESSIONS\|MATERIALS`、分页、可选 `dateFrom`、`dateTo` | 场次或按课件 ID 去重的阅读记录 |
+| `GET` | `/api/v1/employees/{id}/portrait/tasks` | 同上 | 培养任务及提交、评分历史 | 可选 `status`、`dateFrom`、`dateTo`、分页 | 任务状态、归属快照、提交版本和评分结果 |
+| `GET` | `/api/v1/employees/{id}/portrait/exams` | 同上 | 考试计划及历次作答 | 可选 `dateFrom`、`dateTo`、分页 | 包含未参加计划；未发布分数字段按 `exam:manage` 控制 |
+| `GET` | `/api/v1/employees/{id}/portrait/evaluations` | 同上 | 月度或季度评价版本 | `type=MONTH\|QUARTER`、可选 `dateFrom`、`dateTo`、分页 | 正式结果；有 `evaluation:manage` 时包含草稿和缺项 |
+| `GET` | `/api/v1/employees/{id}/portrait/stations` | 同上 | 当前服务站和已生效调站经历 | 路径 `id` | 当前归属、已审批调站记录 |
+| `GET` | `/api/v1/employees/{id}/portrait/locations` | 同上 | 最新位置报备和历史 | 可选 `dateFrom`、`dateTo`、分页 | 最新报备及按实际变动时间排列的历史 |
+| `GET` | `/api/v1/employees/{id}/portrait/timeline` | 同上 | 成长事件时间线 | 可选 `type`、`dateFrom`、`dateTo`、分页 | 入职、签到、任务、考试、评价、调站及位置事件 |
+
+画像接口均为只读查询。日期筛选口径分别为场次开始/最近阅读、任务截止、考试开始、评价生成、位置实际变动和事件实际发生时间；默认页大小 20，上限 100。概览统计始终基于完整业务记录，不从当前明细分页反推。
+
 ## 人员目录与导入
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |

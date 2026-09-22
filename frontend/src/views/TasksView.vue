@@ -196,6 +196,7 @@ const assignmentMetrics = computed(() => ({
 const taskStateTabs = computed(() => [
   {label: '全部任务', value: 'ALL', count: tasks.value.length},
   {label: '进行中', value: 'IN_PROGRESS', count: tasks.value.filter(item => managerTaskState(item) === 'IN_PROGRESS').length},
+  {label: '已结束', value: 'ENDED', count: tasks.value.filter(item => managerTaskState(item) === 'ENDED').length},
   {label: '已完成', value: 'COMPLETED', count: tasks.value.filter(item => managerTaskState(item) === 'COMPLETED').length},
   {label: '未分配', value: 'UNASSIGNED', count: tasks.value.filter(item => managerTaskState(item) === 'UNASSIGNED').length}
 ])
@@ -241,6 +242,7 @@ const progressMetrics = computed(() => ({
   approved: taskProgress.value.filter(row => row.status === 'APPROVED').length,
   files: taskProgress.value.reduce((total, row) => total + Number(row.file_count || 0), 0)
 }))
+const overdueProgressCount = computed(() => taskProgress.value.filter(row => row.status === 'OVERDUE').length)
 
 async function load() {
   tasks.value = (await api.get<any, Envelope<any[]>>('/tasks')).data
@@ -435,7 +437,7 @@ async function doSubmit() {
 }
 
 function statusLabel(status: string) {
-  return ({NOT_SUBMITTED: '未提交', PENDING_REVIEW: '待审核', APPROVED: '已通过', RETURNED: '已退回', OVERDUE: '已逾期'} as Record<string, string>)[status] || status
+  return ({NOT_SUBMITTED: '未提交', PENDING_REVIEW: '待审核', APPROVED: '已通过', RETURNED: '已退回', OVERDUE: '逾期未完成'} as Record<string, string>)[status] || status
 }
 
 function statusTagType(status: string) {
@@ -443,19 +445,21 @@ function statusTagType(status: string) {
 }
 
 function managerTaskState(task: any) {
+  if (task.lifecycle_status) return task.lifecycle_status
   const assigned = Number(task.assigned_count || 0)
   const approved = Number(task.approved_count || 0)
   if (!assigned) return 'UNASSIGNED'
   if (approved >= assigned) return 'COMPLETED'
+  if (task.deadline && new Date(task.deadline).getTime() < Date.now()) return 'ENDED'
   return 'IN_PROGRESS'
 }
 
 function managerTaskStateLabel(task: any) {
-  return ({UNASSIGNED: '未分配', COMPLETED: '已完成', IN_PROGRESS: '进行中'} as Record<string, string>)[managerTaskState(task)]
+  return ({UNASSIGNED: '未分配', COMPLETED: '已完成', IN_PROGRESS: '进行中', ENDED: '已结束'} as Record<string, string>)[managerTaskState(task)]
 }
 
 function managerTaskStateType(task: any) {
-  return ({UNASSIGNED: 'info', COMPLETED: 'success', IN_PROGRESS: 'warning'} as Record<string, string>)[managerTaskState(task)] || 'info'
+  return ({UNASSIGNED: 'info', COMPLETED: 'success', IN_PROGRESS: 'warning', ENDED: 'info'} as Record<string, string>)[managerTaskState(task)] || 'info'
 }
 
 function resetProgressFilters() {
@@ -936,7 +940,7 @@ onMounted(async () => {
       <template #footer><el-button @click="previewDialog = false">关闭</el-button><el-button type="primary" @click="downloadSubmissionFile(previewFile)">下载</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="progressDialog" width="min(1280px, 94vw)" top="5vh" class="progress-dialog" destroy-on-close>
+    <el-dialog v-model="progressDialog" width="min(1500px, calc(100vw - 24px))" top="3vh" class="progress-dialog" destroy-on-close>
       <template #header>
         <div class="progress-dialog-heading">
           <div><span>任务执行明细</span><h3>{{selectedTask?.title || '员工完成情况'}}</h3></div>
@@ -961,10 +965,10 @@ onMounted(async () => {
             <el-option label="待审核" value="PENDING_REVIEW" />
             <el-option label="已退回" value="RETURNED" />
             <el-option label="已通过" value="APPROVED" />
-            <el-option label="已逾期" value="OVERDUE" />
+            <el-option label="逾期未完成" value="OVERDUE" />
           </el-select>
           <el-tooltip content="清除筛选"><el-button class="progress-reset" :icon="RefreshLeft" circle :disabled="!hasProgressFilters" @click="resetProgressFilters" /></el-tooltip>
-          <span class="progress-count">显示 {{filteredTaskProgress.length}} / {{taskProgress.length}} 人</span>
+          <span class="progress-count">显示 {{filteredTaskProgress.length}} / {{taskProgress.length}} 人<span v-if="overdueProgressCount"> · 逾期 {{overdueProgressCount}} 人</span></span>
         </div>
         <div class="progress-export-actions">
           <el-button :icon="FolderOpened" :loading="exportingFiles" :disabled="!progressMetrics.files" @click="exportTaskFiles">打包下载文件</el-button>
@@ -973,17 +977,17 @@ onMounted(async () => {
       </div>
 
       <div class="progress-table-shell">
-        <el-table :data="filteredTaskProgress" max-height="520" empty-text="未找到符合条件的员工">
-          <el-table-column prop="employee_name" label="员工" min-width="120" />
-          <el-table-column prop="employee_no" label="工号" min-width="110" />
-          <el-table-column prop="class_name" label="班级" min-width="100"><template #default="scope">{{scope.row.class_name||'未设置'}}</template></el-table-column>
-          <el-table-column prop="assigned_at" label="下发时间" min-width="160"><template #default="scope">{{formatDate(scope.row.assigned_at)}}</template></el-table-column>
-          <el-table-column prop="submitted_at" label="最近提交" min-width="160"><template #default="scope">{{formatDate(scope.row.submitted_at)}}</template></el-table-column>
+        <el-table :data="filteredTaskProgress" max-height="520" class="progress-table" empty-text="未找到符合条件的员工">
+          <el-table-column prop="employee_name" label="员工" min-width="88" show-overflow-tooltip />
+          <el-table-column prop="employee_no" label="工号" min-width="108" show-overflow-tooltip />
+          <el-table-column prop="class_name" label="班级" min-width="82" show-overflow-tooltip><template #default="scope">{{scope.row.class_name||'未设置'}}</template></el-table-column>
+          <el-table-column prop="assigned_at" label="下发时间" min-width="138"><template #default="scope"><span class="progress-date">{{formatDate(scope.row.assigned_at)}}</span></template></el-table-column>
+          <el-table-column prop="submitted_at" label="最近提交" min-width="138"><template #default="scope"><span class="progress-date">{{formatDate(scope.row.submitted_at)}}</span></template></el-table-column>
           <el-table-column prop="status" label="完成状态" width="110"><template #default="scope"><el-tag :type="statusTagType(scope.row.status)">{{statusLabel(scope.row.status)}}</el-tag></template></el-table-column>
-          <el-table-column label="文件" width="90"><template #default="scope"><span class="file-count">{{scope.row.submission_id ? `${scope.row.file_count || 0} 个附件` : '--'}}</span></template></el-table-column>
-          <el-table-column label="评分进度" width="110" align="center"><template #default="scope">{{scope.row.submitted_review_count||0}} / {{scope.row.reviewer_count||0}}</template></el-table-column>
-          <el-table-column prop="final_score" label="平均分" width="80" align="center"><template #default="scope"><strong class="score-value">{{scope.row.final_score ?? '--'}}</strong></template></el-table-column>
-          <el-table-column label="操作" width="220" fixed="right">
+          <el-table-column label="文件" width="82"><template #default="scope"><span class="file-count">{{scope.row.submission_id ? `${scope.row.file_count || 0} 个附件` : '--'}}</span></template></el-table-column>
+          <el-table-column label="评分进度" width="94" align="center"><template #default="scope">{{scope.row.submitted_review_count||0}} / {{scope.row.reviewer_count||0}}</template></el-table-column>
+          <el-table-column prop="final_score" label="平均分" width="72" align="center"><template #default="scope"><strong class="score-value">{{scope.row.final_score ?? '--'}}</strong></template></el-table-column>
+          <el-table-column label="操作" width="118" fixed="right">
             <template #default="scope">
               <div class="progress-row-actions">
                 <el-button v-if="scope.row.submission_id && Number(scope.row.file_count)" link type="primary" @click="previewEmployeeSubmission(scope.row)">预览</el-button>
@@ -1040,7 +1044,7 @@ onMounted(async () => {
 .dispatch-preview-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:16px}.dispatch-preview-summary span{display:flex;align-items:baseline;justify-content:center;gap:5px;padding:13px;border-radius:9px;color:#738093;background:#f5f8fb;font-size:11px}.dispatch-preview-summary strong{color:#347cc5;font-size:21px}
 .form-stack{display:grid;gap:14px}.task-detail-form{padding:4px 0 18px}.pre-wrap{white-space:pre-wrap}.submission-heading{margin-bottom:8px;color:var(--el-text-color-regular);font-weight:600}.submission-content{margin:0 0 16px;white-space:pre-wrap}.review-panel{display:grid;gap:16px;margin-top:20px}.review-field{display:flex;min-height:32px;align-items:center;gap:14px}.review-label{width:64px;color:var(--el-text-color-regular)}.review-score{width:160px}.review-unit{color:var(--el-text-color-secondary)}
 .submission-upload-list{display:grid;gap:9px;margin:12px 0}.submission-upload-item{padding:10px 12px;border:1px solid #e5eaf1;border-radius:8px;background:#f9fbfd}.submission-file-heading{display:flex;align-items:center;gap:9px;margin-bottom:8px}.submission-file-heading>span{display:flex;min-width:0;flex:1;align-items:baseline;gap:8px}.submission-file-heading strong{overflow:hidden;color:#445066;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.submission-file-heading small{flex:none;color:#929cab;font-size:10px}.submission-file-heading .el-button{margin:0;padding:2px}.submission-file-error{display:block;margin-top:5px;color:var(--el-color-danger);font-size:10px}.submission-upload-item :deep(.el-progress__text){min-width:34px;font-size:10px}
-.progress-dialog-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding-right:28px}.progress-dialog-heading>div{display:flex;min-width:0;flex-direction:column;gap:4px}.progress-dialog-heading span{color:#3b82c4;font-size:11px;font-weight:700}.progress-dialog-heading h3{margin:0;overflow:hidden;color:#28364b;font-size:19px;text-overflow:ellipsis;white-space:nowrap}.progress-dialog-heading p{margin:0;color:#8c97a8;font-size:12px}.progress-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}.progress-overview article{display:grid;grid-template-columns:auto 1fr;align-items:baseline;min-height:72px;padding:12px 14px;border:1px solid #e7ebf1;border-radius:9px;background:#fafcff;column-gap:8px}.progress-overview small{grid-column:1/-1;color:#7d8899;font-size:11px}.progress-overview strong{color:#475569;font-size:22px;line-height:1.25}.progress-overview article>span{overflow:hidden;color:#9aa3b1;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.progress-overview .blue strong{color:#347fc4}.progress-overview .amber strong{color:#c47a12}.progress-overview .green strong{color:#168d70}.progress-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;padding:12px;border:1px solid #e8ecf2;border-radius:9px;background:#f8fafc}.progress-filters,.progress-export-actions{display:flex;align-items:center;gap:8px}.progress-filters .el-input{width:250px}.progress-filters .el-select{width:145px}.progress-count{margin-left:2px;color:#8a95a5;font-size:12px;white-space:nowrap}.progress-export-actions .el-button{margin:0}.progress-table-shell{overflow:hidden;border:1px solid #e6eaf0;border-radius:9px}.progress-row-actions{display:flex;min-height:30px;align-items:center;gap:2px;white-space:nowrap}.progress-row-actions .el-button{margin:0;padding:4px 6px}.file-count{color:#778396;font-size:11px}.score-value{color:#354258}.no-submission{color:#a1a9b5;font-size:11px}
+.progress-dialog-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding-right:28px}.progress-dialog-heading>div{display:flex;min-width:0;flex-direction:column;gap:4px}.progress-dialog-heading span{color:#3b82c4;font-size:11px;font-weight:700}.progress-dialog-heading h3{margin:0;overflow:hidden;color:#28364b;font-size:19px;text-overflow:ellipsis;white-space:nowrap}.progress-dialog-heading p{margin:0;color:#8c97a8;font-size:12px}.progress-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}.progress-overview article{display:grid;grid-template-columns:auto 1fr;align-items:baseline;min-height:72px;padding:12px 14px;border:1px solid #e7ebf1;border-radius:9px;background:#fafcff;column-gap:8px}.progress-overview small{grid-column:1/-1;color:#7d8899;font-size:11px}.progress-overview strong{color:#475569;font-size:22px;line-height:1.25}.progress-overview article>span{overflow:hidden;color:#9aa3b1;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.progress-overview .blue strong{color:#347fc4}.progress-overview .amber strong{color:#c47a12}.progress-overview .green strong{color:#168d70}.progress-toolbar{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;padding:12px;border:1px solid #e8ecf2;border-radius:9px;background:#f8fafc}.progress-filters,.progress-export-actions{display:flex;align-items:center;gap:8px}.progress-filters{min-width:0;flex:1}.progress-filters .el-input{width:220px}.progress-filters .el-select{width:122px}.progress-count{margin-left:2px;color:#8a95a5;font-size:12px;white-space:nowrap}.progress-export-actions{flex:none}.progress-export-actions .el-button{margin:0}.progress-table-shell{width:100%;min-width:0;overflow:hidden;border:1px solid #e6eaf0;border-radius:9px}.progress-table{width:100%;min-width:0}.progress-date{font-size:11px;white-space:nowrap}.progress-person{display:flex;min-width:0;flex-direction:column;gap:3px}.progress-person strong{overflow:hidden;color:#344054;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.progress-person span{overflow:hidden;color:#8b96a7;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.progress-row-actions{display:flex;min-height:30px;align-items:center;gap:2px;white-space:nowrap}.progress-row-actions .el-button{margin:0;padding:4px 6px}.file-count{color:#778396;font-size:11px}.score-value{color:#354258}.no-submission{color:#a1a9b5;font-size:11px}
 :deep(.progress-dialog){overflow:hidden;border-radius:12px}:deep(.progress-dialog .el-dialog__header){padding:20px 22px 14px;border-bottom:1px solid #edf0f4}:deep(.progress-dialog .el-dialog__body){padding:16px 22px 22px}
 .preview-file-switcher{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px 12px;overflow-x:auto;border:1px solid #e7ebf1;border-radius:8px;background:#f8fafc;white-space:nowrap}.preview-file-switcher>span{flex:none;color:#7d8899;font-size:12px}.preview-file-switcher .el-button{flex:none;margin:0}.file-preview{width:100%;border:0}.pdf-preview{height:68vh}.image-preview{display:block;max-height:68vh;object-fit:contain}.text-preview{max-height:68vh;margin:0;overflow:auto;white-space:pre-wrap;font-family:inherit;line-height:1.7}.docx-preview{max-height:68vh;padding:28px 40px;overflow:auto;color:var(--el-text-color-primary);background:#fff;line-height:1.7}.docx-preview :deep(p){margin:0 0 14px;word-break:break-word}.docx-preview :deep(img){width:auto!important;max-width:100%;height:auto!important;max-height:52vh;margin:4px 0;object-fit:contain;vertical-align:middle}.docx-preview :deep(table){width:100%;margin:14px 0;border-collapse:collapse;table-layout:fixed}.docx-preview :deep(td),.docx-preview :deep(th){padding:6px 8px;border:1px solid var(--el-border-color);overflow-wrap:anywhere;vertical-align:top}
 @media(max-width:1100px){.task-summary-grid{grid-template-columns:repeat(2,1fr)}.dispatch-layout{grid-template-columns:1fr}.dispatch-review{position:static;min-height:0;border-top:1px solid #e8ecf2;border-left:0}.manual-workspace{grid-template-columns:1fr}.manual-target{border-top:1px solid #e8ecf2;border-left:0}.progress-toolbar{align-items:stretch;flex-direction:column}.progress-export-actions{justify-content:flex-end}}
