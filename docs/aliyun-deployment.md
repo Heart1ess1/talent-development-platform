@@ -2,6 +2,16 @@
 
 本文是 `yryhx.cn` 的生产部署基线，覆盖 ECS、私有 OSS 签名传输、公共 OSS＋CDN、文件迁移、DNS、HTTPS、验收和回退。脚本位于 `deploy/aliyun/`。
 
+## 2026-09-23 任务下发对象多选发布
+
+- GitHub：任务下发多选 PR [#51](https://github.com/Heart1ess1/talent-development-platform/pull/51) 已合并，功能提交为 `2e86f34000a963a39c35dbabd248dd1c267cc5f7`，合并后生产基线为 `main@d28fb5e5290c25961b489860998bf41ebaf5028c`。
+- 功能范围：计划任务和临时任务的批次、班级、班级职务、板块、服务站筛选均支持多选；同一维度按并集匹配，不同维度按交集匹配；后端去重并兼容旧版单值参数。
+- 验证与构建：合并前已完成前端 49 项测试、TypeScript/Vite 生产构建和后端 154 项测试；根据本次发布要求未重复运行测试，仅重新生成 CDN 生产资源并使用 `maven.test.skip=true` 打包。生产 JAR SHA-256 为 `cb79dfb7015552694087dbcb6676c0a0bc8d77734765ba7a9145925683cdd395`。
+- 备份与发布：部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260923-052640.sql.gz`，SHA-256 为 `6b1d637eabb20c418f5aeccb8b79562843899a51a43335446a496fd4f7932d12`；81 个静态资源已上传，候选目录为 `/data/talent-platform/releases/staging/cdn-20260923-052708-d28fb5e5`，CDN 主资源为 `https://static.yryhx.cn/assets/index-BfYaSKXC.js`。
+- 生产结果：激活时出现三次短暂 502，脚本重试后恢复为 `UP`且未触发回滚。线上 JAR 哈希与候选包一致，Flyway 保持 V38，员工 275 人、任务分配 295 条，近 10 分钟应用日志未发现 `ERROR` 或 `Exception`。正式健康接口返回 200，未登录下发预览接口返回 401，CDN 资源返回 200、`text/javascript`和 `max-age=31104000`，第二次请求为 `TCP_MEM_HIT`，OSS 原始地址匿名访问返回 403。
+- 就绪说明：本机 DNS 代理将根域名映射为 `198.18.0.52`，因此综合脚本的本地 A 记录比对为 false；阿里公共 DNS over HTTPS 返回的权威结果为 `139.224.51.21`，其他 HTTPS、CDN、OSS、RAM Role、容器及服务器侧健康检查均通过。
+- 待人工复核：需使用生产管理员账号实际选择两个班级，目视确认多选标签和下发预览人数。
+
 ## 2026-09-22 人员培养画像与任务状态发布
 
 - GitHub：人员培养画像与任务状态 PR [#45](https://github.com/Heart1ess1/talent-development-platform/pull/45) 已合并，功能提交为 `988279bde41989ab2b8eacf9b5890d235263f09f`，合并后的生产基线为 `main@267f4a7a3cc994cb0df4857062c7b58822909eec`。
