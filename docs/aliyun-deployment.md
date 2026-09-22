@@ -2,6 +2,16 @@
 
 本文是 `yryhx.cn` 的生产部署基线，覆盖 ECS、私有 OSS 签名传输、公共 OSS＋CDN、文件迁移、DNS、HTTPS、验收和回退。脚本位于 `deploy/aliyun/`。
 
+## 2026-09-22 人员培养画像与任务状态发布
+
+- GitHub：人员培养画像与任务状态 PR [#45](https://github.com/Heart1ess1/talent-development-platform/pull/45) 已合并，功能提交为 `988279bde41989ab2b8eacf9b5890d235263f09f`，合并后的生产基线为 `main@267f4a7a3cc994cb0df4857062c7b58822909eec`。
+- 功能范围：人员台账新增只读培养画像，聚合课程、闯关任务、考试、综合评价、服务站与位置、成长记录，并执行专用权限和人员数据范围校验；任务跟踪统一任务层“已结束”和员工层“逾期未完成”的状态口径，员工进度弹窗恢复完整列布局并优化桌面端宽度。
+- 构建校验：前端 49 项测试、TypeScript 检查和 CDN 生产构建通过；后端 152 项测试及生产 JAR 打包通过。生产 JAR SHA-256 为 `390d24c92c07b5676393057f34db25c9a31cc3b96fb6d158cc23b8f13e333bb1`。
+- 备份与发布：部署前数据库备份为 `/data/talent-platform/backups/mysql/talent-platform-20260922-220405.sql.gz`，SHA-256 为 `509feb4fe2e7d7d6b6c39e46ce3bd2cac2552c6f760d52766dfcdb9054aada0b`；81 个静态资源上传成功，候选目录为 `/data/talent-platform/releases/staging/cdn-267f4a7a-20260922`，CDN 主资源为 `https://static.yryhx.cn/assets/index-D0YpbTlz.js`。
+- 生产结果：应用、MySQL 和 Nginx 容器正常，健康状态为 `UP`，Flyway 保持 V38；员工 275 人、任务分配 295 条。正式首页和健康接口返回 200，未登录画像及任务接口返回 401，CDN 主资源返回 200 且 OSS 原始地址匿名访问返回 403，部署后日志未发现 `ERROR` 或 `Exception`。
+- 激活时出现三次短暂 502，脚本重试后恢复并确认新 JAR 已生效。当前本机网络将根域名解析为 `198.18.0.179`，导致综合就绪脚本的 DNS 地址比对为 false；HTTPS、应用健康、CDN、OSS、RAM Role 和服务器内部验证均通过。
+- 待人工复核：生产真实账号下的培养画像七个页签、任务状态和员工进度弹窗布局仍需手动验收。
+
 ## 2026-09-11 人员导出、账号筛选与文件夹发布
 
 - 功能提交：`7005d24162f36ec1ded8173a9c72f47796066ce7`，已推送 GitHub main。包括人员相关导出补全、任务成绩导出、账号台账关联筛选、计划/题库文件夹，以及“闯关任务 / 任务管理”菜单命名。
