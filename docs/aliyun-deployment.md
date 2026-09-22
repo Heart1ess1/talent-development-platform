@@ -12,6 +12,13 @@
 - 激活时出现三次短暂 502，脚本重试后恢复并确认新 JAR 已生效。当前本机网络将根域名解析为 `198.18.0.179`，导致综合就绪脚本的 DNS 地址比对为 false；HTTPS、应用健康、CDN、OSS、RAM Role 和服务器内部验证均通过。
 - 待人工复核：生产真实账号下的培养画像七个页签、任务状态和员工进度弹窗布局仍需手动验收。
 
+### 同日登录会话权限同步修复
+
+- 现象与原因：生产前后端及 CDN 画像代码均已更新，但既有登录会话仍从 `localStorage` 读取发布前保存的用户权限，应用启动时没有调用 `/auth/me`，导致“培养画像”入口被旧权限隐藏，姓名点击继续进入原详情。
+- GitHub：修复 PR [#47](https://github.com/Heart1ess1/talent-development-platform/pull/47) 已合并，功能提交为 `1c209c91`，合并后的生产基线为 `main@e20423b9`。应用现在会在安装路由和挂载页面前刷新当前用户；失效令牌仍按原安全逻辑退出登录。
+- 验证与发布：前端 49 项、后端 152 项测试及 CDN 生产构建通过；生产 JAR SHA-256 为 `41c74377cf226255d858109adfe387dd8b7d036d092d4f79139737dd4a18c531`。部署前备份为 `/data/talent-platform/backups/mysql/talent-platform-20260922-222127.sql.gz`，SHA-256 为 `6231f6eb653eff70ed1b7f015bfa798ddafcf28b01eea3b28b7c5fdd34fc75e7`；候选目录为 `/data/talent-platform/releases/staging/cdn-e20423b9-20260922`，新主资源为 `https://static.yryhx.cn/assets/index-DYhXSHkq.js`。
+- 生产结果：激活脚本在三次短暂 502 后恢复为 `UP`；正式首页已引用新主资源，主资源包含 `/auth/me` 刷新逻辑，Flyway 保持 V38，未登录画像接口返回 401，部署后日志未发现 `ERROR` 或 `Exception`。
+
 ## 2026-09-11 人员导出、账号筛选与文件夹发布
 
 - 功能提交：`7005d24162f36ec1ded8173a9c72f47796066ce7`，已推送 GitHub main。包括人员相关导出补全、任务成绩导出、账号台账关联筛选、计划/题库文件夹，以及“闯关任务 / 任务管理”菜单命名。
