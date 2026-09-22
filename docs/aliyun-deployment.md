@@ -19,6 +19,13 @@
 - 验证与发布：前端 49 项、后端 152 项测试及 CDN 生产构建通过；生产 JAR SHA-256 为 `41c74377cf226255d858109adfe387dd8b7d036d092d4f79139737dd4a18c531`。部署前备份为 `/data/talent-platform/backups/mysql/talent-platform-20260922-222127.sql.gz`，SHA-256 为 `6231f6eb653eff70ed1b7f015bfa798ddafcf28b01eea3b28b7c5fdd34fc75e7`；候选目录为 `/data/talent-platform/releases/staging/cdn-e20423b9-20260922`，新主资源为 `https://static.yryhx.cn/assets/index-DYhXSHkq.js`。
 - 生产结果：激活脚本在三次短暂 502 后恢复为 `UP`；正式首页已引用新主资源，主资源包含 `/auth/me` 刷新逻辑，Flyway 保持 V38，未登录画像接口返回 401，部署后日志未发现 `ERROR` 或 `Exception`。
 
+### 同日画像分隔线编码与弹窗圆角修复
+
+- 现象与原因：生产环境中的人员培养画像头部把全角竖线写在 CSS `content` 中，CDN 样式响应路径未明确字符集时，浏览器可能按错误编码解析该字符并显示为 `ï½œ`。本次改用无文本内容的 CSS 左边框绘制分隔线，从产物中消除非 ASCII 分隔字符；画像弹窗同时统一为任务跟踪员工进度弹窗使用的 `12px` 圆角。
+- GitHub：修复 PR [#49](https://github.com/Heart1ess1/talent-development-platform/pull/49) 已合并，功能提交为 `c418f77`，合并后的生产基线为 `main@b3ac6292105932cb30f9d3043f98e911a441fe37`。
+- 验证与发布：前端 49 项、后端 152 项测试及 CDN 生产构建通过；生产 JAR SHA-256 为 `bef5d473e1cd31fa62d3d749b54dfaa78a47e7fb160e1583a3a1b0b8c3948da5`。部署前备份为 `/data/talent-platform/backups/mysql/talent-platform-20260922-223504.sql.gz`，SHA-256 为 `6871f9c8b68886e18a6b31fbe1113c66c7b8907f0b6900d1f685062d7eacbdc8`；候选目录为 `/data/talent-platform/releases/staging/cdn-b3ac6292-20260922`。
+- 生产结果：激活脚本在三次短暂 502 后恢复为 `UP`；正式首页引用 `https://static.yryhx.cn/assets/index-x6mNyyO3.js`，画像样式 `EmployeeDirectoryView-4m-lTTXV.css` 返回 200，线上规则已确认为空 `content` 加 `border-left`，Flyway 保持 V38，未登录画像接口返回 401，部署后日志未发现 `ERROR` 或 `Exception`。
+
 ## 2026-09-11 人员导出、账号筛选与文件夹发布
 
 - 功能提交：`7005d24162f36ec1ded8173a9c72f47796066ce7`，已推送 GitHub main。包括人员相关导出补全、任务成绩导出、账号台账关联筛选、计划/题库文件夹，以及“闯关任务 / 任务管理”菜单命名。
