@@ -754,19 +754,19 @@ onMounted(async () => {
           <article class="dispatch-step">
             <div class="step-heading"><span>4</span><div><h3>选择下发对象</h3><p>同一条件可多选（满足任一选项），不同条件组合筛选在职员工</p></div></div>
             <div class="target-grid">
-              <el-select v-model="dispatch.batchIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按批次（可多选）">
+              <el-select v-model="dispatch.batchIds" multiple clearable filterable placeholder="按批次（可多选）">
                 <el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/>
               </el-select>
-              <el-select v-model="dispatch.classIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按班级（可多选）">
+              <el-select v-model="dispatch.classIds" multiple clearable filterable placeholder="按班级（可多选）">
                 <el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/>
               </el-select>
-              <el-select v-model="dispatch.classPositionIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按班级职务（可多选）">
+              <el-select v-model="dispatch.classPositionIds" multiple clearable filterable placeholder="按班级职务（可多选）">
                 <el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/>
               </el-select>
-              <el-select v-model="dispatch.businessUnitIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按板块（可多选）">
+              <el-select v-model="dispatch.businessUnitIds" multiple clearable filterable placeholder="按板块（可多选）">
                 <el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/>
               </el-select>
-              <el-select v-model="dispatch.stationIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按服务站（可多选）">
+              <el-select v-model="dispatch.stationIds" multiple clearable filterable placeholder="按服务站（可多选）">
                 <el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/>
               </el-select>
             </div>
@@ -805,11 +805,11 @@ onMounted(async () => {
         </div>
         <div class="manual-target">
           <div class="step-heading"><span>2</span><div><h3>下发对象</h3><p>同一条件可多选（满足任一选项），不同条件组合筛选，至少选择一项</p></div></div>
-          <el-select v-model="manualDispatch.batchIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按批次（可多选）"><el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/></el-select>
-          <el-select v-model="manualDispatch.classIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按班级（可多选）"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
-          <el-select v-model="manualDispatch.classPositionIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按班级职务（可多选）"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
-          <el-select v-model="manualDispatch.businessUnitIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按板块（可多选）"><el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/></el-select>
-          <el-select v-model="manualDispatch.stationIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按服务站（可多选）"><el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.batchIds" multiple clearable filterable placeholder="按批次（可多选）"><el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.classIds" multiple clearable filterable placeholder="按班级（可多选）"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.classPositionIds" multiple clearable filterable placeholder="按班级职务（可多选）"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.businessUnitIds" multiple clearable filterable placeholder="按板块（可多选）"><el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.stationIds" multiple clearable filterable placeholder="按服务站（可多选）"><el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/></el-select>
           <div class="manual-scope-editor"><strong>评分范围（可选）</strong><TaskReviewerScopeEditor v-model:mode="manualReviewerMode" v-model="manualReviewerScopes" :reviewer-options="reviewerOptions" :batches="batches" :business-units="businessUnits" :class-options="classOptions" :preview="manualScopePreview" @preview="previewManualReviewerScopes"/></div>
           <el-button type="primary" size="large" :loading="dispatching" :disabled="!manualDispatchReady" @click="dispatchManualTask">确认下发临时任务</el-button>
         </div>
