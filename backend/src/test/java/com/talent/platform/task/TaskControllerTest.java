@@ -1,5 +1,6 @@
 package com.talent.platform.task;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.talent.platform.common.BusinessException;
 import com.talent.platform.security.*;
 import com.talent.platform.storage.FileStorageService;
@@ -290,11 +291,11 @@ class TaskControllerTest {
         LocalDate.of(2026, 7, 28),
         7,
         null,
-        2L,
-        null,
-        null,
-        3L,
-        null,
+        List.of(2L),
+        List.of(7L, 8L, 7L),
+        List.of(),
+        List.of(3L),
+        List.of(),
         List.of(),
         null);
 
@@ -306,15 +307,38 @@ class TaskControllerTest {
     assertThat(result.reusedTasks()).isEqualTo(1);
     assertThat(result.deadline()).isEqualTo(LocalDateTime.of(2026, 8, 4, 23, 59, 59));
     verify(db).queryForList(
-        argThat(sql -> sql.contains("e.batch_id=?")
-            && sql.contains("e.business_unit_id=?")
+        argThat(sql -> sql.contains("e.batch_id in (?)")
+            && sql.contains("e.class_id in (?,?)")
+            && sql.contains("e.business_unit_id in (?)")
             && !sql.contains(" or ")),
         eq(Long.class),
-        aryEq(new Object[]{2L, 3L}));
+        aryEq(new Object[]{2L, 7L, 8L, 3L}));
     assertThat(result.taskTitles()).containsExactly("安全规范", "工具使用");
     assertThat(result.reviewerIds()).isEmpty();
     verify(db, never()).update(
         startsWith("insert into challenge_task"),
         any(), any(), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void rejectsAssignmentWithoutAnyTargetFilter() {
+    var request = new TaskController.AssignRequest(
+        9L, List.of(), List.of(), List.of(), List.of(), List.of());
+
+    assertThatThrownBy(() -> controller.assign(request))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("请选择批次");
+    verify(db, never()).queryForList(startsWith("select e.id from employee"), eq(Long.class), any(Object[].class));
+  }
+
+  @Test
+  void acceptsLegacySingleValueAndNewArrayTargetFields() throws Exception {
+    var mapper = new ObjectMapper();
+
+    var legacy = mapper.readValue("{\"taskId\":9,\"classId\":7}", TaskController.AssignRequest.class);
+    var current = mapper.readValue("{\"taskId\":9,\"classIds\":[7,8]}", TaskController.AssignRequest.class);
+
+    assertThat(legacy.classIds()).containsExactly(7L);
+    assertThat(current.classIds()).containsExactly(7L, 8L);
   }
 }

@@ -85,8 +85,8 @@ const planReviewerMode=ref<ReviewerScopeMode>('NONE'),manualReviewerMode=ref<Rev
 const planReviewerScopes=ref<ReviewerScopeDraft[]>([]),manualReviewerScopes=ref<ReviewerScopeDraft[]>([])
 const planScopePreview=ref<any>(),manualScopePreview=ref<any>()
 
-const manualDispatch = reactive<any>({title: '', description: '', requirements: '', deadline: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null, reviewerIds: []})
-const dispatch = reactive<any>({planTaskIds: [], taskTitle: '', deadlineMode: 'OFFSET', baseDate: new Date().toISOString().slice(0, 10), offsetDays: 7, deadlineDate: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null, reviewerIds: []})
+const manualDispatch = reactive<any>({title: '', description: '', requirements: '', deadline: '', batchIds: [], classIds: [], classPositionIds: [], businessUnitIds: [], stationIds: [], reviewerIds: []})
+const dispatch = reactive<any>({planTaskIds: [], taskTitle: '', deadlineMode: 'OFFSET', baseDate: new Date().toISOString().slice(0, 10), offsetDays: 7, deadlineDate: '', batchIds: [], classIds: [], classPositionIds: [], businessUnitIds: [], stationIds: [], reviewerIds: []})
 const submit = reactive({content: ''})
 const taskDetail = reactive<any>({title: '', description: '', requirements: '', deadline: '', attachments: []})
 
@@ -158,8 +158,8 @@ function employeeTaskStatusLabel(row:any){
 
 const selectedPlan = computed(() => plans.value.find(item => item.id === selectedPlanId.value))
 const selectedPlanTasks = computed(() => planTasks.value.filter(item => dispatch.planTaskIds.includes(item.id)))
-const hasDispatchTarget = computed(() => Boolean(dispatch.batchId || dispatch.classId || dispatch.classPositionId || dispatch.businessUnitId || dispatch.stationId))
-const hasManualTarget = computed(() => Boolean(manualDispatch.batchId || manualDispatch.classId || manualDispatch.classPositionId || manualDispatch.businessUnitId || manualDispatch.stationId))
+const hasDispatchTarget = computed(() => Boolean(dispatch.batchIds.length || dispatch.classIds.length || dispatch.classPositionIds.length || dispatch.businessUnitIds.length || dispatch.stationIds.length))
+const hasManualTarget = computed(() => Boolean(manualDispatch.batchIds.length || manualDispatch.classIds.length || manualDispatch.classPositionIds.length || manualDispatch.businessUnitIds.length || manualDispatch.stationIds.length))
 const planDispatchReady = computed(() => Boolean(
   selectedPlanId.value
   && dispatch.planTaskIds.length
@@ -210,16 +210,18 @@ const filteredTasks = computed(() => {
 })
 const targetDescription = computed(() => {
   const parts: string[] = []
-  const batch = batches.value.find(item => item.id === dispatch.batchId)
-  if (batch) parts.push(`批次：${batch.name}`)
-  const employeeClass = classOptions.value.find(item => item.id === dispatch.classId)
-  if (employeeClass) parts.push(`班级：${employeeClass.label}`)
-  const classPosition = classPositionOptions.value.find(item => item.id === dispatch.classPositionId)
-  if (classPosition) parts.push(`班级职务：${classPosition.label}`)
-  const businessUnit = businessUnits.value.find(item => item.id === dispatch.businessUnitId)
-  if (businessUnit) parts.push(`板块：${businessUnitLabel(businessUnit.name)}`)
-  const station = stations.value.find(item => item.id === dispatch.stationId)
-  if (station) parts.push(`站点：${station.name}`)
+  const selectedLabels = (ids: number[], options: any[], label: (item: any) => string) =>
+    ids.map(id => options.find(item => item.id === id)).filter(Boolean).map(label).join('、')
+  const batchNames = selectedLabels(dispatch.batchIds, batches.value, item => item.name)
+  if (batchNames) parts.push(`批次：${batchNames}`)
+  const classNames = selectedLabels(dispatch.classIds, classOptions.value, item => item.label)
+  if (classNames) parts.push(`班级：${classNames}`)
+  const classPositionNames = selectedLabels(dispatch.classPositionIds, classPositionOptions.value, item => item.label)
+  if (classPositionNames) parts.push(`班级职务：${classPositionNames}`)
+  const businessUnitNames = selectedLabels(dispatch.businessUnitIds, businessUnits.value, item => businessUnitLabel(item.name))
+  if (businessUnitNames) parts.push(`板块：${businessUnitNames}`)
+  const stationNames = selectedLabels(dispatch.stationIds, stations.value, item => item.name)
+  if (stationNames) parts.push(`站点：${stationNames}`)
   return parts.join('；') || '尚未选择下发对象'
 })
 const filteredTaskProgress = computed(() => {
@@ -285,7 +287,7 @@ async function dispatchManualTask() {
   manualScopePreview.value=previewResponse.data.scopePreview
   if(manualReviewerMode.value!=='NONE'&&!manualScopePreview.value.valid)return ElMessage.warning('评分范围存在未覆盖或重叠员工，请先调整')
   await ElMessageBox.confirm(
-    `确认下发临时任务“${manualDispatch.title}”？系统将按所选批次、班级、板块和服务站组合筛选在职员工。`,
+    `确认下发临时任务“${manualDispatch.title}”？系统将按所选条件组合筛选在职员工，同一条件内满足任一选项即可。`,
     '确认下发任务',
     {confirmButtonText: '确认下发', cancelButtonText: '返回检查', type: 'warning'}
   )
@@ -302,7 +304,7 @@ async function dispatchManualTask() {
       })
     }
     ElMessage.success(`任务已下发给 ${response.data.assignedEmployees} 人${manualFiles.value.length?`，并上传 ${manualFiles.value.length} 个附件`:''}`)
-    Object.assign(manualDispatch, {title: '', description: '', requirements: '', deadline: '', batchId: null, classId: null, classPositionId: null, businessUnitId: null, stationId: null, reviewerIds: []})
+    Object.assign(manualDispatch, {title: '', description: '', requirements: '', deadline: '', batchIds: [], classIds: [], classPositionIds: [], businessUnitIds: [], stationIds: [], reviewerIds: []})
     manualReviewerMode.value='NONE';manualReviewerScopes.value=[];manualScopePreview.value=undefined
     manualFiles.value=[]
     await load()
@@ -354,8 +356,8 @@ async function dispatchPlanTasks() {
 
 watch(planReviewerScopes,()=>{planScopePreview.value=undefined},{deep:true})
 watch(manualReviewerScopes,()=>{manualScopePreview.value=undefined},{deep:true})
-watch(()=>[dispatch.batchId,dispatch.classId,dispatch.classPositionId,dispatch.businessUnitId,dispatch.stationId],()=>{planScopePreview.value=undefined})
-watch(()=>[manualDispatch.batchId,manualDispatch.classId,manualDispatch.classPositionId,manualDispatch.businessUnitId,manualDispatch.stationId],()=>{manualScopePreview.value=undefined})
+watch(()=>[dispatch.batchIds,dispatch.classIds,dispatch.classPositionIds,dispatch.businessUnitIds,dispatch.stationIds],()=>{planScopePreview.value=undefined},{deep:true})
+watch(()=>[manualDispatch.batchIds,manualDispatch.classIds,manualDispatch.classPositionIds,manualDispatch.businessUnitIds,manualDispatch.stationIds],()=>{manualScopePreview.value=undefined},{deep:true})
 
 async function open(row: any, mode: 'SUBMIT' | 'RESUBMIT' | 'VIEW') {
   selected.value = row
@@ -750,21 +752,21 @@ onMounted(async () => {
           </article>
 
           <article class="dispatch-step">
-            <div class="step-heading"><span>4</span><div><h3>选择下发对象</h3><p>按批次、班级、班级职务、所属板块和服务站组合筛选在职员工</p></div></div>
+            <div class="step-heading"><span>4</span><div><h3>选择下发对象</h3><p>同一条件可多选（满足任一选项），不同条件组合筛选在职员工</p></div></div>
             <div class="target-grid">
-              <el-select v-model="dispatch.batchId" clearable filterable placeholder="按批次">
+              <el-select v-model="dispatch.batchIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按批次（可多选）">
                 <el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/>
               </el-select>
-              <el-select v-model="dispatch.classId" clearable filterable placeholder="按班级">
+              <el-select v-model="dispatch.classIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按班级（可多选）">
                 <el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/>
               </el-select>
-              <el-select v-model="dispatch.classPositionId" clearable filterable placeholder="按班级职务">
+              <el-select v-model="dispatch.classPositionIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按班级职务（可多选）">
                 <el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/>
               </el-select>
-              <el-select v-model="dispatch.businessUnitId" clearable filterable placeholder="按板块">
+              <el-select v-model="dispatch.businessUnitIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按板块（可多选）">
                 <el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/>
               </el-select>
-              <el-select v-model="dispatch.stationId" clearable filterable placeholder="按服务站">
+              <el-select v-model="dispatch.stationIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按服务站（可多选）">
                 <el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/>
               </el-select>
             </div>
@@ -802,12 +804,12 @@ onMounted(async () => {
           </div>
         </div>
         <div class="manual-target">
-          <div class="step-heading"><span>2</span><div><h3>下发对象</h3><p>按批次、班级、班级职务、所属板块和服务站组合筛选，至少选择一项</p></div></div>
-          <el-select v-model="manualDispatch.batchId" clearable filterable placeholder="按批次"><el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/></el-select>
-          <el-select v-model="manualDispatch.classId" clearable filterable placeholder="按班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
-          <el-select v-model="manualDispatch.classPositionId" clearable filterable placeholder="按班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
-          <el-select v-model="manualDispatch.businessUnitId" clearable filterable placeholder="按板块"><el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/></el-select>
-          <el-select v-model="manualDispatch.stationId" clearable filterable placeholder="按服务站"><el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/></el-select>
+          <div class="step-heading"><span>2</span><div><h3>下发对象</h3><p>同一条件可多选（满足任一选项），不同条件组合筛选，至少选择一项</p></div></div>
+          <el-select v-model="manualDispatch.batchIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按批次（可多选）"><el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.classIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按班级（可多选）"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.classPositionIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按班级职务（可多选）"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.businessUnitIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按板块（可多选）"><el-option v-for="item in businessUnits" :key="item.id" :label="businessUnitLabel(item.name)" :value="item.id"/></el-select>
+          <el-select v-model="manualDispatch.stationIds" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="按服务站（可多选）"><el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/></el-select>
           <div class="manual-scope-editor"><strong>评分范围（可选）</strong><TaskReviewerScopeEditor v-model:mode="manualReviewerMode" v-model="manualReviewerScopes" :reviewer-options="reviewerOptions" :batches="batches" :business-units="businessUnits" :class-options="classOptions" :preview="manualScopePreview" @preview="previewManualReviewerScopes"/></div>
           <el-button type="primary" size="large" :loading="dispatching" :disabled="!manualDispatchReady" @click="dispatchManualTask">确认下发临时任务</el-button>
         </div>

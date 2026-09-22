@@ -1,6 +1,8 @@
 package com.talent.platform.task;
 
 import com.alibaba.excel.EasyExcel;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.talent.platform.common.*;
 import com.talent.platform.security.*;
 import com.talent.platform.storage.FileStorageService;
@@ -59,10 +61,30 @@ public class TaskController {
 
   public record TaskRequest(@NotBlank String title, @NotBlank String description, String requirements,
                             @NotNull LocalDateTime deadline) {}
-  public record AssignRequest(@NotNull Long taskId, Long batchId, Long classId, Long classPositionId, Long businessUnitId, Long stationId) {}
+  public record AssignRequest(@NotNull Long taskId,
+                              @JsonAlias("batchId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+                              @Size(max = 100) List<@NotNull @Positive Long> batchIds,
+                              @JsonAlias("classId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+                              @Size(max = 100) List<@NotNull @Positive Long> classIds,
+                              @JsonAlias("classPositionId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+                              @Size(max = 100) List<@NotNull @Positive Long> classPositionIds,
+                              @JsonAlias("businessUnitId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+                              @Size(max = 100) List<@NotNull @Positive Long> businessUnitIds,
+                              @JsonAlias("stationId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+                              @Size(max = 100) List<@NotNull @Positive Long> stationIds) {}
   public record ManualDispatchRequest(@NotBlank String title, @NotBlank String description, String requirements,
-                                      @NotNull LocalDateTime deadline, Long batchId, Long classId, Long classPositionId, Long businessUnitId,
-                                      Long stationId, List<Long> reviewerIds,
+                                      @NotNull LocalDateTime deadline,
+                                      @JsonAlias("batchId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+                                      @Size(max = 100) List<@NotNull @Positive Long> batchIds,
+                                      @JsonAlias("classId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+                                      @Size(max = 100) List<@NotNull @Positive Long> classIds,
+                                      @JsonAlias("classPositionId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+                                      @Size(max = 100) List<@NotNull @Positive Long> classPositionIds,
+                                      @JsonAlias("businessUnitId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+                                      @Size(max = 100) List<@NotNull @Positive Long> businessUnitIds,
+                                      @JsonAlias("stationId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+                                      @Size(max = 100) List<@NotNull @Positive Long> stationIds,
+                                      List<Long> reviewerIds,
                                       List<TaskReviewerScopeService.ScopeRequest> reviewerScopes) {}
   public record ManualDispatchResult(Long taskId, int assignedEmployees) {}
   public record ManualDispatchPreview(int targetEmployees, TaskReviewerScopeService.ScopePreview scopePreview) {}
@@ -74,11 +96,16 @@ public class TaskController {
       LocalDate baseDate,
       @Min(0) Integer offsetDays,
       LocalDate deadlineDate,
-      Long batchId,
-      Long classId,
-      Long classPositionId,
-      Long businessUnitId,
-      Long stationId,
+      @JsonAlias("batchId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+      @Size(max = 100) List<@NotNull @Positive Long> batchIds,
+      @JsonAlias("classId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+      @Size(max = 100) List<@NotNull @Positive Long> classIds,
+      @JsonAlias("classPositionId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+      @Size(max = 100) List<@NotNull @Positive Long> classPositionIds,
+      @JsonAlias("businessUnitId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+      @Size(max = 100) List<@NotNull @Positive Long> businessUnitIds,
+      @JsonAlias("stationId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+      @Size(max = 100) List<@NotNull @Positive Long> stationIds,
       List<Long> reviewerIds,
       List<TaskReviewerScopeService.ScopeRequest> reviewerScopes) {}
   public record PlanDispatchResult(int targetEmployees, int createdTasks, int createdAssignments) {}
@@ -243,7 +270,7 @@ public class TaskController {
     permissions.require(Permissions.TASK_MANAGE);
     var u = SecurityUtils.current();
     int count = 0;
-    for (Long employeeId : targetEmployees(q.batchId(), q.classId(), q.classPositionId(), q.businessUnitId(), q.stationId())) {
+    for (Long employeeId : targetEmployees(q.batchIds(), q.classIds(), q.classPositionIds(), q.businessUnitIds(), q.stationIds())) {
       count += insertAssignment(q.taskId(), employeeId, u.id());
     }
     reviewerScopes.rebindAssignments(q.taskId());
@@ -256,7 +283,7 @@ public class TaskController {
   @Transactional
   public ApiResponse<ManualDispatchResult> dispatchManual(@Valid @RequestBody ManualDispatchRequest q) {
     permissions.require(Permissions.TASK_MANAGE);
-    var employeeIds = targetEmployees(q.batchId(), q.classId(), q.classPositionId(), q.businessUnitId(), q.stationId());
+    var employeeIds = targetEmployees(q.batchIds(), q.classIds(), q.classPositionIds(), q.businessUnitIds(), q.stationIds());
     if (employeeIds.isEmpty()) throw new BusinessException(400, "未匹配到在职员工，无法下发任务");
     var user = SecurityUtils.current();
     db.update("insert into challenge_task(title,description,requirements,deadline,created_by) values(?,?,?,?,?)",
@@ -274,9 +301,9 @@ public class TaskController {
   }
 
   @PostMapping("/tasks/dispatch-manual/preview")
-  public ApiResponse<ManualDispatchPreview> previewManualDispatch(@RequestBody ManualDispatchRequest q) {
+  public ApiResponse<ManualDispatchPreview> previewManualDispatch(@Valid @RequestBody ManualDispatchRequest q) {
     permissions.require(Permissions.TASK_MANAGE);
-    var employeeIds = targetEmployees(q.batchId(), q.classId(), q.classPositionId(), q.businessUnitId(), q.stationId());
+    var employeeIds = targetEmployees(q.batchIds(), q.classIds(), q.classPositionIds(), q.businessUnitIds(), q.stationIds());
     var preview = reviewerScopes.previewEmployees(employeeIds, scopeRequests(q.reviewerIds(), q.reviewerScopes()));
     return ApiResponse.ok(new ManualDispatchPreview(employeeIds.size(), preview));
   }
@@ -380,7 +407,7 @@ public class TaskController {
     requireDispatchablePlan(q.planId());
     var planTasks = selectedPlanTasks(q);
 
-    var employees = targetEmployees(q.batchId(), q.classId(), q.classPositionId(), q.businessUnitId(), q.stationId());
+    var employees = targetEmployees(q.batchIds(), q.classIds(), q.classPositionIds(), q.businessUnitIds(), q.stationIds());
     var deadline = resolveDeadline(q);
     var u = SecurityUtils.current();
     var requestedScopes = scopeRequests(q.reviewerIds(), q.reviewerScopes());
@@ -419,7 +446,7 @@ public class TaskController {
     permissions.require(Permissions.TASK_MANAGE);
     requireDispatchablePlan(q.planId());
     var planTasks = selectedPlanTasks(q);
-    var employees = targetEmployees(q.batchId(), q.classId(), q.classPositionId(), q.businessUnitId(), q.stationId());
+    var employees = targetEmployees(q.batchIds(), q.classIds(), q.classPositionIds(), q.businessUnitIds(), q.stationIds());
     var deadline = resolveDeadline(q);
     var taskIds = planTasks.stream().map(row -> row.get("id")).toList();
     String placeholders = String.join(",", Collections.nCopies(taskIds.size(), "?"));
@@ -591,33 +618,33 @@ public class TaskController {
     return ApiResponse.ok(null);
   }
 
-  private List<Long> targetEmployees(Long batchId, Long classId, Long classPositionId, Long businessUnitId, Long stationId) {
+  private List<Long> targetEmployees(List<Long> batchIds, List<Long> classIds, List<Long> classPositionIds,
+                                     List<Long> businessUnitIds, List<Long> stationIds) {
     var where = new StringBuilder(" where e.status='ACTIVE'");
     var args = new ArrayList<Object>();
-    if (batchId == null && classId == null && classPositionId == null && businessUnitId == null && stationId == null) {
+    if (!hasValues(batchIds) && !hasValues(classIds) && !hasValues(classPositionIds)
+        && !hasValues(businessUnitIds) && !hasValues(stationIds)) {
       throw new BusinessException(400, "请选择批次、班级、班级职务、所属板块或服务站");
     }
-    if (batchId != null) {
-      where.append(" and e.batch_id=?");
-      args.add(batchId);
-    }
-    if (classId != null) {
-      where.append(" and e.class_id=?");
-      args.add(classId);
-    }
-    if (classPositionId != null) {
-      where.append(" and e.class_position_id=?");
-      args.add(classPositionId);
-    }
-    if (businessUnitId != null) {
-      where.append(" and e.business_unit_id=?");
-      args.add(businessUnitId);
-    }
-    if (stationId != null) {
-      where.append(" and e.station_id=?");
-      args.add(stationId);
-    }
+    appendMultiValueFilter(where, args, "e.batch_id", batchIds);
+    appendMultiValueFilter(where, args, "e.class_id", classIds);
+    appendMultiValueFilter(where, args, "e.class_position_id", classPositionIds);
+    appendMultiValueFilter(where, args, "e.business_unit_id", businessUnitIds);
+    appendMultiValueFilter(where, args, "e.station_id", stationIds);
     return db.queryForList("select e.id from employee e" + where, Long.class, args.toArray());
+  }
+
+  private boolean hasValues(List<Long> values) {
+    return values != null && !values.isEmpty();
+  }
+
+  private void appendMultiValueFilter(StringBuilder where, List<Object> args, String column, List<Long> values) {
+    if (!hasValues(values)) return;
+    var distinctValues = values.stream().distinct().toList();
+    where.append(" and ").append(column).append(" in (")
+        .append(String.join(",", Collections.nCopies(distinctValues.size(), "?")))
+        .append(")");
+    args.addAll(distinctValues);
   }
 
   private int insertAssignment(Long taskId, Long employeeId, Long assignedBy) {
