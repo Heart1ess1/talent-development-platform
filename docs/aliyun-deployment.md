@@ -12,6 +12,14 @@
 - 就绪说明：本机 DNS 代理将根域名映射为 `198.18.0.52`，因此综合脚本的本地 A 记录比对为 false；阿里公共 DNS over HTTPS 返回的权威结果为 `139.224.51.21`，其他 HTTPS、CDN、OSS、RAM Role、容器及服务器侧健康检查均通过。
 - 待人工复核：需使用生产管理员账号实际选择两个班级，目视确认多选标签和下发预览人数。
 
+### 同日多选标签逐项显示优化
+
+- GitHub：多选标签展示 PR [#53](https://github.com/Heart1ess1/talent-development-platform/pull/53) 已合并，功能提交为 `ec1f3cf5`，合并后生产基线为 `main@ce32fe67`。计划任务与临时任务的 10 个多选筛选框已取消 `collapse-tags`，所有已选项逐个显示并在宽度不足时自然换行。
+- 验证与构建：新增定向回归检查覆盖全部 10 个多选框，Vitest 1 项通过；TypeScript 检查和 CDN 生产构建通过。本次无后端逻辑变更，打包时跳过后端测试。生产 JAR SHA-256 为 `03bf4d7fb072960751a2172285ad0b7fd62e846ee290e06e12dbd1e1b97d158b`。
+- 备份与发布：部署前备份为 `/data/talent-platform/backups/mysql/talent-platform-20260923-054649.sql.gz`，SHA-256 为 `e8143ed32e5fcb72ba3c758a970f7bd74cac9e9787e6d4b02477c4c4a0cad67b`；81 个静态资源已上传，候选目录为 `/data/talent-platform/releases/staging/cdn-20260923-054709-ce32fe67`，CDN 主资源为 `https://static.yryhx.cn/assets/index-D78x1wXQ.js`，任务页面分块为 `https://static.yryhx.cn/assets/TasksView-BbrTmbyH.js`。
+- 生产结果：激活脚本在三次短暂 502 后恢复 `UP`，未触发回滚。线上 JAR 哈希一致，Flyway 保持 V38，员工 275 人、任务分配 295 条，近 10 分钟日志无 `ERROR` 或 `Exception`；公网健康接口返回 200，未登录下发预览返回 401，任务页面分块返回 200、`text/javascript`和长期缓存，第二次请求为 `TCP_MEM_HIT`；线上分块包含多选模型且不包含 `collapse-tags`。
+- 就绪说明：本机 DNS 代理仍将根域名映射为 `198.18.0.52`，阿里公共 DNS over HTTPS 返回 `139.224.51.21`；除本地 A 记录比对外，HTTPS、CDN、OSS、ECS 应用健康和权限边界检查均通过。仍建议使用生产管理员账号实际多选后目视确认标签换行效果。
+
 ## 2026-09-22 人员培养画像与任务状态发布
 
 - GitHub：人员培养画像与任务状态 PR [#45](https://github.com/Heart1ess1/talent-development-platform/pull/45) 已合并，功能提交为 `988279bde41989ab2b8eacf9b5890d235263f09f`，合并后的生产基线为 `main@267f4a7a3cc994cb0df4857062c7b58822909eec`。
