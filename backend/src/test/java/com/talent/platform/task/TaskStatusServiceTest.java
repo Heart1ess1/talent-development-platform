@@ -18,7 +18,7 @@ class TaskStatusServiceTest {
     service.refreshOverdueAssignments();
 
     verify(db).update(contains("set a.status='OVERDUE',a.final_score=0"));
-    verify(db).update(contains("where a.status='NOT_SUBMITTED' and t.deadline<now()"));
+    verify(db).update(contains("where a.status in ('NOT_SUBMITTED','RETURNED') and t.deadline<now()"));
   }
 
   @Test

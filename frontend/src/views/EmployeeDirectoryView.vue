@@ -5,6 +5,7 @@ import {
   CircleCheck,
   Clock,
   Connection,
+  DataAnalysis,
   Download,
   Edit,
   MapLocation,
@@ -21,6 +22,7 @@ import {ElMessage,ElMessageBox} from 'element-plus'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import {avatarUrl,nameInitial} from '@/utils/avatar'
+import EmployeePortraitDialog from '@/components/employeePortrait/EmployeePortraitDialog.vue'
 import {
   loadDictionaryValues,
   loadEnabledBusinessUnits,
@@ -52,6 +54,7 @@ const canEdit=computed(()=>auth.can('employee:update'))
 const canExport=computed(()=>auth.can('employee:export'))
 const canMaster=computed(()=>auth.can('master:manage'))
 const canViewHistory=computed(()=>auth.can('employee:read'))
+const canViewPortrait=computed(()=>auth.can('employee:portrait:view'))
 
 const rows=ref<DirectoryRow[]>([])
 const total=ref(0)
@@ -76,6 +79,8 @@ const advancedFilters=ref(false)
 const dataToolsOpen=ref(false)
 
 const profileOpen=ref(false)
+const portraitOpen=ref(false)
+const portraitEmployee=ref<DirectoryRow|null>(null)
 const profileMode=ref<ProfileMode>('view')
 const selectedEmployee=ref<DirectoryRow|null>(null)
 const editingId=ref<number|null>(null)
@@ -372,6 +377,7 @@ function showDetails(row:DirectoryRow){
   profileMode.value='view'
   profileOpen.value=true
 }
+function showPortrait(row:DirectoryRow){if(!canViewPortrait.value)return showDetails(row);portraitEmployee.value=row;portraitOpen.value=true}
 
 function openCreate(){
   selectedEmployee.value=null
@@ -675,7 +681,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
       <div class="workspace-heading">
         <div>
           <h2>人员档案</h2>
-          <p>查看组织归属、培养关系与基础档案，点击姓名可快速打开完整资料。</p>
+          <p>查看组织归属、培养关系与基础档案，点击姓名可查看培养画像。</p>
         </div>
         <span class="workspace-count">共 {{total}} 人</span>
       </div>
@@ -806,7 +812,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
         <el-table-column v-if="canWrite&&!isNarrow" type="selection" width="44" fixed reserve-selection/>
         <el-table-column v-if="isNarrow" label="姓名 / 工号" width="145" fixed>
           <template #default="{row}">
-            <button class="name-button" type="button" @click="showDetails(row)">
+            <button class="name-button" type="button" @click="showPortrait(row)">
               <span class="employee-name">{{row.name}}</span>
               <span class="employee-number-line">
                 <span class="employee-number">{{row.employee_no}}</span>
@@ -824,7 +830,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
         </el-table-column>
         <el-table-column v-else :column-key="nameColumn.key" :label="nameColumn.label" :width="nameColumn.width" :min-width="nameColumn.minWidth" fixed show-overflow-tooltip>
           <template #default="{row}">
-            <button class="desktop-name-button" type="button" @click="showDetails(row)">
+            <button class="desktop-name-button" type="button" @click="showPortrait(row)">
               {{row.name}}
             </button>
           </template>
@@ -881,6 +887,9 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
                   @click="showDetails(row)"
                 />
               </el-tooltip>
+              <el-tooltip v-if="canViewPortrait" content="查看培养画像" placement="top">
+                <el-button :icon="DataAnalysis" link type="primary" aria-label="查看培养画像" @click="showPortrait(row)"/>
+              </el-tooltip>
               <el-tooltip v-if="canEdit" content="编辑人员" placement="top">
                 <el-button
                   :icon="Edit"
@@ -904,6 +913,9 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
               />
             </el-tooltip>
           </template>
+        </el-table-column>
+        <el-table-column v-if="!isNarrow&&canViewPortrait" label="培养画像" width="88" fixed="right" align="center">
+          <template #default="{row}"><el-tooltip content="查看培养全过程" placement="top"><el-button :icon="DataAnalysis" link type="primary" aria-label="查看培养画像" @click="showPortrait(row)"/></el-tooltip></template>
         </el-table-column>
         <el-table-column v-if="!isNarrow&&canEdit" label="编辑" width="70" fixed="right" align="center">
           <template #default="{row}">
@@ -936,6 +948,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
     </section>
     </section>
 
+    <EmployeePortraitDialog v-model="portraitOpen" :employee="portraitEmployee" @closed="portraitEmployee=null" />
     <el-drawer
       v-model="profileOpen"
       :size="drawerSize"

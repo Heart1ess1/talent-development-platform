@@ -20,6 +20,7 @@
 | 权限点 | 用途 | EMPLOYEE | MENTOR | STATION_MANAGER | TRAINING_ADMIN | ADMIN | SUPER_ADMIN |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `employee:read` | 按人员范围查询统一人员信息、导师列表依赖 | 是 | 是 | 是 | 是 | 是 | 是 |
+| `employee:portrait:view` | 查看人员培养画像；继续执行员工数据范围和成绩、评价字段可见性规则 | 否 | 是 | 是 | 是 | 是 | 是 |
 | `employee:update` | 更新现有人员档案 | 否 | 否 | 否 | 是 | 是 | 是 |
 | `employee:write` | 创建/更新员工、导入员工、绑定导师 | 否 | 否 | 否 | 否 | 是 | 是 |
 | `employee:export` | 人员目录导出 | 否 | 否 | 否 | 是 | 是 | 是 |
@@ -41,6 +42,7 @@
 ## 特殊规则
 
 - 所有已登录角色都拥有 `employee:read` 和 `evaluation:view`，但实际可见员工仍受数据范围限制。
+- 培养画像要求 `employee:portrait:view`，并对每个员工执行 `requireEmployee`；考试未发布成绩和评价草稿仍按原模块管理权限返回，员工角色首期不开放。
 - `MENTOR`、`STATION_MANAGER`、`TRAINING_ADMIN` 拥有 `evaluation:submit`，但只能提交各自对应评分项：
   - `MENTOR` 只能提交 `MENTOR` 评分项。
   - `STATION_MANAGER` 只能提交 `STATION` 评分项。
