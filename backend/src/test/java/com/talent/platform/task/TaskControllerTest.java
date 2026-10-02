@@ -31,6 +31,7 @@ class TaskControllerTest {
   private TaskStatusService taskStatus;
   private TaskScoringService scoring;
   private TaskReviewerScopeService reviewerScopes;
+  private TaskAttachmentService taskAttachments;
   private TaskController controller;
 
   @BeforeEach
@@ -41,9 +42,10 @@ class TaskControllerTest {
     taskStatus = mock(TaskStatusService.class);
     scoring = mock(TaskScoringService.class);
     reviewerScopes = mock(TaskReviewerScopeService.class);
+    taskAttachments = mock(TaskAttachmentService.class);
     controller = new TaskController(
         db, storage, permissions, mock(AuditService.class), taskStatus,
-        mock(TaskAttachmentService.class), mock(UploadTicketService.class), scoring, reviewerScopes);
+        taskAttachments, mock(UploadTicketService.class), scoring, reviewerScopes);
     var user = new CurrentUser(7L, "admin", "Admin", "TRAINING_ADMIN", false, 1,
         Set.of(Permissions.TASK_MANAGE), "ALL");
     SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
@@ -253,6 +255,46 @@ class TaskControllerTest {
     verify(taskStatus).refreshOverdueAssignments();
     assertThat(sql.getValue())
         .contains("a.status,a.final_score");
+  }
+
+  @Test
+  void allowsEmployeeToReadTaskDetailThroughAssignedTaskId() {
+    var employee = new CurrentUser(7L, "employee", "Employee", "EMPLOYEE", false, 1,
+        Set.of(), "SELF");
+    SecurityContextHolder.getContext().setAuthentication(
+        new UsernamePasswordAuthenticationToken(employee, null, List.of()));
+    when(scoring.canViewTask(27L)).thenReturn(false);
+    when(permissions.employeeFilter("e"))
+        .thenReturn(new PermissionService.ScopeFilter(" and e.user_id=?", List.of(7L)));
+    when(db.queryForObject(startsWith("select count(*) from task_assignment"), eq(Integer.class),
+        aryEq(new Object[]{27L, 7L}))).thenReturn(1);
+    when(db.queryForList(startsWith("select * from challenge_task"), eq(27L)))
+        .thenReturn(List.of(new HashMap<>(Map.of("id", 27L, "title", "月报提交"))));
+    when(taskAttachments.listForTask(27L)).thenReturn(List.of());
+
+    var result = controller.taskDetail(27L);
+
+    assertThat(result.data()).containsEntry("title", "月报提交");
+    verify(db).queryForObject(startsWith("select count(*) from task_assignment"), eq(Integer.class),
+        aryEq(new Object[]{27L, 7L}));
+  }
+
+  @Test
+  void rejectsAssignmentIdWhenItIsNotTheAssignedTaskId() {
+    var employee = new CurrentUser(7L, "employee", "Employee", "EMPLOYEE", false, 1,
+        Set.of(), "SELF");
+    SecurityContextHolder.getContext().setAuthentication(
+        new UsernamePasswordAuthenticationToken(employee, null, List.of()));
+    when(scoring.canViewTask(501L)).thenReturn(false);
+    when(permissions.employeeFilter("e"))
+        .thenReturn(new PermissionService.ScopeFilter(" and e.user_id=?", List.of(7L)));
+    when(db.queryForObject(startsWith("select count(*) from task_assignment"), eq(Integer.class),
+        aryEq(new Object[]{501L, 7L}))).thenReturn(0);
+
+    assertThatThrownBy(() -> controller.taskDetail(501L))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessageContaining("无权访问该任务");
+    verify(db, never()).queryForList(startsWith("select * from challenge_task"), eq(501L));
   }
 
   @Test
