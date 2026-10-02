@@ -251,6 +251,8 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/submissions/{id}/files/archive` | 登录，按任务员工范围校验 | 下载单名员工单次提交资料 | 路径 `id` | ZIP，包含提交说明与全部附件 |
 | `POST` | `/api/v1/submissions/{id}/review` | `task:score` 且本人是评分人 | 旧审核兼容入口，统一调用任务评分服务 | `decision=APPROVE|RETURN`、`comment`、通过时必填整数 `score` | 空 |
 
+`GET /api/v1/assignments` 返回的 `id` 是 `task_assignment.id`，用于提交和查询提交历史；同一响应中的 `task_id` 是 `challenge_task.id`，用于任务详情、任务附件和任务进度接口。前端不得将两者互换。
+
 下发对象的五个数组字段均兼容旧版单值字段 `batchId`、`classId`、`classPositionId`、`businessUnitId`、`stationId`。
 
 任务提交允许 `NOT_SUBMITTED`、`RETURNED` 与截止前的 `PENDING_REVIEW` 重新提交；首名评分人提交评分后禁止员工主动重提。系统维护最近一项未提交任务的截止时间定时器，在截止时间到达时立即将仍未提交的分配固化为 `OVERDUE` 并记 0 分，服务启动和任务变更后会自动重排该定时器。单次最多上传 5 个附件，文件扩展名限制为 `pdf`、`doc`、`docx`、`xls`、`xlsx`、`ppt`、`pptx`、`png`、`jpg`、`jpeg`、`zip`。

@@ -25,6 +25,7 @@ import TaskReviewerScopeEditor from '@/components/TaskReviewerScopeEditor.vue'
 import {abandonUploadTickets,createUploadTicket,storageCapabilities,uploadWithStorageFallback} from '@/storageTransfer'
 import {loadDictionaryValues, loadEnabledBusinessUnits, type DictionaryOption} from '@/utils/masterData'
 import {reviewerScopePayload,type ReviewerScopeDraft,type ReviewerScopeMode} from '@/types/taskReviewerScope'
+import {taskIdForEmployeeAssignment,taskIdForManagedTask} from './taskNavigation'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -53,6 +54,8 @@ const submitting = ref(false)
 const submissionStage = ref<'IDLE'|'UPLOADING'|'REGISTERING'|'LOCAL_SUBMITTING'>('IDLE')
 const manualFiles = ref<any[]>([])
 const history = ref<any[]>([])
+const submissionHistoryLoading = ref(false)
+const submissionHistoryError = ref('')
 const previewDialog = ref(false)
 const previewFile = ref<any>()
 const previewType = ref<'PDF' | 'IMAGE' | 'TEXT' | 'HTML'>('TEXT')
@@ -67,6 +70,8 @@ const downloadingAssignmentId = ref<number | null>(null)
 const detailDialog = ref(false)
 const selectedTask = ref<any>()
 const detailTaskId = ref<number | null>(null)
+const detailLoading = ref(false)
+const detailError = ref('')
 const taskProgress = ref<any[]>([])
 const progressFilters = reactive({keyword: '', classId: null as number | null, classPositionId: null as number | null, status: ''})
 const dispatchMode = ref<'PLAN' | 'MANUAL'>('PLAN')
@@ -360,15 +365,30 @@ watch(()=>[dispatch.batchIds,dispatch.classIds,dispatch.classPositionIds,dispatc
 watch(()=>[manualDispatch.batchIds,manualDispatch.classIds,manualDispatch.classPositionIds,manualDispatch.businessUnitIds,manualDispatch.stationIds],()=>{manualScopePreview.value=undefined},{deep:true})
 
 async function open(row: any, mode: 'SUBMIT' | 'RESUBMIT' | 'VIEW') {
+  if (submissionHistoryLoading.value) return
   selected.value = row
   submissionMode.value = mode
+  history.value = []
+  submissionHistoryError.value = ''
   if (mode === 'SUBMIT' || mode === 'RESUBMIT') {
     submit.content = ''
     files.value = []
     submissionStage.value = 'IDLE'
   }
-  history.value = (await api.get<any, Envelope<any[]>>(`/assignments/${row.id}/submissions`)).data
   dialog.value = true
+  if (mode === 'VIEW') {
+    submissionHistoryLoading.value = true
+    try {
+      history.value = (await api.get<any, Envelope<any[]>>(`/assignments/${row.id}/submissions`, {silentError: true} as any)).data
+    } catch (error: any) {
+      submissionHistoryError.value = error?.response?.status === 403
+        ? '当前账号无权查看该提交记录'
+        : error?.response?.data?.message || '提交记录加载失败，请重试'
+      return
+    } finally {
+      submissionHistoryLoading.value = false
+    }
+  }
 }
 
 async function doSubmit() {
@@ -444,6 +464,19 @@ function statusLabel(status: string) {
 
 function statusTagType(status: string) {
   return ({APPROVED: 'success', RETURNED: 'danger', PENDING_REVIEW: 'warning', OVERDUE: 'danger'} as Record<string, string>)[status] || 'info'
+}
+
+function submissionRecordStatusLabel(status?: string) {
+  return ({
+    PENDING_REVIEW: '待审核',
+    APPROVED: '已通过',
+    RETURNED: '已退回',
+    SUPERSEDED: '已被新版本替代'
+  } as Record<string, string>)[status || ''] || status || '未知状态'
+}
+
+function submissionRecordStatusType(status?: string) {
+  return ({APPROVED: 'success', RETURNED: 'danger', PENDING_REVIEW: 'warning', SUPERSEDED: 'info'} as Record<string, string>)[status || ''] || 'info'
 }
 
 function managerTaskState(task: any) {
@@ -631,10 +664,28 @@ async function previewSubmissionFile(file: any) {
 }
 
 async function openTaskDetail(task: any) {
-  const response = await api.get<any, Envelope<any>>(`/tasks/${task.id}`)
-  detailTaskId.value = task.id
-  Object.assign(taskDetail, response.data)
+  const taskId = employee.value ? taskIdForEmployeeAssignment(task) : taskIdForManagedTask(task)
+  if (!taskId) {
+    ElMessage.error('任务信息已失效，请刷新后重试')
+    return
+  }
+  detailLoading.value = true
+  detailError.value = ''
+  detailTaskId.value = null
+  Object.assign(taskDetail, {title: '', description: '', requirements: '', deadline: '', attachments: []})
   detailDialog.value = true
+  try {
+    const response = await api.get<any, Envelope<any>>(`/tasks/${taskId}`, {silentError: true} as any)
+    detailTaskId.value = taskId
+    Object.assign(taskDetail, response.data)
+    detailDialog.value = true
+  } catch (error: any) {
+    detailError.value = error?.response?.status === 403
+      ? '当前账号无权访问该任务，请刷新后重试'
+      : error?.response?.data?.message || '任务详情加载失败，请重试'
+  } finally {
+    detailLoading.value = false
+  }
 }
 
 async function saveTaskDetail() {
@@ -846,7 +897,7 @@ onMounted(async () => {
         <el-table-column label="状态" min-width="150"><template #default="{row}"><el-tag :type="statusTagType(row.status)">{{employeeTaskStatusLabel(row)}}</el-tag></template></el-table-column>
         <el-table-column prop="final_score" label="最终平均分" width="110"><template #default="{row}">{{row.final_score??'--'}}</template></el-table-column>
         <el-table-column prop="review_comments" label="评分意见" min-width="180" show-overflow-tooltip><template #default="{row}">{{row.review_comments||'--'}}</template></el-table-column>
-        <el-table-column label="操作" width="165" fixed="right"><template #default="{row}"><el-button link @click="openTaskDetail(row)">详情</el-button><el-button v-if="['NOT_SUBMITTED','RETURNED'].includes(row.status)" link type="primary" @click="open(row,'SUBMIT')">提交成果</el-button><el-button v-else-if="row.status==='PENDING_REVIEW'&&!Number(row.submitted_review_count)" link @click="open(row,'RESUBMIT')">重新提交</el-button><span v-else-if="row.status==='PENDING_REVIEW'" class="no-submission">评分中</span></template></el-table-column>
+        <el-table-column label="操作" width="250" fixed="right"><template #default="{row}"><el-button link @click="openTaskDetail(row)">详情</el-button><el-button link @click="open(row,'VIEW')">提交记录</el-button><el-button v-if="['NOT_SUBMITTED','RETURNED'].includes(row.status)" link type="primary" @click="open(row,'SUBMIT')">提交成果</el-button><el-button v-else-if="row.status==='PENDING_REVIEW'&&!Number(row.submitted_review_count)" link @click="open(row,'RESUBMIT')">重新提交</el-button><span v-else-if="row.status==='PENDING_REVIEW'" class="no-submission">评分中</span></template></el-table-column>
       </el-table>
     </section>
 
@@ -909,13 +960,27 @@ onMounted(async () => {
         </el-alert>
       </template>
       <template v-else>
-        <div class="submission-heading">提交说明</div>
-        <p class="submission-content">{{ history[0]?.content || '未填写文字说明' }}</p>
-        <el-table :data="history[0]?.files || []" empty-text="未提交附件">
-          <el-table-column prop="original_name" label="附件" min-width="240" show-overflow-tooltip />
-          <el-table-column prop="size" label="大小" width="100"><template #default="scope">{{ scope.row.size ? `${Math.ceil(scope.row.size / 1024)} KB` : '--' }}</template></el-table-column>
-          <el-table-column label="操作" width="140"><template #default="scope"><el-button link type="primary" :loading="previewLoading" @click="previewSubmissionFile(scope.row)">预览</el-button><el-button link type="primary" @click="downloadSubmissionFile(scope.row)">下载</el-button></template></el-table-column>
-        </el-table>
+        <el-skeleton v-if="submissionHistoryLoading" :rows="5" animated />
+        <el-alert v-else-if="submissionHistoryError" type="error" :title="submissionHistoryError" show-icon :closable="false" />
+        <el-empty v-else-if="!history.length" description="暂无提交记录" />
+        <section v-else class="submission-history-list">
+          <article v-for="record in history" :key="record.id" class="submission-history-card">
+            <header>
+              <strong>第{{record.submission_version}}版</strong>
+              <el-tag size="small" :type="submissionRecordStatusType(record.status)">{{submissionRecordStatusLabel(record.status)}}</el-tag>
+              <span>{{formatDate(record.submitted_at)}}</span>
+            </header>
+            <div class="submission-history-content"><span>提交说明</span><p>{{record.content || '未填写文字说明'}}</p></div>
+            <div v-if="record.score !== null && record.score !== undefined || record.review_comment" class="submission-history-review">
+              <span>审核结果</span><p>{{record.score !== null && record.score !== undefined ? `评分：${record.score}` : ''}}{{record.review_comment ? `${record.score !== null && record.score !== undefined ? '；' : ''}意见：${record.review_comment}` : ''}}</p>
+            </div>
+            <el-table :data="record.files || []" empty-text="本次提交未上传附件">
+              <el-table-column prop="original_name" label="附件" min-width="240" show-overflow-tooltip />
+              <el-table-column prop="size" label="大小" width="100"><template #default="scope">{{ scope.row.size ? `${Math.ceil(scope.row.size / 1024)} KB` : '--' }}</template></el-table-column>
+              <el-table-column label="操作" width="140"><template #default="scope"><el-button link type="primary" :loading="previewLoading" @click="previewSubmissionFile(scope.row)">预览</el-button><el-button link type="primary" @click="downloadSubmissionFile(scope.row)">下载</el-button></template></el-table-column>
+            </el-table>
+          </article>
+        </section>
       </template>
       <template #footer>
         <el-button v-if="submissionMode === 'SUBMIT' || submissionMode === 'RESUBMIT'" type="primary" :loading="submitting" :disabled="submitting" @click="doSubmit">{{submitting?'提交中':'确认'}}</el-button>
@@ -1003,30 +1068,34 @@ onMounted(async () => {
       </div>
     </el-dialog>
 
-    <el-dialog v-model="detailDialog" title="任务详情" width="720px">
-      <div v-if="canManage" class="form-stack task-detail-form">
-        <el-input v-model="taskDetail.title" placeholder="任务标题" />
-        <el-date-picker v-model="taskDetail.deadline" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="截止时间" style="width: 100%" />
-        <el-input v-model="taskDetail.description" type="textarea" :rows="5" placeholder="任务说明" />
-        <el-input v-model="taskDetail.requirements" type="textarea" :rows="5" placeholder="成果要求" />
-      </div>
-      <el-descriptions v-else :column="1" border>
-        <el-descriptions-item label="任务名称">{{ taskDetail.title }}</el-descriptions-item>
-        <el-descriptions-item label="截止时间">{{ formatDate(taskDetail.deadline) }}</el-descriptions-item>
-        <el-descriptions-item label="任务说明" class-name="pre-wrap">{{ taskDetail.description }}</el-descriptions-item>
-        <el-descriptions-item label="成果要求" class-name="pre-wrap">{{ taskDetail.requirements || '--' }}</el-descriptions-item>
-      </el-descriptions>
-      <TaskAttachmentsPanel
-        v-if="detailTaskId"
-        :list-url="`/tasks/${detailTaskId}/attachments`"
-        :upload-url="canManage?`/tasks/${detailTaskId}/attachments`:''"
-        :delete-url-prefix="canManage?`/tasks/${detailTaskId}/attachments`:''"
-        :can-manage="canManage"
-        title="任务资料"
-        :description="canManage?'可在此上传、删除、预览和下载附件；点击文件名即可预览':'点击附件文件名可预览，也可下载到本地'"
-        @changed="load"
-      />
-      <template #footer><el-button @click="detailDialog = false">{{ canManage ? '取消' : '关闭' }}</el-button><el-button v-if="canManage" type="primary" :disabled="!taskDetail.title || !taskDetail.description || !taskDetail.deadline" @click="saveTaskDetail">保存修改</el-button></template>
+    <el-dialog v-model="detailDialog" title="任务详情" width="720px" :close-on-click-modal="!detailLoading">
+      <el-skeleton v-if="detailLoading" :rows="7" animated />
+      <el-alert v-else-if="detailError" type="error" :title="detailError" show-icon :closable="false" />
+      <template v-else>
+        <div v-if="canManage" class="form-stack task-detail-form">
+          <el-input v-model="taskDetail.title" placeholder="任务标题" />
+          <el-date-picker v-model="taskDetail.deadline" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="截止时间" style="width: 100%" />
+          <el-input v-model="taskDetail.description" type="textarea" :rows="5" placeholder="任务说明" />
+          <el-input v-model="taskDetail.requirements" type="textarea" :rows="5" placeholder="成果要求" />
+        </div>
+        <el-descriptions v-else :column="1" border>
+          <el-descriptions-item label="任务名称">{{ taskDetail.title }}</el-descriptions-item>
+          <el-descriptions-item label="截止时间">{{ formatDate(taskDetail.deadline) }}</el-descriptions-item>
+          <el-descriptions-item label="任务说明" class-name="pre-wrap">{{ taskDetail.description }}</el-descriptions-item>
+          <el-descriptions-item label="成果要求" class-name="pre-wrap">{{ taskDetail.requirements || '--' }}</el-descriptions-item>
+        </el-descriptions>
+        <TaskAttachmentsPanel
+          v-if="detailTaskId"
+          :list-url="`/tasks/${detailTaskId}/attachments`"
+          :upload-url="canManage?`/tasks/${detailTaskId}/attachments`:''"
+          :delete-url-prefix="canManage?`/tasks/${detailTaskId}/attachments`:''"
+          :can-manage="canManage"
+          title="任务资料"
+          :description="canManage?'可在此上传、删除、预览和下载附件；点击文件名即可预览':'点击附件文件名可预览，也可下载到本地'"
+          @changed="load"
+        />
+      </template>
+      <template #footer><el-button @click="detailDialog = false">{{ canManage ? '取消' : '关闭' }}</el-button><el-button v-if="canManage&&!detailLoading&&!detailError" type="primary" :disabled="!taskDetail.title || !taskDetail.description || !taskDetail.deadline" @click="saveTaskDetail">保存修改</el-button></template>
     </el-dialog>
   </div>
 </template>
@@ -1045,6 +1114,7 @@ onMounted(async () => {
 .pending-section{margin-bottom:16px}.task-filter-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #edf0f4}.task-filter-bar .el-input{max-width:360px}.task-name-cell{display:flex;min-width:0;flex-direction:column;gap:5px;padding:3px 0}.task-name-cell>strong{overflow:hidden;color:#326fae;font-size:13px;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.task-name-cell>strong:hover{text-decoration:underline}.task-name-cell>span{overflow:hidden;color:#939dac;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.progress-cell{display:flex;flex-direction:column;gap:5px}.progress-cell strong{font-size:12px}.progress-cell span{color:#939dac;font-size:10px}.task-actions{display:flex;min-height:32px;align-items:center;gap:6px;white-space:nowrap}.task-actions .el-button{min-width:50px;margin:0;padding:6px 9px}
 .dispatch-preview-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:16px}.dispatch-preview-summary span{display:flex;align-items:baseline;justify-content:center;gap:5px;padding:13px;border-radius:9px;color:#738093;background:#f5f8fb;font-size:11px}.dispatch-preview-summary strong{color:#347cc5;font-size:21px}
 .form-stack{display:grid;gap:14px}.task-detail-form{padding:4px 0 18px}.pre-wrap{white-space:pre-wrap}.submission-heading{margin-bottom:8px;color:var(--el-text-color-regular);font-weight:600}.submission-content{margin:0 0 16px;white-space:pre-wrap}.review-panel{display:grid;gap:16px;margin-top:20px}.review-field{display:flex;min-height:32px;align-items:center;gap:14px}.review-label{width:64px;color:var(--el-text-color-regular)}.review-score{width:160px}.review-unit{color:var(--el-text-color-secondary)}
+.submission-history-list{display:grid;gap:14px;max-height:65vh;overflow:auto}.submission-history-card{display:grid;gap:10px;padding:14px;border:1px solid #e5eaf1;border-radius:9px;background:#fafcff}.submission-history-card>header{display:flex;align-items:center;gap:9px}.submission-history-card>header strong{color:#344054;font-size:13px}.submission-history-card>header span{margin-left:auto;color:#8994a5;font-size:11px}.submission-history-content,.submission-history-review{display:grid;grid-template-columns:64px 1fr;gap:10px;color:#7c8798;font-size:12px}.submission-history-content p,.submission-history-review p{margin:0;color:#475467;white-space:pre-wrap;word-break:break-word}.submission-history-review{padding-top:8px;border-top:1px solid #edf0f4}
 .submission-upload-list{display:grid;gap:9px;margin:12px 0}.submission-upload-item{padding:10px 12px;border:1px solid #e5eaf1;border-radius:8px;background:#f9fbfd}.submission-file-heading{display:flex;align-items:center;gap:9px;margin-bottom:8px}.submission-file-heading>span{display:flex;min-width:0;flex:1;align-items:baseline;gap:8px}.submission-file-heading strong{overflow:hidden;color:#445066;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.submission-file-heading small{flex:none;color:#929cab;font-size:10px}.submission-file-heading .el-button{margin:0;padding:2px}.submission-file-error{display:block;margin-top:5px;color:var(--el-color-danger);font-size:10px}.submission-upload-item :deep(.el-progress__text){min-width:34px;font-size:10px}
 .progress-dialog-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding-right:28px}.progress-dialog-heading>div{display:flex;min-width:0;flex-direction:column;gap:4px}.progress-dialog-heading span{color:#3b82c4;font-size:11px;font-weight:700}.progress-dialog-heading h3{margin:0;overflow:hidden;color:#28364b;font-size:19px;text-overflow:ellipsis;white-space:nowrap}.progress-dialog-heading p{margin:0;color:#8c97a8;font-size:12px}.progress-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}.progress-overview article{display:grid;grid-template-columns:auto 1fr;align-items:baseline;min-height:72px;padding:12px 14px;border:1px solid #e7ebf1;border-radius:9px;background:#fafcff;column-gap:8px}.progress-overview small{grid-column:1/-1;color:#7d8899;font-size:11px}.progress-overview strong{color:#475569;font-size:22px;line-height:1.25}.progress-overview article>span{overflow:hidden;color:#9aa3b1;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.progress-overview .blue strong{color:#347fc4}.progress-overview .amber strong{color:#c47a12}.progress-overview .green strong{color:#168d70}.progress-toolbar{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;padding:12px;border:1px solid #e8ecf2;border-radius:9px;background:#f8fafc}.progress-filters,.progress-export-actions{display:flex;align-items:center;gap:8px}.progress-filters{min-width:0;flex:1}.progress-filters .el-input{width:220px}.progress-filters .el-select{width:122px}.progress-count{margin-left:2px;color:#8a95a5;font-size:12px;white-space:nowrap}.progress-export-actions{flex:none}.progress-export-actions .el-button{margin:0}.progress-table-shell{width:100%;min-width:0;overflow:hidden;border:1px solid #e6eaf0;border-radius:9px}.progress-table{width:100%;min-width:0}.progress-date{font-size:11px;white-space:nowrap}.progress-person{display:flex;min-width:0;flex-direction:column;gap:3px}.progress-person strong{overflow:hidden;color:#344054;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.progress-person span{overflow:hidden;color:#8b96a7;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.progress-row-actions{display:flex;min-height:30px;align-items:center;gap:2px;white-space:nowrap}.progress-row-actions .el-button{margin:0;padding:4px 6px}.file-count{color:#778396;font-size:11px}.score-value{color:#354258}.no-submission{color:#a1a9b5;font-size:11px}
 :deep(.progress-dialog){overflow:hidden;border-radius:12px}:deep(.progress-dialog .el-dialog__header){padding:20px 22px 14px;border-bottom:1px solid #edf0f4}:deep(.progress-dialog .el-dialog__body){padding:16px 22px 22px}
