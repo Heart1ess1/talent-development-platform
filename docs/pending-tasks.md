@@ -4,10 +4,10 @@
 
 ## 当前基线
 
-- 最后核对日期：2026-10-03
-- GitHub：功能 PR #56 已合并为 `main@e434e58`，部署记录 PR #57 已合并为 `main@2903ba6`。
-- 云服务器：已激活本次 CDN 生产 JAR，SHA-256、数据库备份和回滚材料详见下方“2026-10-03 部署记录”。
-- 线上验收：应用健康状态为 `UP`，Flyway 已升级至 V39；MySQL、应用和 Nginx 容器均正常，生产就绪检查为 `ready: true`，新增接口未登录请求均返回 401，CDN 主资源正常，OSS 原始地址匿名访问返回 403。登录后的功能页面仍待使用授权真实账号复核。
+- 最后核对日期：2026-10-04
+- GitHub：功能 PR #59 已合并为 `main@7278c36`，嵌套路由修复 PR #60 已合并为 `main@123e757`。
+- 云服务器：已激活本次 CDN 生产 JAR，SHA-256、数据库备份和回滚材料详见下方“2026-10-04 部署记录”。
+- 线上验收：应用健康状态为 `UP`，Flyway 已升级至 V41；MySQL、应用和 Nginx 容器均正常，生产就绪检查为 `ready: true`，历史导入及两类批量预览接口未登录请求均返回 401，新历史导入嵌套路由直达返回 200，CDN 主资源正常，OSS 原始地址匿名访问返回 403。登录后的功能页面仍待使用授权真实账号复核。
 - 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、主站及 CDN HTTPS、正式 DNS 和每日本地备份均已投入使用；`static.yryhx.cn` 已通过 CDN 同账号私有 OSS 回源提供公共静态资源。
 
 ### 2026-10-03 部署记录：PR #56 三项功能
@@ -17,6 +17,15 @@
 - 部署前数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20261003-234358.sql.gz`；SHA-256：`2b08ddf65717f9f4db6bc05aaa1ea4e00cc4b691b9766c512be53d501ac8d372`。
 - 服务器验收：应用、MySQL、Nginx 容器正常，健康接口 `UP`，Flyway V39；历史导入批次和行记录均为 0。主 CDN 资源返回 200、`text/javascript`、`max-age=31104000`，公共 OSS 原始地址匿名访问 403。
 - 未登录安全边界：历史导入、人员批量预览、账号批量预览接口均返回 401；近 10 分钟应用日志未发现 `ERROR` 或 `Exception`。未使用生产账号执行登录后页面冒烟，登录后功能验收仍需由授权账号完成。
+
+### 2026-10-04 部署记录：PR #59 历史导入重构与批量操作优化
+
+- 线上代码：功能 PR #59 合并提交 `main@7278c36`；随后修复新嵌套路由直达 404 的 PR #60 合并提交 `main@123e757`。生产 JAR SHA-256：`843b03df863a148785c86abaab197e8ec64725c4528dc48e99c1d27da5bf915a`。
+- 发布候选：`/data/talent-platform/releases/staging/cdn-123e757-20261004-0330`；激活回滚材料：`/data/talent-platform/releases/history/cdn-activation-20261004032927-132909/`。
+- 部署前数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20261004-032632.sql.gz`；SHA-256：`767b0bd6e15771eb9c42bd8f5efe589a2126541aeeb076ed1d385d46400f48e5`。
+- 服务器验收：应用、MySQL、Nginx 容器正常，健康接口 `UP`，Flyway V41 成功；生产 JAR 与候选 JAR SHA-256 一致。激活期间出现 3 次短暂 502，发布脚本重试后成功，未触发回滚。
+- 功能与安全边界：`/exams/results/history-imports`、`/evaluation/results/history-imports` 直达均返回 200；历史导入、人员批量预览、账号批量预览接口均返回 401；CDN 主资源返回 200、`text/javascript`、`max-age=31104000`，公共 OSS 原始地址匿名访问 403；近 5 分钟应用日志错误计数为 0；生产就绪检查为 `ready: true`。
+- 未使用生产账号执行登录后的导入、批量修改和页面视觉冒烟，登录后功能验收仍需由授权账号完成。
 
 “代码已合并”不等于“云端已上线”。只有部署任务取得服务器端版本、健康检查、迁移记录和业务冒烟证据后，才能将状态改为 `Done`。
 
