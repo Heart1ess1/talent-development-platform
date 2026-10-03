@@ -10,6 +10,14 @@
 - 线上验收：应用健康状态为 `UP`，Flyway 保持 V37；MySQL、应用和 Nginx 容器均正常，生产就绪检查为 `ready: true`，未登录评分范围接口返回 401，新 CDN 主资源正常，OSS 原始地址匿名访问返回 403，部署后日志无 `ERROR` 或 `Exception`。任务 12 仍按两条范围完整覆盖 66 人：陈立青负责机动车范围 36 人，原 30 条已完成评分完整保留；朱小红负责城轨范围 30 人，已实际完成 4 条评分、剩余 26 条待评分；范围匹配、评分记录范围和评分人成员一致性错误均为 0。已登录后的范围展示、平均分三态排序、成果提交弹窗以及本次详情宽度和四列布局仍待使用真实账号复核。
 - 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、主站及 CDN HTTPS、正式 DNS 和每日本地备份均已投入使用；`static.yryhx.cn` 已通过 CDN 同账号私有 OSS 回源提供公共静态资源。
 
+### 2026-10-03 部署记录：PR #56 三项功能
+
+- 线上代码：`main@e434e58`（PR #56，历史成绩导入、浏览器标签页标题、人员与账号批量修改）；生产 JAR SHA-256：`d51e3137103033a6eb1eefd1aa30cdd58c82424572da830724e9776fb3b3976f`。
+- 发布候选：`/data/talent-platform/releases/staging/cdn-e434e58-20261003-2345`；激活回滚材料：`/data/talent-platform/releases/history/cdn-activation-20261003234819-105813/`。
+- 部署前数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20261003-234358.sql.gz`；SHA-256：`2b08ddf65717f9f4db6bc05aaa1ea4e00cc4b691b9766c512be53d501ac8d372`。
+- 服务器验收：应用、MySQL、Nginx 容器正常，健康接口 `UP`，Flyway V39；历史导入批次和行记录均为 0。主 CDN 资源返回 200、`text/javascript`、`max-age=31104000`，公共 OSS 原始地址匿名访问 403。
+- 未登录安全边界：历史导入、人员批量预览、账号批量预览接口均返回 401；近 10 分钟应用日志未发现 `ERROR` 或 `Exception`。未使用生产账号执行登录后页面冒烟，登录后功能验收仍需由授权账号完成。
+
 “代码已合并”不等于“云端已上线”。只有部署任务取得服务器端版本、健康检查、迁移记录和业务冒烟证据后，才能将状态改为 `Done`。
 
 ## 状态说明
