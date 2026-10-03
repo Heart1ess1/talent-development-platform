@@ -42,12 +42,12 @@ public class EmployeePortraitQuery {
       left join course_material_view_session v on v.material_id=m.id and v.employee_id=? group by m.id
     ) x
     """,id,id);}
-  public Map<String,Object> examMetrics(long id){return db.queryForMap("""
+  public Map<String,Object> examMetrics(long id){var online=db.queryForMap("""
     select count(*) total,count(case when exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id and a.submitted_at is not null) then 1 end) completed,
       count(case when p.ends_at<now() and not exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id) then 1 end) absent
     from exam_assignment ea join exam_plan p on p.id=ea.plan_id where ea.employee_id=? and p.status='PUBLISHED'
-    """,id);}
-  public List<Map<String,Object>> publishedExamTrend(long id){return db.queryForList("""
+    """,id);var historical=db.queryForMap("select count(*) total,count(case when result_status='COMPLETED' then 1 end) completed,count(case when result_status='ABSENT' then 1 end) absent from legacy_exam_result r join history_import_batch b on b.id=r.batch_id where r.employee_id=? and r.active=true and b.status='PUBLISHED'",id);return Map.of("total",number(online.get("total"))+number(historical.get("total")),"completed",number(online.get("completed"))+number(historical.get("completed")),"absent",number(online.get("absent"))+number(historical.get("absent")));}
+  public List<Map<String,Object>> publishedExamTrend(long id){var rows=db.queryForList("""
     select a.id,p.id plan_id,p.name,p.score_month,a.attempt_no,a.total_score,
       coalesce((select sum(q.score) from exam_attempt_question q where q.attempt_id=a.id),
                (select sum(q.score) from exam_paper_question q where q.paper_id=p.paper_id)) max_score
@@ -55,12 +55,13 @@ public class EmployeePortraitQuery {
     where a.employee_id=? and a.status='GRADED' and a.published=true
       and a.id=(select x.id from exam_attempt x where x.employee_id=a.employee_id and x.plan_id=a.plan_id and x.status='GRADED' and x.published=true order by x.attempt_no desc,x.id desc limit 1)
     order by p.score_month,p.id
-    """,id);}
+    """,id);rows.addAll(db.queryForList("select r.id,x.id plan_id,x.name,x.score_month,1 attempt_no,r.score total_score,x.max_score from legacy_exam_result r join legacy_exam x on x.id=r.exam_id join history_import_batch b on b.id=r.batch_id where r.employee_id=? and r.active=true and r.result_status='COMPLETED' and b.status='PUBLISHED' order by x.score_month,x.id",id));return rows;}
   public List<Map<String,Object>> evaluationTrend(long id,String type){return db.queryForList("""
     select s.period_key,s.final_score from score_summary s where s.employee_id=? and s.summary_type=? and s.status='PUBLISHED'
       and s.version=(select max(x.version) from score_summary x where x.employee_id=s.employee_id and x.summary_type=s.summary_type and x.period_key=s.period_key and x.status='PUBLISHED')
     order by s.period_key
     """,id,type);}
+  private static long number(Object value){return value instanceof Number n?n.longValue():0;}
   public List<Map<String,Object>> courseParticipation(long id){return db.queryForList("""
     select case when cs.starts_at>now() then 'UPCOMING' when cs.ends_at>=now() then 'IN_PROGRESS'
       when a.id is not null then 'ATTENDED' else 'ABSENT' end state,count(*) count

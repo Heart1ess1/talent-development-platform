@@ -320,7 +320,7 @@ public class EvaluationController {
   public ApiResponse<List<Map<String,Object>>> summaries(@RequestParam Long employeeId) {
     permissions.require(Permissions.EVALUATION_VIEW); permissions.requireEmployee(employeeId);
     boolean manage=SecurityUtils.current().can(Permissions.EVALUATION_MANAGE);
-    List<Map<String,Object>> rows=db.queryForList("select * from score_summary where employee_id=?"+(manage?"":" and status='PUBLISHED'")+" order by generated_at desc",employeeId);
+    List<Map<String,Object>> rows=db.queryForList("select * from score_summary where employee_id=?"+(manage?" and status<>'REVOKED'":" and status='PUBLISHED'")+" order by generated_at desc",employeeId);
     for(Map<String,Object> row:rows){parseJson(row,"component_snapshot");parseJson(row,"quarter_snapshot");}
     return ApiResponse.ok(rows);
   }

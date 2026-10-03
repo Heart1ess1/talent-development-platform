@@ -123,5 +123,20 @@ class UserControllerTest {
     assertThatThrownBy(()->controller.username(1L,new UserController.UsernameRequest("another-admin"))).isInstanceOf(BusinessException.class).hasMessageContaining("不能修改超级管理员");
   }
 
+  @Test void bulkDisableCannotDisableCurrentAccount(){
+    authenticate("SUPER_ADMIN");
+    when(db.queryForList(contains("select u.id from sys_user"),any(Object[].class)))
+        .thenReturn(List.of(Map.of("id",7L)));
+    when(db.queryForObject(eq("select role from sys_user where id=?"),eq(String.class),eq(7L)))
+        .thenReturn("ADMIN");
+    var request=new UserController.BulkRequest(
+        new UserController.BulkSelection("IDS",List.of(7L),Map.of(),List.of()),
+        Map.of("enabled",false),false,null,null,"bulk-test");
+
+    assertThatThrownBy(()->controller.bulkPreview(request))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("不能停用当前账号");
+  }
+
   private void authenticate(String role){var u=new CurrentUser(7L,"u","U",role,false,1,permissionService.permissions(role),"ALL");SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(u,null,List.of()));}
 }

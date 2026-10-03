@@ -18,7 +18,7 @@ onMounted(()=>q.load())
     </el-alert>
     <el-table v-else :data="q.records.value" v-loading="q.loading.value" height="100%" stripe empty-text="暂无评价记录">
       <el-table-column type="expand"><template #default="s"><div class="evaluation-detail" v-if="type==='MONTH'"><span>考试：{{score(s.row.examScore)}}</span><span>任务：{{score(s.row.taskScore)}}</span><span>导师：{{score(s.row.mentorScore)}}</span><span>服务站：{{score(s.row.stationScore)}}</span><span>培训：{{score(s.row.trainingScore)}}</span><span>加分：{{s.row.bonus??0}}</span><span>扣分：{{s.row.deduction??0}}</span></div><div v-else class="evaluation-detail"><span>季度组成快照：{{s.row.quarterSnapshot||'暂无快照'}}</span></div></template></el-table-column>
-      <el-table-column prop="period" label="周期" min-width="120"/>
+      <el-table-column prop="period" label="周期" min-width="120"><template #default="s"><span>{{s.row.period}}</span><el-tag v-if="s.row.sourceType==='HISTORICAL'" size="small" type="warning" effect="plain" class="history-tag">历史导入</el-tag></template></el-table-column>
       <el-table-column prop="version" label="版本" width="80"/>
       <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="s.row.provisional?'warning':'success'">{{s.row.provisional?'暂定':'已发布'}}</el-tag></template></el-table-column>
       <el-table-column label="最终得分" width="110"><template #default="s"><strong>{{score(s.row.finalScore)}}</strong></template></el-table-column>

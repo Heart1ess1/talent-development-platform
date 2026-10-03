@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -85,5 +86,19 @@ class EmployeeControllerTest {
         assertThat(value)
             .contains("insert into station_change_request")
             .contains("reviewed_at"));
+  }
+
+  @Test
+  void bulkPreviewRejectsIdentityFields() {
+    var db = mock(JdbcTemplate.class);
+    var permissions = mock(PermissionService.class);
+    var controller = new EmployeeController(db, mock(PasswordEncoder.class), permissions, mock(AuditService.class));
+    var request = new EmployeeController.BulkRequest(
+        new EmployeeController.BulkSelection("IDS", List.of(1L), Map.of(), List.of()),
+        Map.of("name", "不允许批量覆盖"), false, null, null, "bulk-test");
+
+    assertThatThrownBy(() -> controller.bulkPreview(request))
+        .isInstanceOf(com.talent.platform.common.BusinessException.class)
+        .hasMessageContaining("不支持的批量字段");
   }
 }

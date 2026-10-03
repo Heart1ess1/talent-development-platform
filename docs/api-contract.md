@@ -98,9 +98,11 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/employees` | `employee:write` | 创建员工和关联员工账号 | `employeeNo`、`name`、`gender=男|女`、`batchId`、`classId`、`classPositionId`、`businessUnitId`、`stationId`、`mentorUserId`、`skillMentorUserId`、`status` 及个人资料字段 | 员工 ID |
 | `PUT` | `/api/v1/employees/{id}` | `employee:write` | 更新人员完整档案；站点改变时自动写入已生效历史 | 同创建员工 | 空 |
 | `POST` | `/api/v1/employees/bind-mentor` | `employee:write` | 批量设置技术或技能导师 | `employeeIds`、`mentorUserId`、`mentorType=TECHNICAL|SKILL` | 更新数量 |
+| `POST` | `/api/v1/employees/bulk/preview` | `employee:update`；导师字段需 `employee:write`；同步账号需 `user:employee:manage` | 预览人员批量结构化修改 | `selection=IDS|FILTER`、`changes`、`syncLinkedAccount` | `selectionHash`、匹配/变更/未变化数量 |
+| `POST` | `/api/v1/employees/bulk/execute` | 同预览接口 | 执行人员批量结构化修改；事务内写入服务站历史 | 预览返回的 `selectionHash`、`expectedCount`、`requestId` 及修改内容 | `operationId`、执行数量 |
 | `GET` | `/api/v1/employees/{id}` | `employee:read`，非 `EMPLOYEE`，按数据范围校验 | 查询员工详情 | 路径 `id` | 员工详情 |
 
-员工创建会同步创建 `EMPLOYEE` 账号，默认停用并要求改密。`/api/v1/employees` 继续供统一人员台账页面及其他业务模块复用，不再对应独立前端页面；员工本人使用 `/api/v1/profile/employee`。
+员工创建会同步创建 `EMPLOYEE` 账号，账号启用状态跟随人员状态并要求改密。`/api/v1/employees` 继续供统一人员台账页面及其他业务模块复用，不再对应独立前端页面；员工本人使用 `/api/v1/profile/employee`。
 
 ### 人员接口分工与兼容约定
 
@@ -110,6 +112,7 @@ Authorization: Bearer <token>
 - 两类查询都必须应用 `PermissionService.employeeFilter` 数据范围。新增筛选条件时，应确认页面查询、导出和共享人员选择是否需要同步。
 - 管理员通过 `PUT /api/v1/employees/{id}` 直接改变或取消服务站分配时，后端会写入一条已生效的 `station_change_request`，不能绕过历史轨迹。
 - 前端旧 `/employees` 地址只做路由重定向，不是新的 API，也不再对应独立人员台账页面。
+- 批量接口单次最多处理 500 条；`selection.mode=IDS` 使用明确 ID，`FILTER` 使用对应列表筛选条件，均会在后端重新应用数据范围。`changes` 未出现的字段保持原值，结构化字段可使用 `{operation:"SET",value:...}` 或 `{operation:"CLEAR"}`；执行前必须携带预览返回的 `selectionHash` 和 `expectedCount`。
 
 ### 人员培养画像
 
@@ -367,6 +370,23 @@ Authorization: Bearer <token>
 
 动态试卷的题目集合以 `exam_attempt_question` 为准。开始考试后，查看答卷、保存答案、提交、自动评分和人工阅卷必须使用同一集合，不能重新按标签抽题。前端旧 `/exams` 地址只重定向到按角色可访问的拆分页面，不代表存在第二套考试 API。
 
+## 历史考试成绩与综合评价导入
+
+| 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/v1/history-imports/templates` | `history:import` | 下载历史考试或综合评价模板 | `type=EXAM\|EVALUATION` | Excel 文件 |
+| `POST` | `/api/v1/history-imports` | `history:import` | 上传并创建导入批次 | `multipart/form-data`：`type`、`sourceSystem`、`file` | 批次 ID、行数、错误数、警告数 |
+| `GET` | `/api/v1/history-imports` | `history:import` | 查询导入批次 | 无 | 批次列表 |
+| `GET` | `/api/v1/history-imports/{id}` | `history:import` | 查看预览行和校验结果 | 路径 `id` | 批次概览、错误、警告和行数据 |
+| `POST` | `/api/v1/history-imports/{id}/rows` | `history:import` | 人工新增导入行 | `rowType`、`data` | 行 ID |
+| `PUT` | `/api/v1/history-imports/{id}/rows/{rowId}` | `history:import` | 修正导入行并重新校验 | `data` | 空 |
+| `POST` | `/api/v1/history-imports/{id}/validate` | `history:import` | 重新校验批次 | 路径 `id` | 行数、错误数、警告数 |
+| `POST` | `/api/v1/history-imports/{id}/submit` | `history:import` | 提交管理员审核 | 路径 `id` | 空 |
+| `POST` | `/api/v1/history-imports/{id}/publish` | `history:import` 且管理员角色 | 发布历史数据 | 路径 `id` | 空 |
+| `POST` | `/api/v1/history-imports/{id}/revoke` | `history:import` 且管理员角色 | 撤销已发布批次 | 路径 `id` | 空 |
+
+历史导入记录使用独立数据表，不创建在线考试答卷、题目答案或监考事件。发布后的考试成绩会合并到成绩查询、成绩导出和员工培养画像；历史评价会生成只读的 `score_summary` 快照。重复文件按 `type + sourceSystem + SHA-256` 幂等，已发布记录通过新批次形成新版本。
+
 ## 账号管理
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
@@ -379,8 +399,11 @@ Authorization: Bearer <token>
 | `PUT` | `/api/v1/users/{id}/username` | `user:admin:manage`（仅超级管理员） | 修改非超级管理员账号的用户名 | `username`，仅支持字母、数字、点、下划线、连字符；员工账号会同步更新工号并使原登录态失效 | 空 |
 | `POST` | `/api/v1/users/{id}/reset-password` | 员工账号需 `user:employee:manage`，运营角色需 `user:ops-role:manage`，管理员角色需 `user:admin:manage` | 重置密码 | 路径 `id` | `temporaryPassword` |
 | `PUT` | `/api/v1/users/{id}/stations` | `user:ops-role:manage` | 设置站点负责人服务站范围 | `stationIds` | 空 |
+| `POST` | `/api/v1/users/bulk/preview` | 基础需 `user:employee:manage`；具体字段按目标账号角色再次校验 | 预览账号批量启停、角色或服务站范围修改 | `selection=IDS|FILTER`、`changes`、`syncLinkedEmployeeStatus` | `selectionHash`、匹配/变更/未变化数量 |
+| `POST` | `/api/v1/users/bulk/execute` | 同预览接口 | 执行账号批量修改；整批事务和安全约束校验 | 预览返回的 `selectionHash`、`expectedCount`、`requestId` | `operationId`、执行数量 |
 
 站点负责人必须至少绑定一个服务站。账号创建和重置密码返回临时密码，用户后续需要修改密码。
+账号批量接口不提供批量重置密码；启停、角色和服务站范围修改均为整批事务，任一目标违反现有安全规则时整批拒绝。
 
 ## 文件与审计
 
