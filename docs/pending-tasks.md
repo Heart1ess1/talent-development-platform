@@ -5,8 +5,8 @@
 ## 当前基线
 
 - 最后核对日期：2026-10-04
-- GitHub：功能 PR #59 已合并为 `main@7278c36`，嵌套路由修复 PR #60 已合并为 `main@123e757`。
-- 云服务器：已激活本次 CDN 生产 JAR，SHA-256、数据库备份和回滚材料详见下方“2026-10-04 部署记录”。
+- GitHub：功能 PR #59 已合并为 `main@7278c36`，嵌套路由修复 PR #60 已合并为 `main@123e757`，左侧导航变更 PR #62 已合并为 `main@9f5cf82`。
+- 云服务器：已激活最新 CDN 生产 JAR，SHA-256、数据库备份和回滚材料详见下方“2026-10-04 左侧导航变更部署记录”。
 - 线上验收：应用健康状态为 `UP`，Flyway 已升级至 V41；MySQL、应用和 Nginx 容器均正常，生产就绪检查为 `ready: true`，历史导入及两类批量预览接口未登录请求均返回 401，新历史导入嵌套路由直达返回 200，CDN 主资源正常，OSS 原始地址匿名访问返回 403。登录后的功能页面仍待使用授权真实账号复核。
 - 基础设施现状：100 GiB 数据盘、MySQL 数据目录、两个私有 ACL OSS Bucket、ECS RAM Role、主站及 CDN HTTPS、正式 DNS 和每日本地备份均已投入使用；`static.yryhx.cn` 已通过 CDN 同账号私有 OSS 回源提供公共静态资源。
 
@@ -26,6 +26,15 @@
 - 服务器验收：应用、MySQL、Nginx 容器正常，健康接口 `UP`，Flyway V41 成功；生产 JAR 与候选 JAR SHA-256 一致。激活期间出现 3 次短暂 502，发布脚本重试后成功，未触发回滚。
 - 功能与安全边界：`/exams/results/history-imports`、`/evaluation/results/history-imports` 直达均返回 200；历史导入、人员批量预览、账号批量预览接口均返回 401；CDN 主资源返回 200、`text/javascript`、`max-age=31104000`，公共 OSS 原始地址匿名访问 403；近 5 分钟应用日志错误计数为 0；生产就绪检查为 `ready: true`。
 - 未使用生产账号执行登录后的导入、批量修改和页面视觉冒烟，登录后功能验收仍需由授权账号完成。
+
+### 2026-10-04 左侧导航变更部署记录：PR #62
+
+- 线上代码：PR #62 合并提交 `main@9f5cf82`，在考试中心和综合评价菜单中增加权限控制的历史导入入口；生产 JAR SHA-256：`c0c8d91a9f4c58447eed6f68996ba8e245c8b659b093a3d765ee8ba8006aa545`。
+- 发布候选：`/data/talent-platform/releases/staging/cdn-9f5cf82-20261004-0403`；激活回滚材料：`/data/talent-platform/releases/history/cdn-activation-20261004040356-137726/`。
+- 部署前数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20261004-040019.sql.gz`；SHA-256：`4e1d9a3514424f589655a0614cc7482527e3f5390e7a48624aea25bed6e3d76a`。
+- 服务器验收：应用、MySQL、Nginx 容器正常，健康接口 `UP`，Flyway V41；生产 JAR 与候选 JAR SHA-256 一致。激活期间 3 次短暂 502 后重试成功，未触发回滚。
+- 功能与安全边界：主站返回 200，新主资源 `index-MeNkZgPd.js` 返回 200、`text/javascript`、`max-age=31104000`；历史导入、人员批量预览、账号批量预览接口均返回 401；公共 OSS 原始地址匿名访问 403；近 5 分钟应用日志错误计数为 0；生产就绪检查为 `ready: true`。
+- 未使用生产账号执行登录后的左侧导航、历史导入和批量修改页面视觉冒烟，登录后功能验收仍需由授权账号完成。
 
 “代码已合并”不等于“云端已上线”。只有部署任务取得服务器端版本、健康检查、迁移记录和业务冒烟证据后，才能将状态改为 `Done`。
 
