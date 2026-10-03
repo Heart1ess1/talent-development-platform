@@ -22,13 +22,16 @@ const accountEntryDescription=computed(()=>isEmployee.value
 )
 type MenuItem={to?:string;label:string;permission?:string;children?:MenuItem[]}
 const examChildren=computed<MenuItem[]>(()=>{
-  if(auth.can('exam:manage'))return [
-    {to:'/exams/questions',label:'题库管理'},
-    {to:'/exams/papers',label:'试卷管理'},
-    {to:'/exams/plans',label:'考试计划'},
-    {to:'/exams/results',label:'成绩管理'}
-  ]
-  return [{to:'/exams/results',label:'考试成绩'}]
+  const children:MenuItem[]=auth.can('exam:manage')
+    ?[
+      {to:'/exams/questions',label:'题库管理'},
+      {to:'/exams/papers',label:'试卷管理'},
+      {to:'/exams/plans',label:'考试计划'},
+      {to:'/exams/results',label:'成绩管理'}
+    ]
+    :[{to:'/exams/results',label:'考试成绩'}]
+  if(auth.can('history:import'))children.push({to:'/exams/results/history-imports',label:'历史成绩导入'})
+  return children
 })
 const courseChildren=computed<MenuItem[]>(()=>{
   if(isEmployee.value)return [
@@ -64,6 +67,7 @@ const evaluationChildren=computed<MenuItem[]>(()=>{
   children.push({to:'/evaluation/monthly',label:'月度评分'})
   if(auth.can('evaluation:manage'))children.push({to:'/evaluation/templates',label:'评价模板'})
   children.push({to:'/evaluation/results',label:'结果中心'})
+  if(auth.can('history:import'))children.push({to:'/evaluation/results/history-imports',label:'历史评价导入'})
   return children
 })
 const menus=computed<MenuItem[]>(()=>[
