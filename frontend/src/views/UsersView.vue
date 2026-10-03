@@ -55,6 +55,16 @@ const scopeUser=ref<UserRow|null>(null)
 const formRef=ref<FormInstance>()
 const page=ref(1)
 const pageSize=ref(10)
+const selectedRows=ref<UserRow[]>([])
+const accountBulkOpen=ref(false)
+const accountBulkPreview=ref<any|null>(null)
+const accountBulkPreviewing=ref(false)
+const accountBulkSaving=ref(false)
+const accountBulkAction=ref<'enabled'|'role'|'stationIds'>('enabled')
+const accountBulkEnabled=ref<boolean|null>(null)
+const accountBulkRole=ref<Role|null>(null)
+const accountBulkStations=ref<number[]>([])
+const accountBulkSyncEmployee=ref(false)
 
 const filters=reactive<AccountFilters>({keyword:'',role:'',enabled:'',batchId:'',businessUnitId:'',classId:'',linked:''})
 const form=reactive<{username:string;displayName:string;role:Role;stationIds:number[]}>({
@@ -135,6 +145,64 @@ async function load(){
 
 function resetFilters(){
   Object.assign(filters,{keyword:'',role:'',enabled:'',batchId:'',businessUnitId:'',classId:'',linked:''})
+}
+
+function selectFilteredAccounts(){
+  selectedRows.value=[...filteredRows.value]
+}
+
+function clearAccountSelection(){selectedRows.value=[]}
+
+function openAccountBulk(action:'enabled'|'role'|'stationIds'){
+  if(!selectedRows.value.length)return ElMessage.warning('请先选择账号')
+  accountBulkAction.value=action
+  accountBulkEnabled.value=null
+  accountBulkRole.value=null
+  accountBulkStations.value=[]
+  accountBulkSyncEmployee.value=false
+  accountBulkPreview.value=null
+  accountBulkOpen.value=true
+}
+
+function accountBulkChanges(){
+  if(accountBulkAction.value==='enabled')return {enabled:accountBulkEnabled.value}
+  if(accountBulkAction.value==='role')return {role:accountBulkRole.value}
+  return {stationIds:accountBulkStations.value}
+}
+
+async function previewAccountBulk(){
+  const changes=accountBulkChanges()
+  if(accountBulkAction.value==='enabled'&&accountBulkEnabled.value===null)return ElMessage.warning('请选择账号状态')
+  if(accountBulkAction.value==='role'&&!accountBulkRole.value)return ElMessage.warning('请选择目标角色')
+  if(accountBulkAction.value==='stationIds'&&!accountBulkStations.value.length)return ElMessage.warning('请选择服务站范围')
+  accountBulkPreviewing.value=true
+  try{
+    const response=await api.post<any,Envelope<any>>('/users/bulk/preview',{
+      selection:{mode:'IDS',ids:selectedRows.value.map(row=>row.id),excludedIds:[]},
+      changes,
+      syncLinkedEmployeeStatus:accountBulkSyncEmployee.value
+    })
+    accountBulkPreview.value=response.data
+  }finally{accountBulkPreviewing.value=false}
+}
+
+async function executeAccountBulk(){
+  if(!accountBulkPreview.value)return previewAccountBulk()
+  accountBulkSaving.value=true
+  try{
+    const response=await api.post<any,Envelope<any>>('/users/bulk/execute',{
+      selection:{mode:'IDS',ids:selectedRows.value.map(row=>row.id),excludedIds:[]},
+      changes:accountBulkChanges(),
+      syncLinkedEmployeeStatus:accountBulkSyncEmployee.value,
+      expectedCount:accountBulkPreview.value.matched,
+      selectionHash:accountBulkPreview.value.selectionHash,
+      requestId:crypto.randomUUID?.()||`${Date.now()}-${Math.random()}`
+    })
+    ElMessage.success(`已完成批量操作，共更新 ${response.data.changed} 个账号`)
+    accountBulkOpen.value=false
+    selectedRows.value=[]
+    await load()
+  }finally{accountBulkSaving.value=false}
 }
 
 function openCreate(){
@@ -401,13 +469,24 @@ onMounted(load)
         </div>
       </div>
 
+      <div v-if="selectedRows.length" class="account-selection-bar">
+        <span>已选择 <strong>{{selectedRows.length}}</strong> 个账号</span>
+        <el-button size="small" text @click="selectFilteredAccounts">全选当前筛选</el-button>
+        <el-button size="small" type="primary" @click="openAccountBulk('enabled')">批量启停</el-button>
+        <el-button v-if="superAdmin" size="small" @click="openAccountBulk('role')">批量改角色</el-button>
+        <el-button v-if="canOps||superAdmin" size="small" @click="openAccountBulk('stationIds')">批量设服务站</el-button>
+        <el-button size="small" text @click="clearAccountSelection">取消选择</el-button>
+      </div>
+
       <el-table
         v-loading="loading"
         :data="pagedRows"
         row-key="id"
+        @selection-change="(selection:UserRow[])=>selectedRows=selection"
         class="account-table"
         :header-cell-style="{background:'#f8fafc',color:'#64748b',fontWeight:'600'}"
       >
+        <el-table-column type="selection" width="48" fixed="left" reserve-selection/>
         <el-table-column label="账号" min-width="220">
           <template #default="{row}">
             <div class="account-cell">
@@ -535,6 +614,28 @@ onMounted(load)
       </div>
     </section>
 
+    <el-dialog v-model="accountBulkOpen" class="account-dialog" :title="accountBulkAction==='enabled'?'批量启停账号':accountBulkAction==='role'?'批量调整角色':'批量设置服务站范围'" width="560px" destroy-on-close>
+      <div class="bulk-account-tip">已选择 {{selectedRows.length}} 个账号；执行前会重新校验权限和账号安全约束。</div>
+      <el-form label-position="top">
+        <el-form-item v-if="accountBulkAction==='enabled'" label="目标状态">
+          <el-radio-group v-model="accountBulkEnabled"><el-radio :label="true">启用</el-radio><el-radio :label="false">停用</el-radio></el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="accountBulkAction==='role'" label="目标角色">
+          <el-select v-model="accountBulkRole" class="full-width" filterable placeholder="请选择角色"><el-option v-for="role in changeRoles" :key="role" :label="roleLabels[role]" :value="role"/></el-select>
+        </el-form-item>
+        <el-form-item v-if="accountBulkAction==='stationIds'" label="服务站范围">
+          <el-select v-model="accountBulkStations" class="full-width" multiple filterable collapse-tags collapse-tags-tooltip placeholder="请选择服务站"><el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/></el-select>
+        </el-form-item>
+        <el-checkbox v-if="accountBulkAction==='enabled'" v-model="accountBulkSyncEmployee">同步关联员工人员状态</el-checkbox>
+      </el-form>
+      <el-alert v-if="accountBulkPreview" class="bulk-preview" type="info" :closable="false">预览：匹配 {{accountBulkPreview.matched}} 个账号，预计更新 {{accountBulkPreview.changed}} 个，未变化 {{accountBulkPreview.unchanged}} 个。</el-alert>
+      <template #footer>
+        <el-button @click="accountBulkOpen=false">取消</el-button>
+        <el-button v-if="!accountBulkPreview" type="primary" :loading="accountBulkPreviewing" @click="previewAccountBulk">预览修改</el-button>
+        <el-button v-else type="primary" :loading="accountBulkSaving" @click="executeAccountBulk">确认执行</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="dialog" class="account-dialog" title="创建账号" width="560px" destroy-on-close>
       <div class="dialog-intro">
         <div class="intro-icon"><UserFilled/></div>
@@ -643,6 +744,7 @@ onMounted(load)
 .metric-card span{color:#7a879b;font-size:12px}
 .metric-card strong{color:#172033;font-size:22px;line-height:1.1}
 .content-card{max-width:1500px;margin:0 auto;background:#fff;border:1px solid #e4e9f1;border-radius:14px;box-shadow:0 5px 18px rgba(32,51,82,.04);overflow:hidden}
+.account-selection-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 20px;background:#edf6ff;border-top:1px solid #d7eafd;border-bottom:1px solid #d7eafd;color:#475467;font-size:13px}.account-selection-bar strong{color:#1769aa}.bulk-account-tip{margin-bottom:14px;color:#667085;font-size:13px}.bulk-preview{margin-top:14px}
 .card-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:20px 20px 16px}
 .card-heading>div:first-child{display:flex;align-items:baseline;gap:10px;flex-shrink:0}
 .card-heading h2{margin:0;color:#1e293b;font-size:17px}

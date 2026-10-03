@@ -28,7 +28,7 @@ onMounted(()=>q.load())
           </el-table>
         </template>
       </el-table-column>
-      <el-table-column prop="examName" label="考试" min-width="200"/>
+      <el-table-column prop="examName" label="考试" min-width="200"><template #default="s"><span>{{s.row.examName}}</span><el-tag v-if="s.row.sourceType==='HISTORICAL'" size="small" type="warning" effect="plain" class="history-tag">历史导入</el-tag></template></el-table-column>
       <el-table-column label="考试时间" min-width="190"><template #default="s">{{dateTime(s.row.startsAt)}}<br>{{dateTime(s.row.endsAt)}}</template></el-table-column>
       <el-table-column label="计划状态" width="100"><template #default="s">{{statusLabel(s.row.planPhase)}}</template></el-table-column>
       <el-table-column label="参与状态" width="110"><template #default="s"><el-tag :type="s.row.participationStatus==='ABSENT'?'danger':'info'">{{statusLabel(s.row.participationStatus)}}</el-tag></template></el-table-column>

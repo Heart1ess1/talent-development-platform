@@ -13,10 +13,17 @@ public class AuditService {
     CurrentUser u=null;try{u=SecurityUtils.current();}catch(Exception ignored){}
     write(u==null?null:u.id(),action,type,id,before,after);
   }
+  public void logWithRequestId(String requestId,String action,String type,Object id,Object before,Object after){
+    CurrentUser u=null;try{u=SecurityUtils.current();}catch(Exception ignored){}
+    write(u==null?null:u.id(),action,type,id,before,after,requestId);
+  }
   public void logAs(Long userId,String action,String type,Object id,Object before,Object after){write(userId,action,type,id,before,after);}
   private void write(Long userId,String action,String type,Object id,Object before,Object after){
+    write(userId,action,type,id,before,after,request.getHeader("X-Request-Id"));
+  }
+  private void write(Long userId,String action,String type,Object id,Object before,Object after,String requestId){
     db.update("insert into operation_log(user_id,action,target_type,target_id,detail,request_id,before_value,after_value) values(?,?,?,?,?,?,?,?)",
-      userId,action,type,id instanceof Number n?n.longValue():null,null,request.getHeader("X-Request-Id"),json(before),json(after));
+      userId,action,type,id instanceof Number n?n.longValue():null,null,requestId,json(before),json(after));
   }
   private String json(Object value){try{return value==null?null:mapper.writeValueAsString(value);}catch(Exception e){return null;}}
 }

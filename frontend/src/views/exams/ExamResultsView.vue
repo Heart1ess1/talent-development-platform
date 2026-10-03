@@ -17,6 +17,7 @@ const detailClassId=ref<number|null>(null),classOptions=ref<DictionaryOption[]>(
 const detailClassPositionId=ref<number|null>(null),classPositionOptions=ref<DictionaryOption[]>([])
 const detailVisible=ref(false),detailLoading=ref(false),exporting=ref(false),selectedPlan=ref<any>(null)
 const pendingReviews=computed(()=>reviewQueue.value.filter(x=>x.status==='PENDING_REVIEW'))
+const historicalResults=computed(()=>results.value.filter(x=>x.source_type==='HISTORICAL'))
 
 const filteredPlans=computed(()=>plans.value.filter(row=>{
   const matchesKeyword=!keyword.value||`${row.name} ${row.paper_name}`.toLowerCase().includes(keyword.value.trim().toLowerCase())
@@ -40,7 +41,7 @@ const detailOverview=computed(()=>({
 }))
 
 async function load(){
-  if(canManage.value){const [planResponse,reviewResponse]=await Promise.all([api.get<any,Envelope<any[]>>('/exams/results/manage/plans'),api.get<any,Envelope<any[]>>('/exams/review')]);plans.value=planResponse.data;reviewQueue.value=reviewResponse.data}
+  if(canManage.value){const [planResponse,reviewResponse,historyResponse]=await Promise.all([api.get<any,Envelope<any[]>>('/exams/results/manage/plans'),api.get<any,Envelope<any[]>>('/exams/review'),api.get<any,Envelope<any[]>>('/exams/results')]);plans.value=planResponse.data;reviewQueue.value=reviewResponse.data;results.value=historyResponse.data}
   else results.value=(await api.get<any,Envelope<any[]>>('/exams/results')).data
 }
 async function openReview(row:any){reviewVisible.value=true;reviewLoading.value=true;try{reviewAttempt.value=(await api.get<any,Envelope<any>>(`/exams/attempts/${row.id}`)).data;for(const question of reviewAttempt.value.questions.filter((x:any)=>x.question_type==='SHORT'))grades[question.id]={score:Number(question.answer_score??0),comment:question.reviewer_comment||''}}finally{reviewLoading.value=false}}
@@ -126,12 +127,16 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
           <el-table-column label="" width="42"><template #default><el-icon class="row-arrow"><ArrowRight/></el-icon></template></el-table-column>
         </el-table>
       </section>
+      <section v-if="historicalResults.length" class="exam-workspace history-results-workspace">
+        <div class="exam-workspace-head"><div><span class="card-title">历史导入成绩</span><span class="header-tip">已发布历史记录只读展示</span></div><el-button :icon="Download" :loading="exporting" @click="exportResults()">导出全部成绩</el-button></div>
+        <el-table :data="historicalResults" empty-text="暂无历史成绩"><el-table-column prop="exam_name" label="考试" min-width="180"/><el-table-column prop="employee_name" label="员工" min-width="110"/><el-table-column prop="employee_no" label="工号" width="110"/><el-table-column prop="total_score" label="成绩" width="90"/><el-table-column prop="score_month" label="成绩月份" width="110"/><el-table-column label="来源" width="100"><template #default><el-tag type="warning" effect="plain">历史导入</el-tag></template></el-table-column></el-table>
+      </section>
     </template>
 
     <el-card v-else>
       <template #header>已发布成绩</template>
       <el-table :data="results" empty-text="暂无已发布成绩">
-        <el-table-column prop="exam_name" label="考试"/><el-table-column prop="total_score" label="成绩"/>
+        <el-table-column prop="exam_name" label="考试"><template #default="s"><span>{{s.row.exam_name}}</span><el-tag v-if="s.row.source_type==='HISTORICAL'" size="small" type="warning" effect="plain" class="history-tag">历史导入</el-tag></template></el-table-column><el-table-column prop="total_score" label="成绩"/>
         <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="resultStatus(s.row).type" effect="plain">{{resultStatus(s.row).label}}</el-tag></template></el-table-column>
         <el-table-column label="计分月份"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column>
       </el-table>

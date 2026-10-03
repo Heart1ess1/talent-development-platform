@@ -42,12 +42,13 @@ public final class EmployeePortraitDtos {
   public record ExamAttempt(Long id,int attemptNo,String status,LocalDateTime startedAt,
       LocalDateTime submittedAt,BigDecimal score,BigDecimal maxScore,boolean published) {}
   public record Exam(Long planId,String examName,LocalDateTime startsAt,LocalDateTime endsAt,
-      String planPhase,String participationStatus,int maxAttempts,List<ExamAttempt> attempts) {}
+      String planPhase,String participationStatus,int maxAttempts,List<ExamAttempt> attempts,
+      String sourceType,boolean readOnly) {}
   public record Evaluation(Long id,String type,String period,int version,String status,
       BigDecimal examScore,BigDecimal taskScore,BigDecimal mentorScore,BigDecimal stationScore,
       BigDecimal trainingScore,BigDecimal bonus,BigDecimal deduction,BigDecimal finalScore,
       String missingItems,String componentSnapshot,String quarterSnapshot,LocalDateTime generatedAt,
-      LocalDateTime publishedAt,boolean provisional) {}
+      LocalDateTime publishedAt,boolean provisional,String sourceType,boolean readOnly) {}
   public record StationHistory(Long id,String fromStation,String toStation,LocalDateTime effectiveAt,
       String source,String comment) {}
   public record Stations(EmployeeSummary employee,List<StationHistory> history,LocalDateTime fetchedAt) {}

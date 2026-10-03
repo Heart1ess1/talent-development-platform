@@ -106,38 +106,46 @@ public class EmployeePortraitService {
   public PageResult<Exam> exams(long employeeId,int page,int size){return exams(employeeId,page,size,null,null);}
   public PageResult<Exam> exams(long employeeId,int page,int size,LocalDate dateFrom,LocalDate dateTo){
     requireDateRange(dateFrom,dateTo);int limit=limit(size),offset=offset(page,limit);var args=new ArrayList<Object>();args.add(employeeId);String range=dateFilter("p.starts_at",dateFrom,dateTo,args);
-    long total=query.count("select count(*) from exam_assignment ea join exam_plan p on p.id=ea.plan_id where ea.employee_id=?"+range,args.toArray());args.add(limit);args.add(offset);
+    long total=query.count("select count(*) from exam_assignment ea join exam_plan p on p.id=ea.plan_id where ea.employee_id=?"+range,args.toArray());
+    var historyArgs=new ArrayList<Object>(); historyArgs.add(employeeId); String historyRange=dateFilter("x.exam_date",dateFrom,dateTo,historyArgs);
+    total += query.count("select count(*) from legacy_exam_result r join legacy_exam x on x.id=r.exam_id join history_import_batch hb on hb.id=r.batch_id where r.employee_id=? and r.active=true and hb.status='PUBLISHED'"+historyRange,historyArgs.toArray());
     var plans=query.rows("""
       select p.id,p.name,p.starts_at,p.ends_at,p.max_attempts,
         case when p.status='DRAFT' then 'DRAFT' when p.ends_at<now() then 'ENDED' when p.starts_at>now() then 'UPCOMING' else 'OPEN' end plan_phase
       from exam_assignment ea join exam_plan p on p.id=ea.plan_id where ea.employee_id=?
-      """+range+" order by p.starts_at desc,p.id desc limit ? offset ?",args.toArray());
-    if(plans.isEmpty())return new PageResult<>(List.of(),total,page,limit);
-    String marks=String.join(",",Collections.nCopies(plans.size(),"?"));var ids=plans.stream().map(x->x.get("id")).toArray();
-    boolean manage=SecurityUtils.current().can(Permissions.EXAM_MANAGE);
-    var attemptRows=query.rows("""
-      select a.id,a.plan_id,a.attempt_no,a.status,a.started_at,a.submitted_at,
-        case when ? or a.published=true then a.total_score else null end total_score,
-        case when ? or a.published=true then a.published else false end published,
-        coalesce((select sum(q.score) from exam_attempt_question q where q.attempt_id=a.id),
-                 (select sum(q.score) from exam_paper_question q where q.paper_id=p.paper_id)) max_score
-      from exam_attempt a join exam_plan p on p.id=a.plan_id where a.employee_id=? and a.plan_id in ("""+marks+") order by a.plan_id,a.attempt_no",prepend(new Object[]{manage,manage,employeeId},ids));
-    var grouped=attemptRows.stream().collect(Collectors.groupingBy(x->nl(x,"plan_id"),LinkedHashMap::new,Collectors.toList()));
-    var data=plans.stream().map(p->{var attempts=grouped.getOrDefault(nl(p,"id"),List.of()).stream().map(a->new ExamAttempt(nl(a,"id"),integer(a,"attempt_no"),s(a,"status"),dt(a,"started_at"),dt(a,"submitted_at"),decimal(a,"total_score"),decimal(a,"max_score"),bool(a,"published"))).toList();var end=dt(p,"ends_at");String participation=attempts.isEmpty()?(end!=null&&end.isBefore(LocalDateTime.now())?"ABSENT":"NOT_STARTED"):attempts.stream().anyMatch(a->"IN_PROGRESS".equals(a.status()))?"IN_PROGRESS":attempts.stream().anyMatch(a->"PENDING_REVIEW".equals(a.status()))?"PENDING_REVIEW":"COMPLETED";return new Exam(nl(p,"id"),s(p,"name"),dt(p,"starts_at"),end,s(p,"plan_phase"),participation,integer(p,"max_attempts"),attempts);}).toList();
+      """+range+" order by p.starts_at desc,p.id desc",args.toArray());
+    Map<Long,List<Map<String,Object>>> grouped=new LinkedHashMap<>();
+    if(!plans.isEmpty()) {
+      String marks=String.join(",",Collections.nCopies(plans.size(),"?"));var ids=plans.stream().map(x->x.get("id")).toArray();
+      boolean manage=SecurityUtils.current().can(Permissions.EXAM_MANAGE);
+      var attemptRows=query.rows("""
+        select a.id,a.plan_id,a.attempt_no,a.status,a.started_at,a.submitted_at,
+          case when ? or a.published=true then a.total_score else null end total_score,
+          case when ? or a.published=true then a.published else false end published,
+          coalesce((select sum(q.score) from exam_attempt_question q where q.attempt_id=a.id),
+                   (select sum(q.score) from exam_paper_question q where q.paper_id=p.paper_id)) max_score
+        from exam_attempt a join exam_plan p on p.id=a.plan_id where a.employee_id=? and a.plan_id in ("""+marks+") order by a.plan_id,a.attempt_no",prepend(new Object[]{manage,manage,employeeId},ids));
+      grouped.putAll(attemptRows.stream().collect(Collectors.groupingBy((Map<String,Object> x)->nl(x,"plan_id"),LinkedHashMap::new,Collectors.toList())));
+    }
+    var data=new ArrayList<Exam>();
+    data.addAll(plans.stream().map(p->{var attempts=grouped.getOrDefault(nl(p,"id"),List.of()).stream().map(a->new ExamAttempt(nl(a,"id"),integer(a,"attempt_no"),s(a,"status"),dt(a,"started_at"),dt(a,"submitted_at"),decimal(a,"total_score"),decimal(a,"max_score"),bool(a,"published"))).toList();var end=dt(p,"ends_at");String participation=attempts.isEmpty()?(end!=null&&end.isBefore(LocalDateTime.now())?"ABSENT":"NOT_STARTED"):attempts.stream().anyMatch(a->"IN_PROGRESS".equals(a.status()))?"IN_PROGRESS":attempts.stream().anyMatch(a->"PENDING_REVIEW".equals(a.status()))?"PENDING_REVIEW":"COMPLETED";return new Exam(nl(p,"id"),s(p,"name"),dt(p,"starts_at"),end,s(p,"plan_phase"),participation,integer(p,"max_attempts"),attempts,"ONLINE",false);}).toList());
+    var history=query.rows("select r.id result_id,x.id exam_id,x.name,x.exam_date,x.max_score,r.result_status,r.score,r.taken_at from legacy_exam_result r join legacy_exam x on x.id=r.exam_id join history_import_batch hb on hb.id=r.batch_id where r.employee_id=? and r.active=true and hb.status='PUBLISHED'"+historyRange+" order by x.exam_date desc,x.id desc",historyArgs.toArray());
+    for(var h:history){var attempt=new ExamAttempt(nl(h,"result_id"),1,s(h,"result_status"),dt(h,"taken_at"),dt(h,"taken_at"),decimal(h,"score"),decimal(h,"max_score"),true);data.add(new Exam(nl(h,"exam_id"),s(h,"name"),dt(h,"exam_date"),dt(h,"exam_date"),"ENDED",s(h,"result_status"),1,List.of(attempt),"HISTORICAL",true));}
+    data.sort(Comparator.comparing(Exam::startsAt,Comparator.nullsLast(Comparator.reverseOrder()))); int from=Math.min(Math.max(page-1,0)*limit,data.size()); int to=Math.min(from+limit,data.size()); data=new ArrayList<>(data.subList(from,to));
     return new PageResult<>(data,total,page,limit);
   }
 
   public PageResult<Evaluation> evaluations(long employeeId,String type,int page,int size){return evaluations(employeeId,type,page,size,null,null);}
   public PageResult<Evaluation> evaluations(long employeeId,String type,int page,int size,LocalDate dateFrom,LocalDate dateTo){
     requireDateRange(dateFrom,dateTo);int limit=limit(size),offset=offset(page,limit);String selected=normalize(type,"MONTH",Set.of("MONTH","QUARTER"));boolean manage=SecurityUtils.current().can(Permissions.EVALUATION_MANAGE);
-    String visibility=manage?"":" and status='PUBLISHED'";var args=new ArrayList<Object>();args.add(employeeId);args.add(selected);visibility+=dateFilter("generated_at",dateFrom,dateTo,args);long total=query.count("select count(*) from score_summary where employee_id=? and summary_type=?"+visibility,args.toArray());args.add(limit);args.add(offset);
+    String visibility=manage?" and status<>'REVOKED'":" and status='PUBLISHED'";var args=new ArrayList<Object>();args.add(employeeId);args.add(selected);visibility+=dateFilter("generated_at",dateFrom,dateTo,args);long total=query.count("select count(*) from score_summary where employee_id=? and summary_type=?"+visibility,args.toArray());args.add(limit);args.add(offset);
     var rows=query.rows("""
-      select id,summary_type,period_key,version,status,exam_score,task_score,mentor_score,station_score,training_score,
+      select id,summary_type,period_key,version,status,source_type,read_only,exam_score,task_score,mentor_score,station_score,training_score,
         bonus,deduction,final_score,missing_items,cast(component_snapshot as char) component_snapshot,
         cast(quarter_snapshot as char) quarter_snapshot,generated_at,published_at
       from score_summary where employee_id=? and summary_type=?
       """+visibility+" order by period_key desc,version desc limit ? offset ?",args.toArray());
-    var data=rows.stream().map(x->new Evaluation(nl(x,"id"),s(x,"summary_type"),s(x,"period_key"),integer(x,"version"),s(x,"status"),decimal(x,"exam_score"),decimal(x,"task_score"),decimal(x,"mentor_score"),decimal(x,"station_score"),decimal(x,"training_score"),decimal(x,"bonus"),decimal(x,"deduction"),decimal(x,"final_score"),s(x,"missing_items"),s(x,"component_snapshot"),s(x,"quarter_snapshot"),dt(x,"generated_at"),dt(x,"published_at"),!"PUBLISHED".equals(s(x,"status")))).toList();
+    var data=rows.stream().map(x->new Evaluation(nl(x,"id"),s(x,"summary_type"),s(x,"period_key"),integer(x,"version"),s(x,"status"),decimal(x,"exam_score"),decimal(x,"task_score"),decimal(x,"mentor_score"),decimal(x,"station_score"),decimal(x,"training_score"),decimal(x,"bonus"),decimal(x,"deduction"),decimal(x,"final_score"),s(x,"missing_items"),s(x,"component_snapshot"),s(x,"quarter_snapshot"),dt(x,"generated_at"),dt(x,"published_at"),!"PUBLISHED".equals(s(x,"status")),s(x,"source_type"),bool(x,"read_only"))).toList();
     return new PageResult<>(data,total,page,limit);
   }
 

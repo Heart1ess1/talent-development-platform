@@ -94,6 +94,19 @@ const bulkOpen=ref(false)
 const bulkSaving=ref(false)
 const bulkMentorType=ref<'TECHNICAL'|'SKILL'>('TECHNICAL')
 const bulkMentorId=ref<number|null>(null)
+const bulkEditOpen=ref(false)
+const bulkEditPreview=ref<any|null>(null)
+const bulkEditPreviewing=ref(false)
+const bulkEditSaving=ref(false)
+const bulkEditSyncAccount=ref(false)
+const bulkEditFields=reactive<Record<string,boolean>>({
+  gender:false,status:false,batchId:false,classId:false,classPositionId:false,businessUnitId:false,stationId:false,
+  mentorUserId:false,skillMentorUserId:false,education:false,politicalStatus:false,onboardDate:false
+})
+const bulkEditValues=reactive<Record<string,any>>({
+  gender:null,status:null,batchId:null,classId:null,classPositionId:null,businessUnitId:null,stationId:null,
+  mentorUserId:null,skillMentorUserId:null,education:null,politicalStatus:null,onboardDate:null
+})
 
 const batches=ref<any[]>([])
 const businessUnits=ref<any[]>([])
@@ -425,6 +438,67 @@ function openBulk(type:'TECHNICAL'|'SKILL'){
   bulkMentorType.value=type
   bulkMentorId.value=null
   bulkOpen.value=true
+}
+
+function selectFiltered(){
+  tableRef.value?.clearSelection?.()
+  rows.value.forEach(row=>tableRef.value?.toggleRowSelection?.(row,true))
+}
+
+function resetBulkEdit(){
+  Object.keys(bulkEditFields).forEach(key=>bulkEditFields[key]=false)
+  Object.keys(bulkEditValues).forEach(key=>bulkEditValues[key]=null)
+  bulkEditPreview.value=null
+  bulkEditSyncAccount.value=false
+}
+
+function openBulkEdit(){
+  if(!selectedRows.value.length)return ElMessage.warning('请先选择人员')
+  resetBulkEdit()
+  bulkEditOpen.value=true
+}
+
+function buildBulkChanges(){
+  const changes:Record<string,any>={}
+  Object.keys(bulkEditFields).forEach(key=>{
+    if(!bulkEditFields[key])return
+    const value=bulkEditValues[key]
+    changes[key]=value===null||value===''?{operation:'CLEAR'}:value
+  })
+  return changes
+}
+
+async function previewBulkEdit(){
+  const changes=buildBulkChanges()
+  if(!Object.keys(changes).length)return ElMessage.warning('请至少选择一个修改字段')
+  if(bulkEditFields.status&&!bulkEditValues.status)return ElMessage.warning('请选择人员状态')
+  bulkEditPreviewing.value=true
+  try{
+    const response=await api.post<any,Envelope<any>>('/employees/bulk/preview',{
+      selection:{mode:'IDS',ids:selectedRows.value.map(row=>row.id),excludedIds:[]},
+      changes,
+      syncLinkedAccount:bulkEditSyncAccount.value
+    })
+    bulkEditPreview.value=response.data
+  }finally{bulkEditPreviewing.value=false}
+}
+
+async function executeBulkEdit(){
+  if(!bulkEditPreview.value)return previewBulkEdit()
+  bulkEditSaving.value=true
+  try{
+    const response=await api.post<any,Envelope<any>>('/employees/bulk/execute',{
+      selection:{mode:'IDS',ids:selectedRows.value.map(row=>row.id),excludedIds:[]},
+      changes:buildBulkChanges(),
+      syncLinkedAccount:bulkEditSyncAccount.value,
+      expectedCount:bulkEditPreview.value.matched,
+      selectionHash:bulkEditPreview.value.selectionHash,
+      requestId:crypto.randomUUID?.()||`${Date.now()}-${Math.random()}`
+    })
+    ElMessage.success(`已完成批量修改，共更新 ${response.data.changed} 人`)
+    bulkEditOpen.value=false
+    await load()
+  }finally{bulkEditSaving.value=false}
 }
 
 async function bindMentor(){
@@ -789,8 +863,10 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
 
       <div v-if="selectedRows.length" class="selection-bar">
         <span>已选择 <strong>{{selectedRows.length}}</strong> 人</span>
-        <el-button size="small" @click="openBulk('TECHNICAL')">设置技术导师</el-button>
-        <el-button size="small" @click="openBulk('SKILL')">设置技能导师</el-button>
+        <el-button size="small" text @click="selectFiltered">全选当前筛选</el-button>
+        <el-button v-if="canEdit" size="small" type="primary" @click="openBulkEdit">批量修改</el-button>
+        <el-button v-if="canWrite" size="small" @click="openBulk('TECHNICAL')">设置技术导师</el-button>
+        <el-button v-if="canWrite" size="small" @click="openBulk('SKILL')">设置技能导师</el-button>
         <el-button size="small" text @click="clearSelection">取消选择</el-button>
       </div>
 
@@ -809,7 +885,8 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
         @selection-change="(selection:DirectoryRow[])=>selectedRows=selection"
         @header-dragend="resizeColumn"
       >
-        <el-table-column v-if="canWrite&&!isNarrow" type="selection" width="44" fixed reserve-selection/>
+        <el-table-column v-if="(canEdit||canWrite)&&!isNarrow" type="selection" width="44" fixed reserve-selection/>
+        <el-table-column v-if="(canEdit||canWrite)&&isNarrow" type="selection" width="44" fixed reserve-selection/>
         <el-table-column v-if="isNarrow" label="姓名 / 工号" width="145" fixed>
           <template #default="{row}">
             <button class="name-button" type="button" @click="showPortrait(row)">
@@ -1342,6 +1419,38 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
     </el-dialog>
 
     <el-dialog
+      v-model="bulkEditOpen"
+      title="批量修改人员"
+      width="720px"
+      destroy-on-close
+    >
+      <div class="bulk-edit-tip">已选择 {{selectedRows.length}} 人；未勾选的字段保持原值。</div>
+      <div class="bulk-edit-grid">
+        <div class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.gender">性别</el-checkbox><el-select v-model="bulkEditValues.gender" :disabled="!bulkEditFields.gender" clearable filterable placeholder="选择性别"><el-option label="男" value="男"/><el-option label="女" value="女"/></el-select></div>
+        <div class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.status">人员状态</el-checkbox><el-select v-model="bulkEditValues.status" :disabled="!bulkEditFields.status" filterable placeholder="选择状态"><el-option label="在职" value="ACTIVE"/><el-option label="停用" value="INACTIVE"/></el-select></div>
+        <div class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.batchId">批次</el-checkbox><el-select v-model="bulkEditValues.batchId" :disabled="!bulkEditFields.batchId" clearable filterable placeholder="选择批次"><el-option v-for="item in batches" :key="item.id" :label="item.name" :value="item.id"/></el-select></div>
+        <div class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.classId">班级</el-checkbox><el-select v-model="bulkEditValues.classId" :disabled="!bulkEditFields.classId" clearable filterable placeholder="选择班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select></div>
+        <div class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.classPositionId">班级职务</el-checkbox><el-select v-model="bulkEditValues.classPositionId" :disabled="!bulkEditFields.classPositionId" clearable filterable placeholder="选择班级职务"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select></div>
+        <div class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.businessUnitId">所属板块</el-checkbox><el-select v-model="bulkEditValues.businessUnitId" :disabled="!bulkEditFields.businessUnitId" clearable filterable placeholder="选择板块"><el-option v-for="item in businessUnits" :key="item.id" :label="item.name" :value="item.id"/></el-select></div>
+        <div class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.stationId">服务站点</el-checkbox><el-select v-model="bulkEditValues.stationId" :disabled="!bulkEditFields.stationId" clearable filterable placeholder="选择服务站"><el-option v-for="item in stations" :key="item.id" :label="item.name" :value="item.id"/></el-select></div>
+        <div v-if="canWrite" class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.mentorUserId">技术导师</el-checkbox><el-select v-model="bulkEditValues.mentorUserId" :disabled="!bulkEditFields.mentorUserId" clearable filterable placeholder="选择导师"><el-option v-for="item in mentors" :key="item.id" :label="item.display_name" :value="item.id"/></el-select></div>
+        <div v-if="canWrite" class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.skillMentorUserId">技能导师</el-checkbox><el-select v-model="bulkEditValues.skillMentorUserId" :disabled="!bulkEditFields.skillMentorUserId" clearable filterable placeholder="选择导师"><el-option v-for="item in mentors" :key="item.id" :label="item.display_name" :value="item.id"/></el-select></div>
+        <div class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.education">学历</el-checkbox><el-select v-model="bulkEditValues.education" :disabled="!bulkEditFields.education" clearable filterable placeholder="选择学历"><el-option v-for="item in educationOptions" :key="item.id" :label="item.label" :value="item.value"/></el-select></div>
+        <div class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.politicalStatus">政治面貌</el-checkbox><el-select v-model="bulkEditValues.politicalStatus" :disabled="!bulkEditFields.politicalStatus" clearable filterable placeholder="选择政治面貌"><el-option v-for="item in politicalStatusOptions" :key="item.id" :label="item.label" :value="item.value"/></el-select></div>
+        <div class="bulk-edit-field"><el-checkbox v-model="bulkEditFields.onboardDate">入职日期</el-checkbox><el-date-picker v-model="bulkEditValues.onboardDate" :disabled="!bulkEditFields.onboardDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期"/></div>
+      </div>
+      <el-checkbox v-if="bulkEditFields.status&&auth.can('user:employee:manage')" v-model="bulkEditSyncAccount">同步关联员工账号启停</el-checkbox>
+      <el-alert v-if="bulkEditPreview" class="bulk-preview" type="info" :closable="false">
+        预览：匹配 {{bulkEditPreview.matched}} 人，预计更新 {{bulkEditPreview.changed}} 人，未变化 {{bulkEditPreview.unchanged}} 人。
+      </el-alert>
+      <template #footer>
+        <el-button @click="bulkEditOpen=false">取消</el-button>
+        <el-button v-if="!bulkEditPreview" type="primary" :loading="bulkEditPreviewing" @click="previewBulkEdit">预览修改</el-button>
+        <el-button v-else type="primary" :loading="bulkEditSaving" @click="executeBulkEdit">确认执行</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="bulkOpen"
       :title="bulkMentorType==='TECHNICAL'?'批量设置技术导师':'批量设置技能导师'"
       width="420px"
@@ -1403,6 +1512,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
 .table-layout-tools{display:flex;align-items:center;gap:10px;color:#8a96a8;font-size:12px}.table-layout-tools .el-button{margin:0}
 .selection-bar{min-height:46px;display:flex;align-items:center;gap:8px;padding:8px 14px;background:#edf6ff;border-bottom:1px solid #d7eafd;color:#475467;font-size:13px}
 .selection-bar strong{color:#1769aa}
+.bulk-edit-tip{margin-bottom:14px;color:#667085;font-size:13px}.bulk-edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px;margin-bottom:16px}.bulk-edit-field{display:grid;grid-template-columns:92px minmax(0,1fr);align-items:center;gap:8px}.bulk-edit-field .el-select,.bulk-edit-field .el-date-editor{width:100%}.bulk-preview{margin-top:14px}
 .people-table{width:calc(100% - 24px);margin:0 12px}
 .people-table :deep(.el-table__cell){padding:10px 0}.people-table :deep(th.el-table__cell){padding:9px 0;background:#fafbfd;color:#667085;font-weight:600}
 .draggable-column-header{display:flex;min-width:0;align-items:center;gap:4px;cursor:grab;user-select:none}.draggable-column-header:active{cursor:grabbing}.draggable-column-header.dragging{opacity:.45}.draggable-column-header.over{color:#1769aa}.drag-grip{color:#a5afbd;font-size:13px;letter-spacing:-4px}
