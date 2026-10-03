@@ -885,8 +885,8 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
         @selection-change="(selection:DirectoryRow[])=>selectedRows=selection"
         @header-dragend="resizeColumn"
       >
-        <el-table-column v-if="(canEdit||canWrite)&&!isNarrow" type="selection" width="44" fixed reserve-selection/>
-        <el-table-column v-if="(canEdit||canWrite)&&isNarrow" type="selection" width="44" fixed reserve-selection/>
+        <el-table-column v-if="(canEdit||canWrite)&&!isNarrow" type="selection" width="56" fixed reserve-selection class-name="selection-column" label-class-name="selection-column-header"/>
+        <el-table-column v-if="(canEdit||canWrite)&&isNarrow" type="selection" width="56" fixed reserve-selection class-name="selection-column" label-class-name="selection-column-header"/>
         <el-table-column v-if="isNarrow" label="姓名 / 工号" width="145" fixed>
           <template #default="{row}">
             <button class="name-button" type="button" @click="showPortrait(row)">
@@ -953,7 +953,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="isNarrow" label="操作" width="62" fixed="right" align="center">
+        <el-table-column v-if="isNarrow" label="操作" width="78" fixed="right" align="center">
           <template #default="{row}">
             <div class="row-actions">
               <el-tooltip content="查看完整档案" placement="top">
@@ -979,7 +979,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             </div>
           </template>
         </el-table-column>
-        <el-table-column v-else label="详情" width="62" fixed="right" align="center">
+        <el-table-column v-else label="详情" width="78" fixed="right" align="center">
           <template #default="{row}">
             <el-tooltip content="查看完整档案" placement="top">
               <el-button
@@ -991,10 +991,10 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isNarrow&&canViewPortrait" label="培养画像" width="88" fixed="right" align="center">
+        <el-table-column v-if="!isNarrow&&canViewPortrait" label="培养画像" width="96" fixed="right" align="center">
           <template #default="{row}"><el-tooltip content="查看培养全过程" placement="top"><el-button :icon="DataAnalysis" link type="primary" aria-label="查看培养画像" @click="showPortrait(row)"/></el-tooltip></template>
         </el-table-column>
-        <el-table-column v-if="!isNarrow&&canEdit" label="编辑" width="70" fixed="right" align="center">
+        <el-table-column v-if="!isNarrow&&canEdit" label="编辑" width="78" fixed="right" align="center">
           <template #default="{row}">
             <el-tooltip content="编辑人员" placement="top">
               <el-button
@@ -1515,6 +1515,10 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
 .bulk-edit-tip{margin-bottom:14px;color:#667085;font-size:13px}.bulk-edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px;margin-bottom:16px}.bulk-edit-field{display:grid;grid-template-columns:92px minmax(0,1fr);align-items:center;gap:8px}.bulk-edit-field .el-select,.bulk-edit-field .el-date-editor{width:100%}.bulk-preview{margin-top:14px}
 .people-table{width:calc(100% - 24px);margin:0 12px}
 .people-table :deep(.el-table__cell){padding:10px 0}.people-table :deep(th.el-table__cell){padding:9px 0;background:#fafbfd;color:#667085;font-weight:600}
+.people-table :deep(.selection-column .cell),.people-table :deep(.selection-column-header .cell),.people-table :deep(.table-column--selection .cell){height:100%;padding:0;display:flex;align-items:center;justify-content:center}
+.people-table :deep(.selection-column .el-checkbox),.people-table :deep(.selection-column-header .el-checkbox),.people-table :deep(.table-column--selection .el-checkbox){width:100%;min-height:32px;margin:0;display:flex;align-items:center;justify-content:center}
+.people-table :deep(.selection-column .el-checkbox__input),.people-table :deep(.selection-column-header .el-checkbox__input),.people-table :deep(.table-column--selection .el-checkbox__input){width:32px;height:32px;display:flex;align-items:center;justify-content:center}
+.people-table :deep(.selection-column .el-checkbox__inner),.people-table :deep(.selection-column-header .el-checkbox__inner),.people-table :deep(.table-column--selection .el-checkbox__inner){width:18px;height:18px}
 .draggable-column-header{display:flex;min-width:0;align-items:center;gap:4px;cursor:grab;user-select:none}.draggable-column-header:active{cursor:grabbing}.draggable-column-header.dragging{opacity:.45}.draggable-column-header.over{color:#1769aa}.drag-grip{color:#a5afbd;font-size:13px;letter-spacing:-4px}
 .name-button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;border:0;background:transparent;padding:4px 0;color:inherit;cursor:pointer;text-align:left}
 .desktop-name-button{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:0;background:transparent;padding:0;color:#253043;font:inherit;font-weight:600;cursor:pointer;text-align:left}
@@ -1525,12 +1529,12 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
 .employee-number-line .el-tag{height:18px;padding:0 5px}
 .employee-class{font-size:12px;color:#667085}
 .name-button:hover .employee-name{color:#1769aa}
-.station-button{max-width:100%;justify-content:flex-start}
+.station-button{max-width:100%;min-height:32px;justify-content:flex-start;padding:6px 8px}
 .change-count{margin-left:6px;color:#7b8794;font-size:12px}
 .mobile-organization{display:flex;flex-direction:column;gap:2px;line-height:1.35}
 .mobile-organization span{font-size:12px;color:#7b8794}
-.mobile-organization .el-button{justify-content:flex-start;margin-left:0}
-.row-actions{display:flex;justify-content:center;gap:2px}
+.mobile-organization .el-button{min-height:32px;justify-content:flex-start;margin-left:0;padding:6px 8px}
+.row-actions{display:flex;justify-content:center;gap:2px}.row-actions :deep(.el-button){min-width:36px;min-height:36px;padding:8px}
 .row-actions .el-button+.el-button{margin-left:0}
 .people-empty{display:flex;min-height:280px;align-items:center;justify-content:center;flex-direction:column;color:#98a2b3}.people-empty>.el-icon{margin-bottom:10px;font-size:38px}.people-empty>strong{color:#596579;font-size:14px}.people-empty>span{margin:7px 0 15px;font-size:11px}
 .scroll-load-row{display:flex;min-height:42px;align-items:center;justify-content:center;padding:0 16px;border-top:1px solid #edf0f4;color:#8a96a8;font-size:12px}

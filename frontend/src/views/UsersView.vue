@@ -486,7 +486,7 @@ onMounted(load)
         class="account-table"
         :header-cell-style="{background:'#f8fafc',color:'#64748b',fontWeight:'600'}"
       >
-        <el-table-column type="selection" width="48" fixed="left" reserve-selection/>
+        <el-table-column type="selection" width="56" fixed="left" reserve-selection class-name="selection-column" label-class-name="selection-column-header"/>
         <el-table-column label="账号" min-width="220">
           <template #default="{row}">
             <div class="account-cell">
@@ -562,7 +562,7 @@ onMounted(load)
           <template #default="{row}"><span class="date-text">{{formatDate(row.created_at)}}</span></template>
         </el-table-column>
 
-        <el-table-column label="操作" fixed="right" width="168" align="right">
+        <el-table-column label="操作" fixed="right" width="180" align="right">
           <template #default="{row}">
             <div class="row-actions">
               <el-button v-if="canOperate(row)" link type="primary" :icon="Key" @click="resetPassword(row)">重置密码</el-button>
@@ -756,6 +756,10 @@ onMounted(load)
 .account-table{width:100%;border-top:1px solid #edf0f5}
 .account-table :deep(th.el-table__cell){height:45px;padding:0}
 .account-table :deep(td.el-table__cell){padding:13px 0;border-bottom-color:#edf0f4}
+.account-table :deep(.selection-column .cell),.account-table :deep(.selection-column-header .cell),.account-table :deep(.table-column--selection .cell){height:100%;padding:0;display:flex;align-items:center;justify-content:center}
+.account-table :deep(.selection-column .el-checkbox),.account-table :deep(.selection-column-header .el-checkbox),.account-table :deep(.table-column--selection .el-checkbox){width:100%;min-height:32px;margin:0;display:flex;align-items:center;justify-content:center}
+.account-table :deep(.selection-column .el-checkbox__input),.account-table :deep(.selection-column-header .el-checkbox__input),.account-table :deep(.table-column--selection .el-checkbox__input){width:32px;height:32px;display:flex;align-items:center;justify-content:center}
+.account-table :deep(.selection-column .el-checkbox__inner),.account-table :deep(.selection-column-header .el-checkbox__inner),.account-table :deep(.table-column--selection .el-checkbox__inner){width:18px;height:18px}
 .account-table :deep(.el-table__row:hover>td.el-table__cell){background:#fafcff}
 .account-cell{display:flex;align-items:center;gap:11px;min-width:0}
 .user-avatar{flex:0 0 auto;border:1px solid rgba(52,104,212,.08);color:#3468d4;background:#eef4ff;font-size:12px;font-weight:700}
@@ -785,8 +789,8 @@ onMounted(load)
 .security-cell strong{color:#344054;font-size:12px;font-weight:600}
 .security-cell span:last-child{color:#99a4b5;font-size:11px}
 .row-actions{display:flex;align-items:center;justify-content:flex-end;gap:2px}
-.row-actions :deep(.el-button){font-size:12px}
-.more-button{width:30px!important;height:30px!important;padding:0!important;color:#64748b}
+.row-actions :deep(.el-button){min-height:36px;padding:8px 6px;font-size:12px}
+.more-button{width:40px!important;height:40px!important;padding:0!important;color:#64748b}
 .pagination-bar{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 20px;border-top:1px solid #edf0f4}
 .pagination-bar>span{color:#8a96a8;font-size:12px}
 .empty-state{display:flex;flex-direction:column;align-items:center;gap:8px;padding:42px 0;color:#94a0b2}

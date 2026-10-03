@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed,onMounted,ref,watch} from 'vue'
+import {useRouter} from 'vue-router'
 import {Calendar,Document,Histogram,Lock,RefreshLeft} from '@element-plus/icons-vue'
 import {ElMessage,ElMessageBox} from 'element-plus'
 import {api,type Envelope} from '@/api'
@@ -8,7 +9,7 @@ import {componentLabels,scoreText,type ComponentCode} from '@/evaluation/model'
 import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData'
 import '@/styles/evaluation-center.css'
 
-const auth=useAuthStore()
+const auth=useAuthStore(),router=useRouter()
 const canManage=computed(()=>auth.can('evaluation:manage')),isAdmin=computed(()=>['ADMIN','SUPER_ADMIN'].includes(auth.user?.role||'')),isEmployee=computed(()=>auth.user?.role==='EMPLOYEE')
 const employees=ref<any[]>([]),selected=ref<number>(),summaries=ref<any[]>([]),loading=ref(false)
 const classId=ref<number|null>(null),classOptions=ref<DictionaryOption[]>([])
@@ -31,7 +32,7 @@ watch(selected,load);watch([classId,classPositionId],()=>{if(!filteredEmployees.
   <div class="evaluation-module-page" v-loading="loading">
     <header class="evaluation-page-head">
       <div><span class="eyebrow">综合评价 · {{isEmployee?'我的评价':'结果中心'}}</span><h1>{{isEmployee?'我的综合评价':'评价结果中心'}}</h1><p>{{isEmployee?'查看已经正式发布的月度与季度综合评价结果。':'集中核对分项快照、缺失项和版本状态，并完成月度、季度结果发布。'}}</p></div>
-      <div class="evaluation-head-actions"><el-select v-if="!isEmployee" v-model="classId" clearable filterable placeholder="全部班级" style="width:160px"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><el-select v-if="!isEmployee" v-model="classPositionId" clearable filterable placeholder="全部班级职务" style="width:160px"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><el-select v-if="!isEmployee" v-model="selected" filterable placeholder="选择员工" style="width:240px"><el-option v-for="employee in filteredEmployees" :key="employee.id" :value="employee.id" :label="`${employee.name}（${employee.employee_no}）`"/></el-select><el-button v-if="canManage" type="primary" :icon="Calendar" @click="generateQuarter">生成季度汇总</el-button></div>
+      <div class="evaluation-head-actions"><el-select v-if="!isEmployee" v-model="classId" clearable filterable placeholder="全部班级" style="width:160px"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><el-select v-if="!isEmployee" v-model="classPositionId" clearable filterable placeholder="全部班级职务" style="width:160px"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><el-select v-if="!isEmployee" v-model="selected" filterable placeholder="选择员工" style="width:240px"><el-option v-for="employee in filteredEmployees" :key="employee.id" :value="employee.id" :label="`${employee.name}（${employee.employee_no}）`"/></el-select><el-button v-if="canManage&&auth.can('history:import')" type="primary" @click="router.push('/evaluation/results/history-imports')">导入历史评价</el-button><el-button v-if="canManage" type="primary" :icon="Calendar" @click="generateQuarter">生成季度汇总</el-button></div>
     </header>
 
     <section class="evaluation-summary-grid">

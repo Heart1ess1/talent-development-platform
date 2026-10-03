@@ -374,9 +374,9 @@ Authorization: Bearer <token>
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/history-imports/templates` | `history:import` | 下载历史考试或综合评价模板 | `type=EXAM\|EVALUATION` | Excel 文件 |
-| `POST` | `/api/v1/history-imports` | `history:import` | 上传并创建导入批次 | `multipart/form-data`：`type`、`sourceSystem`、`file` | 批次 ID、行数、错误数、警告数 |
-| `GET` | `/api/v1/history-imports` | `history:import` | 查询导入批次 | 无 | 批次列表 |
+| `GET` | `/api/v1/history-imports/templates` | `history:import` | 下载历史考试或综合评价单页签模板 | `type=EXAM\|EVALUATION` | Excel 文件 |
+| `POST` | `/api/v1/history-imports` | `history:import` | 上传并创建导入草稿 | `multipart/form-data`：`type`、`metadata`、`file` | 批次 ID、行数、错误数、警告数 |
+| `GET` | `/api/v1/history-imports` | `history:import` | 按类型、关键词和状态查询导入批次 | `type`、`keyword`、`status`、`size` | 批次列表 |
 | `GET` | `/api/v1/history-imports/{id}` | `history:import` | 查看预览行和校验结果 | 路径 `id` | 批次概览、错误、警告和行数据 |
 | `POST` | `/api/v1/history-imports/{id}/rows` | `history:import` | 人工新增导入行 | `rowType`、`data` | 行 ID |
 | `PUT` | `/api/v1/history-imports/{id}/rows/{rowId}` | `history:import` | 修正导入行并重新校验 | `data` | 空 |
@@ -384,8 +384,9 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/history-imports/{id}/submit` | `history:import` | 提交管理员审核 | 路径 `id` | 空 |
 | `POST` | `/api/v1/history-imports/{id}/publish` | `history:import` 且管理员角色 | 发布历史数据 | 路径 `id` | 空 |
 | `POST` | `/api/v1/history-imports/{id}/revoke` | `history:import` 且管理员角色 | 撤销已发布批次 | 路径 `id` | 空 |
+| `POST` | `/api/v1/history-imports/{id}/revision` | `history:import` | 从已发布批次创建可编辑修订草稿 | 路径 `id` | 新批次 ID、校验统计 |
 
-历史导入记录使用独立数据表，不创建在线考试答卷、题目答案或监考事件。发布后的考试成绩会合并到成绩查询、成绩导出和员工培养画像；历史评价会生成只读的 `score_summary` 快照。重复文件按 `type + sourceSystem + SHA-256` 幂等，已发布记录通过新批次形成新版本。
+历史导入记录使用独立数据表，不创建在线考试答卷、题目答案或监考事件。考试模板只有“历史成绩”页签，空成绩按缺考处理；综合评价模板只有“历史评价”页签，每行代表一个员工期间的评分项。发布后的考试成绩会合并到成绩查询、成绩导出和员工培养画像；历史评价会生成只读的 `score_summary` 快照。重复文件按 `type + SHA-256` 幂等，已发布记录通过修订批次形成新版本，不再使用来源系统字段。
 
 ## 账号管理
 

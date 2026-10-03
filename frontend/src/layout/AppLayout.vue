@@ -26,8 +26,7 @@ const examChildren=computed<MenuItem[]>(()=>{
     {to:'/exams/questions',label:'题库管理'},
     {to:'/exams/papers',label:'试卷管理'},
     {to:'/exams/plans',label:'考试计划'},
-    {to:'/exams/results',label:'成绩管理'},
-    ...(auth.can('history:import')?[{to:'/history-imports',label:'历史成绩导入'}]:[])
+    {to:'/exams/results',label:'成绩管理'}
   ]
   return [{to:'/exams/results',label:'考试成绩'}]
 })
