@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {computed,nextTick,onMounted,reactive,ref} from 'vue'
-import {useRoute} from 'vue-router'
+import {useRoute,useRouter} from 'vue-router'
 import {ElMessage} from 'element-plus'
 import {ArrowRight,Calendar,CircleCheck,Download,Histogram,Search,Timer} from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
@@ -9,7 +9,7 @@ import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData'
 import {dateTimeParts,resultStatusLabels,scoreMonth} from './examUi'
 import '@/styles/exam-center.css'
 
-const auth=useAuthStore(),route=useRoute(),canManage=computed(()=>auth.can('exam:manage'))
+const auth=useAuthStore(),route=useRoute(),router=useRouter(),canManage=computed(()=>auth.can('exam:manage'))
 const plans=ref<any[]>([]),results=ref<any[]>([]),planResults=ref<any[]>([])
 const reviewQueue=ref<any[]>([]),reviewVisible=ref(false),reviewLoading=ref(false),reviewAttempt=ref<any>(),grades=reactive<Record<number,{score:number;comment:string}>>({})
 const keyword=ref(''),phase=ref(''),detailKeyword=ref(''),detailStatus=ref('')
@@ -83,7 +83,7 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
         <h1>{{canManage?'成绩管理':'我的成绩'}}</h1>
         <p>{{canManage?'交卷后即时查看客观题得分；整场考试结束时由系统统一向员工发布。':'成绩将在整场考试结束后自动显示，避免考试期间互通答案。'}}</p>
       </div>
-      <div class="exam-head-actions"><el-button v-if="canManage" :icon="Download" :loading="exporting" @click="exportResults()">导出已发布成绩</el-button></div>
+      <div class="exam-head-actions"><el-button v-if="canManage&&auth.can('history:import')" type="primary" @click="router.push('/exams/results/history-imports')">导入历史成绩</el-button><el-button v-if="canManage" :icon="Download" :loading="exporting" @click="exportResults()">导出已发布成绩</el-button></div>
     </header>
 
     <template v-if="canManage">
