@@ -11,4 +11,6 @@ public class SpaController {
   public String examSpa(){return "forward:/index.html";}
   @GetMapping("/evaluation/{path:[a-zA-Z0-9_-]+}")
   public String evaluationSpa(){return "forward:/index.html";}
+  @GetMapping({"/exams/results/{path:[a-zA-Z0-9_-]+}", "/evaluation/results/{path:[a-zA-Z0-9_-]+}"})
+  public String nestedResultsSpa(){return "forward:/index.html";}
 }
