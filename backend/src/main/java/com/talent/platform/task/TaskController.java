@@ -28,8 +28,6 @@ import java.time.Duration;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -737,72 +735,11 @@ public class TaskController {
       List<Map<String, Object>> submissions,
       String filename
   ) throws IOException {
-    var archiveFiles = new LinkedHashMap<Long, List<SubmissionArchiveFile>>();
-    for (var submission : submissions) {
-      Long submissionId = ((Number) submission.get("id")).longValue();
-      var files = db.queryForList(
-          "select id,original_name,storage_key from stored_file where submission_id=? order by id",
-          submissionId);
-      var resolvedFiles = new ArrayList<SubmissionArchiveFile>();
-      for (var file : files) {
-        Resource resource = null;
-        try {
-          resource = storage.load(text(file.get("storage_key")));
-        } catch (BusinessException exception) {
-          if (exception.getCode() != 404) throw exception;
-        }
-        resolvedFiles.add(new SubmissionArchiveFile(
-            text(file.get("id")),
-            text(file.get("original_name")),
-            resource));
-      }
-      archiveFiles.put(submissionId, resolvedFiles);
-    }
-
     response.setContentType("application/zip");
     response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''"
         + URLEncoder.encode(filename, StandardCharsets.UTF_8));
-    try (var zip = new ZipOutputStream(response.getOutputStream(), StandardCharsets.UTF_8)) {
-      for (var submission : submissions) {
-        Long submissionId = ((Number) submission.get("id")).longValue();
-        String employeeName = safeFilePart(submission.get("employee_name"));
-        String employeeNo = text(submission.get("employee_no")).isBlank()
-            ? "" : "（" + safeFilePart(submission.get("employee_no")) + "）";
-        String employeeFolder = employeeName + employeeNo;
-        String version = submission.get("submission_version") instanceof Number value
-            ? String.valueOf(value.intValue()) : "1";
-        String folder = employeeFolder + "/第" + version + "版/";
-        String content = text(submission.get("content"));
-        if (!content.isBlank()) {
-          putZipText(zip, folder + "提交说明.txt", content);
-        }
-        for (var file : archiveFiles.getOrDefault(submissionId, List.of())) {
-          String entryName = folder + file.id() + "-" + safeFilePart(file.originalName());
-          if (file.resource() == null) {
-            putZipText(zip, entryName + ".缺失说明.txt",
-                "原附件“" + file.originalName() + "”的物理文件已不存在，请联系系统管理员核查存储或备份。");
-            continue;
-          }
-          zip.putNextEntry(new ZipEntry(entryName));
-          try (var input = file.resource().getInputStream()) {
-            input.transferTo(zip);
-          }
-          zip.closeEntry();
-        }
-        putZipText(zip, folder + "人员信息.txt",
-            "姓名：" + text(submission.get("employee_name")) + "\n"
-            + "工号：" + text(submission.get("employee_no")) + "\n"
-            + "批次：" + text(submission.get("batch_name")) + "\n"
-            + "板块：" + text(submission.get("business_unit_name")) + "\n"
-            + "班级：" + text(submission.get("class_name")) + "\n");
-      }
-    }
-  }
-
-  private void putZipText(ZipOutputStream zip, String entryName, String content) throws IOException {
-    zip.putNextEntry(new ZipEntry(entryName));
-    zip.write(content.getBytes(StandardCharsets.UTF_8));
-    zip.closeEntry();
+    SubmissionArchiveWriter.write(response.getOutputStream(),
+        SubmissionArchiveWriter.snapshot(db, submissions), storage, ignored -> {});
   }
 
   private String taskStatusLabel(String status) {
@@ -829,7 +766,6 @@ public class TaskController {
     return value == null ? "" : String.valueOf(value);
   }
 
-  private record SubmissionArchiveFile(String id, String originalName, Resource resource) {}
 
   private Map<String, Object> task(Long id) {
     var rows = db.queryForList("select * from challenge_task where id=?", id);

@@ -104,7 +104,8 @@ public class OssFileStorageService implements FileStorageService {
       OSSObject object = oss.getObject(bucket, key);
       return new InputStreamResource(object.getObjectContent());
     } catch (OSSException e) {
-      throw new BusinessException(404, "文件不存在");
+      if ("NoSuchKey".equals(e.getErrorCode())) throw new BusinessException(404, "文件不存在");
+      throw new BusinessException(503, "文件存储暂时不可用，请稍后重试");
     }
   }
 
