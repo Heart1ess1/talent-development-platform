@@ -21,6 +21,24 @@ import org.mockito.ArgumentCaptor;
 
 class OssFileStorageServiceTest {
   @Test
+  void distinguishesMissingObjectFromStorageUnavailable() {
+    OSS oss = mock(OSS.class);
+    var storage = new OssFileStorageService(oss, mock(OSS.class), "private-bucket");
+    var missing = mock(com.aliyun.oss.OSSException.class);
+    when(missing.getErrorCode()).thenReturn("NoSuchKey");
+    when(oss.getObject("private-bucket", "missing")).thenThrow(missing);
+    assertThatThrownBy(() -> storage.load("missing"))
+        .isInstanceOf(com.talent.platform.common.BusinessException.class)
+        .extracting("code").isEqualTo(404);
+    var denied = mock(com.aliyun.oss.OSSException.class);
+    when(denied.getErrorCode()).thenReturn("AccessDenied");
+    when(oss.getObject("private-bucket", "denied")).thenThrow(denied);
+    assertThatThrownBy(() -> storage.load("denied"))
+        .isInstanceOf(com.talent.platform.common.BusinessException.class)
+        .extracting("code").isEqualTo(503);
+  }
+
+  @Test
   void marksTheProductionConstructorForSpringInjection() {
     var autowired = java.util.Arrays.stream(OssFileStorageService.class.getDeclaredConstructors())
         .filter(constructor -> constructor.isAnnotationPresent(

@@ -10,7 +10,6 @@ import {
   Delete,
   Document,
   Download,
-  FolderOpened,
   Plus,
   Refresh,
   RefreshLeft,
@@ -21,6 +20,7 @@ import {
 import {api, type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import TaskAttachmentsPanel from '@/components/TaskAttachmentsPanel.vue'
+import TaskArchiveDownload from '@/components/TaskArchiveDownload.vue'
 import TaskReviewerScopeEditor from '@/components/TaskReviewerScopeEditor.vue'
 import {abandonUploadTickets,createUploadTicket,storageCapabilities,uploadWithStorageFallback} from '@/storageTransfer'
 import {loadDictionaryValues, loadEnabledBusinessUnits, type DictionaryOption} from '@/utils/masterData'
@@ -65,7 +65,6 @@ const previewLoading = ref(false)
 const previewCandidates = ref<any[]>([])
 const progressDialog = ref(false)
 const exportingProgress = ref(false)
-const exportingFiles = ref(false)
 const downloadingAssignmentId = ref<number | null>(null)
 const detailDialog = ref(false)
 const selectedTask = ref<any>()
@@ -579,17 +578,6 @@ async function downloadEmployeeSubmissionFiles(row: any) {
   }
 }
 
-async function exportTaskFiles() {
-  if (!selectedTask.value?.id) return
-  exportingFiles.value = true
-  try {
-    const blob = await api.get<any, Blob>(`/tasks/${selectedTask.value.id}/submissions/archive`, {responseType: 'blob'})
-    saveBlob(blob, `${selectedTask.value.title || '任务'}-全部提交文件.zip`)
-  } finally {
-    exportingFiles.value = false
-  }
-}
-
 async function exportTaskProgress() {
   if (!selectedTask.value?.id) return
   exportingProgress.value = true
@@ -1038,7 +1026,7 @@ onMounted(async () => {
           <span class="progress-count">显示 {{filteredTaskProgress.length}} / {{taskProgress.length}} 人<span v-if="overdueProgressCount"> · 逾期 {{overdueProgressCount}} 人</span></span>
         </div>
         <div class="progress-export-actions">
-          <el-button :icon="FolderOpened" :loading="exportingFiles" :disabled="!progressMetrics.files" @click="exportTaskFiles">打包下载文件</el-button>
+          <TaskArchiveDownload :task-id="selectedTask?.id" :disabled="!progressMetrics.files" />
           <el-button type="primary" plain :icon="Download" :loading="exportingProgress" @click="exportTaskProgress">导出提交情况</el-button>
         </div>
       </div>
