@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {scoreText} from '@/evaluation/model'
 import {computed,onMounted,reactive,ref} from 'vue'
 import {ElMessage,ElMessageBox} from 'element-plus'
 import {Collection,Delete,Document,EditPen,Plus,Search,View} from '@element-plus/icons-vue'
@@ -90,7 +91,7 @@ onMounted(load)
       <el-table :data="filteredPapers" class="exam-table" empty-text="暂无试卷">
         <el-table-column label="试卷" min-width="260"><template #default="s"><div class="paper-name"><span><el-icon><Document/></el-icon></span><div><strong>{{s.row.name}}</strong><small>{{s.row.description||'暂无试卷说明'}}</small></div></div></template></el-table-column>
         <el-table-column label="组卷方式" width="120"><template #default="s"><el-tag :type="s.row.assembly_mode==='RANDOM'?'success':'info'" effect="plain">{{modeLabel(s.row)}}</el-tag></template></el-table-column>
-        <el-table-column label="结构" width="130"><template #default="s"><strong>{{s.row.question_count}}</strong> 题 / <strong>{{s.row.total_score}}</strong> 分</template></el-table-column>
+        <el-table-column label="结构" width="130"><template #default="s"><strong>{{s.row.question_count}}</strong> 题 / <strong>{{scoreText(s.row.total_score)}}</strong> 分</template></el-table-column>
         <el-table-column label="考试设置" min-width="170"><template #default="s"><div class="paper-options-cell"><span>{{truthy(s.row.randomize_questions)?'题序随机':'固定题序'}}</span><span>{{truthy(s.row.randomize_options)?'选项随机':'固定选项'}}</span></div></template></el-table-column>
         <el-table-column label="使用情况" width="108"><template #default="s"><el-tag :type="Number(s.row.plan_count)>0?'warning':'info'" effect="plain">{{Number(s.row.plan_count)>0?`${s.row.plan_count} 个计划`:'尚未使用'}}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="128" fixed="right"><template #default="s"><div class="exam-table-actions"><el-button link type="primary" @click="openDetail(s.row)">详情</el-button><el-button link type="danger" :disabled="Number(s.row.plan_count)>0" @click="deletePaper(s.row)">删除</el-button></div></template></el-table-column>
@@ -121,7 +122,7 @@ onMounted(load)
             <el-table-column label="抽取题数" width="155"><template #default="s"><el-input-number v-model="paper.rules[s.row.type].count" :min="0" :max="availableCount(s.row.type)" controls-position="right"/></template></el-table-column>
             <el-table-column label="每题分值" width="155"><template #default="s"><el-input-number v-model="paper.rules[s.row.type].score" :min="0.01" :precision="2" controls-position="right"/></template></el-table-column>
             <el-table-column v-if="paper.dynamicAssembly" label="限定专业标签" min-width="180"><template #default="s"><el-select v-model="paper.rules[s.row.type].tags" multiple allow-create filterable collapse-tags placeholder="不限"><el-option v-for="tag in tagOptions" :key="tag" :label="tag" :value="tag"/></el-select></template></el-table-column>
-            <el-table-column label="小计" width="88"><template #default="s"><strong>{{paper.rules[s.row.type].count*paper.rules[s.row.type].score}}</strong> 分</template></el-table-column>
+            <el-table-column label="小计" width="88"><template #default="s"><strong>{{scoreText(paper.rules[s.row.type].count*paper.rules[s.row.type].score)}}</strong> 分</template></el-table-column>
           </el-table>
         </template>
       </section>
@@ -136,8 +137,8 @@ onMounted(load)
       <div v-loading="detailLoading">
         <div class="paper-detail-head"><span><el-icon><Document/></el-icon></span><div><h3>{{selectedDetail?.name}}</h3><p>{{selectedDetail?.description||'暂无说明'}}</p></div><el-tag effect="plain">{{selectedDetail?modeLabel(selectedDetail):''}}</el-tag></div>
         <div class="detail-metrics"><div><span>题目数量</span><strong>{{selectedDetail?.question_count??selectedDetail?.questions?.length??'--'}}</strong></div><div><span>随机题序</span><strong>{{truthy(selectedDetail?.randomize_questions)?'是':'否'}}</strong></div><div><span>随机选项</span><strong>{{truthy(selectedDetail?.randomize_options)?'是':'否'}}</strong></div></div>
-        <el-table v-if="selectedDetail?.questions" :data="selectedDetail.questions" max-height="330"><el-table-column prop="sort_order" label="#" width="50"/><el-table-column prop="bank_name" label="题库" width="120" show-overflow-tooltip/><el-table-column prop="stem" label="题干" min-width="260" show-overflow-tooltip/><el-table-column label="题型" width="90"><template #default="s">{{typeLabels[s.row.question_type]}}</template></el-table-column><el-table-column prop="score" label="分值" width="70"/></el-table>
-        <el-table v-else :data="detailRules()" max-height="330"><el-table-column label="题型"><template #default="s">{{typeLabels[s.row.question_type]}}</template></el-table-column><el-table-column prop="count" label="题数"/><el-table-column prop="score" label="每题分值"/></el-table>
+        <el-table v-if="selectedDetail?.questions" :data="selectedDetail.questions" max-height="330"><el-table-column prop="sort_order" label="#" width="50"/><el-table-column prop="bank_name" label="题库" width="120" show-overflow-tooltip/><el-table-column prop="stem" label="题干" min-width="260" show-overflow-tooltip/><el-table-column label="题型" width="90"><template #default="s">{{typeLabels[s.row.question_type]}}</template></el-table-column><el-table-column prop="score" label="分值" width="70"><template #default="{row}">{{scoreText(row.score)}}</template></el-table-column></el-table>
+        <el-table v-else :data="detailRules()" max-height="330"><el-table-column label="题型"><template #default="s">{{typeLabels[s.row.question_type]}}</template></el-table-column><el-table-column prop="count" label="题数"/><el-table-column prop="score" label="每题分值"><template #default="{row}">{{scoreText(row.score)}}</template></el-table-column></el-table>
       </div>
     </el-dialog>
   </div>

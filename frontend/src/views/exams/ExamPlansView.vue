@@ -2,17 +2,21 @@
 import {computed,nextTick,onMounted,reactive,ref} from 'vue'
 import {ElMessage,ElMessageBox} from 'element-plus'
 import {Calendar,Clock,Document,Plus,Search,UserFilled} from '@element-plus/icons-vue'
+import TimeWindowEditor from '@/components/TimeWindowEditor.vue'
+import ScheduleDialog from '@/components/ScheduleDialog.vue'
+import {windowPayload,localDateTime} from '@/utils/timeWindow'
 import {api,type Envelope} from '@/api'
 import {loadDictionaryValues,loadEnabledBusinessUnits,type DictionaryOption} from '@/utils/masterData'
 import {dateTimeParts,planPhaseLabels,scoreMonth} from './examUi'
 import '@/styles/exam-center.css'
 
+const scheduleDialog=ref<InstanceType<typeof ScheduleDialog>>()
 const plans=ref<any[]>([]),papers=ref<any[]>([]),batches=ref<any[]>([]),businessUnits=ref<any[]>([]),classOptions=ref<DictionaryOption[]>([]),classPositionOptions=ref<DictionaryOption[]>([])
 const candidates=ref<any[]>([]),selectedCandidates=ref<any[]>([]),candidateTable=ref<any>()
 const drawerVisible=ref(false),candidateLoading=ref(false),saving=ref(false)
 const keyword=ref(''),statusFilter=ref('')
 const scope=reactive<any>({batchIds:[] as number[],businessUnitIds:[] as number[],classId:null,classPositionId:null,keyword:''})
-const emptyPlan=()=>({paperId:null,name:'',startsAt:'',endsAt:'',durationMinutes:60,maxAttempts:1,violationLimit:4,violationGraceSeconds:15,employeeIds:[] as number[]})
+const emptyPlan=()=>({paperId:null,name:'',scheduleMode:'IMMEDIATE',baseDate:localDateTime().slice(0,10),offsetDays:7,startsAt:'',endsAt:'',durationMinutes:60,maxAttempts:1,violationLimit:4,violationGraceSeconds:15,employeeIds:[] as number[]})
 const plan=reactive<any>(emptyPlan())
 
 const filteredPlans=computed(()=>plans.value.filter(row=>{
@@ -28,7 +32,7 @@ const overview=computed(()=>({
 const selectedPaper=computed(()=>papers.value.find(x=>x.id===plan.paperId))
 const selectedBatchNames=computed(()=>scope.batchIds.length?batches.value.filter(x=>scope.batchIds.includes(x.id)).map(x=>x.name).join('、'):'全部')
 const selectedBusinessUnitNames=computed(()=>scope.businessUnitIds.length?businessUnits.value.filter(x=>scope.businessUnitIds.includes(x.id)).map(x=>x.name).join('、'):'全部')
-const scoreMonthLabel=computed(()=>plan.startsAt?plan.startsAt.slice(0,7):'选择开始时间后自动生成')
+const scoreMonthLabel=computed(()=>windowPayload(plan).endsAt?.slice(0,7)||'选择截止时间后自动生成')
 const windowMinutes=computed(()=>{
   if(!plan.startsAt||!plan.endsAt)return 0
   return Math.max(0,Math.floor((new Date(plan.endsAt).getTime()-new Date(plan.startsAt).getTime())/60000))
@@ -73,7 +77,8 @@ function onStartChange(value:string){
 function validatePlan(){
   if(!plan.name.trim())return '请输入考试名称'
   if(!plan.paperId)return '请选择试卷'
-  if(!plan.startsAt||!plan.endsAt)return '请设置考试开始和结束时间'
+  const resolved=windowPayload(plan);plan.startsAt=resolved.startsAt;plan.endsAt=resolved.endsAt
+  if(!plan.startsAt||!plan.endsAt)return '请完整设置考试时限'
   if(new Date(plan.endsAt)<=new Date(plan.startsAt))return '结束时间必须晚于开始时间'
   if(windowMinutes.value<plan.durationMinutes)return '考试开放时段不能短于考试时长'
   if(!Number.isInteger(plan.violationLimit)||plan.violationLimit<1||plan.violationLimit>20)return '异常行为自动交卷次数应为 1 至 20 次'
@@ -85,7 +90,7 @@ async function createPlan(publish:boolean){
   const message=validatePlan();if(message)return ElMessage.warning(message)
   saving.value=true
   try{
-    const payload={...plan,name:plan.name.trim(),batchId:scope.batchIds.length===1?scope.batchIds[0]:null,batchIds:scope.batchIds,businessUnitIds:scope.businessUnitIds,employeeIds:selectedCandidates.value.map(x=>x.id)}
+    const payload={...plan,...windowPayload(plan),name:plan.name.trim(),batchId:scope.batchIds.length===1?scope.batchIds[0]:null,batchIds:scope.batchIds,businessUnitIds:scope.businessUnitIds,employeeIds:selectedCandidates.value.map(x=>x.id)}
     const res=await api.post<any,Envelope<number>>('/exams/plans',payload)
     if(publish)await api.post(`/exams/plans/${res.data}/publish`)
     ElMessage.success(publish?'考试计划已创建并发布':'考试计划已保存为草稿')
@@ -122,7 +127,7 @@ onMounted(load)
 
     <section class="exam-workspace">
         <div class="exam-workspace-head">
-          <div><span class="card-title">计划列表</span><span class="header-tip">计分月份根据考试开始时间自动归属</span></div>
+          <div><span class="card-title">计划列表</span><span class="header-tip">计分月份根据考试截止时间自动归属</span></div>
           <div class="filters">
             <el-input v-model="keyword" clearable placeholder="搜索考试或试卷" :prefix-icon="Search"/>
             <el-select v-model="statusFilter" clearable filterable placeholder="计划状态">
@@ -145,7 +150,7 @@ onMounted(load)
         <el-table-column label="板块" width="100" show-overflow-tooltip><template #default="s">{{s.row.target_business_unit_names||'全部'}}</template></el-table-column>
         <el-table-column label="参考人数" width="100" align="center" header-align="center"><template #default="s"><strong>{{s.row.assigned_count??0}}</strong></template></el-table-column>
         <el-table-column label="计划状态" width="92"><template #default="s"><el-tag :type="planPhase(s.row).type" effect="plain">{{planPhase(s.row).label}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="126" fixed="right"><template #default="s"><div v-if="s.row.status==='DRAFT'" class="exam-table-actions"><el-button link type="primary" @click="publishPlan(s.row)">发布</el-button><el-button link type="danger" @click="deletePlan(s.row)">删除</el-button></div><span v-else class="muted">已发布</span></template></el-table-column>
+        <el-table-column label="操作" width="180" fixed="right"><template #default="s"><div v-if="s.row.status==='DRAFT'" class="exam-table-actions"><el-button link type="primary" @click="publishPlan(s.row)">发布</el-button><el-button link type="danger" @click="deletePlan(s.row)">删除</el-button></div><el-button v-else link type="primary" @click="scheduleDialog?.open('EXAM',s.row.id)">{{s.row.plan_phase==='ENDED'?'重新开放':'调整时限／个人补考'}}</el-button></template></el-table-column>
       </el-table>
     </section>
 
@@ -166,10 +171,9 @@ onMounted(load)
         </section>
 
         <section class="form-section">
-          <div class="section-title"><span>2</span><div><strong>考试安排</strong><small>计分月份将自动取考试开始时间所在月份</small></div></div>
+          <div class="section-title"><span>2</span><div><strong>考试安排</strong><small>计分月份自动取考试截止时间所在月份</small></div></div>
           <div class="form-grid">
-            <el-form-item label="开始时间" required><el-date-picker v-model="plan.startsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择开始时间" :disabled-date="disabledPast" @change="onStartChange"/></el-form-item>
-            <el-form-item label="结束时间" required><el-date-picker v-model="plan.endsAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择结束时间" :disabled-date="disabledPast"/></el-form-item>
+            <TimeWindowEditor :model-value="plan" @update:model-value="Object.assign(plan,$event)"/>
             <el-form-item label="考试时长（分钟）" required><el-input-number v-model="plan.durationMinutes" :min="1" :max="600" controls-position="right"/></el-form-item>
             <el-form-item label="最大考试次数" required><el-input-number v-model="plan.maxAttempts" :min="1" :max="10" controls-position="right"/></el-form-item>
             <el-form-item label="异常行为自动交卷次数" required><el-input-number v-model="plan.violationLimit" :min="1" :max="20" controls-position="right"/><div class="field-help">累计异常行为达到该次数时立即自动交卷。</div></el-form-item>
@@ -206,6 +210,7 @@ onMounted(load)
       </template>
     </el-drawer>
   </div>
+  <ScheduleDialog ref="scheduleDialog" @changed="load"/>
 </template>
 
 <style scoped>

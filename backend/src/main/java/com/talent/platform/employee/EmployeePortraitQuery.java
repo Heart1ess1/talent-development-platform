@@ -32,7 +32,7 @@ public class EmployeePortraitQuery {
       count(case when status in ('NOT_SUBMITTED','OVERDUE') then 1 end) not_submitted,
       count(case when status='PENDING_REVIEW' then 1 end) pending_review,
       count(case when status='RETURNED' then 1 end) returned_count,
-      count(case when status='OVERDUE' or (status<>'APPROVED' and t.deadline<now()) then 1 end) overdue
+      count(case when status='OVERDUE' or (status<>'APPROVED' and coalesce(a.window_ends_at,t.deadline)<now()) then 1 end) overdue
     from task_assignment a join challenge_task t on t.id=a.task_id where a.employee_id=?
     """,id);}
   public Map<String,Object> materialMetrics(long id){return db.queryForMap("""
@@ -44,16 +44,16 @@ public class EmployeePortraitQuery {
     """,id,id);}
   public Map<String,Object> examMetrics(long id){var online=db.queryForMap("""
     select count(*) total,count(case when exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id and a.submitted_at is not null) then 1 end) completed,
-      count(case when p.ends_at<now() and not exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id) then 1 end) absent
+      count(case when coalesce(ea.window_ends_at,p.ends_at)<now() and not exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id) then 1 end) absent
     from exam_assignment ea join exam_plan p on p.id=ea.plan_id where ea.employee_id=? and p.status='PUBLISHED'
     """,id);var historical=db.queryForMap("select count(*) total,count(case when result_status='COMPLETED' then 1 end) completed,count(case when result_status='ABSENT' then 1 end) absent from legacy_exam_result r join history_import_batch b on b.id=r.batch_id where r.employee_id=? and r.active=true and b.status='PUBLISHED'",id);return Map.of("total",number(online.get("total"))+number(historical.get("total")),"completed",number(online.get("completed"))+number(historical.get("completed")),"absent",number(online.get("absent"))+number(historical.get("absent")));}
   public List<Map<String,Object>> publishedExamTrend(long id){var rows=db.queryForList("""
-    select a.id,p.id plan_id,p.name,p.score_month,a.attempt_no,a.total_score,
+    select a.id,p.id plan_id,p.name,coalesce((select ea.score_month from exam_assignment ea where ea.plan_id=p.id and ea.employee_id=a.employee_id),p.score_month) score_month,a.attempt_no,a.total_score,
       coalesce((select sum(q.score) from exam_attempt_question q where q.attempt_id=a.id),
                (select sum(q.score) from exam_paper_question q where q.paper_id=p.paper_id)) max_score
     from exam_attempt a join exam_plan p on p.id=a.plan_id
     where a.employee_id=? and a.status='GRADED' and a.published=true
-      and a.id=(select x.id from exam_attempt x where x.employee_id=a.employee_id and x.plan_id=a.plan_id and x.status='GRADED' and x.published=true order by x.attempt_no desc,x.id desc limit 1)
+      and a.id=(select x.id from exam_attempt x where x.employee_id=a.employee_id and x.plan_id=a.plan_id and x.status='GRADED' and x.published=true order by x.total_score desc,x.attempt_no desc,x.id desc limit 1)
     order by p.score_month,p.id
     """,id);rows.addAll(db.queryForList("select r.id,x.id plan_id,x.name,x.score_month,1 attempt_no,r.score total_score,x.max_score from legacy_exam_result r join legacy_exam x on x.id=r.exam_id join history_import_batch b on b.id=r.batch_id where r.employee_id=? and r.active=true and r.result_status='COMPLETED' and b.status='PUBLISHED' order by x.score_month,x.id",id));return rows;}
   public List<Map<String,Object>> evaluationTrend(long id,String type){return db.queryForList("""

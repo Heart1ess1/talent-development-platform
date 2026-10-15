@@ -3,6 +3,8 @@ import {computed,onMounted,reactive,ref,watch} from 'vue'
 import {useRouter} from 'vue-router'
 import {Calendar,EditPen,Plus,Refresh,Setting,UserFilled} from '@element-plus/icons-vue'
 import {ElMessage,ElMessageBox} from 'element-plus'
+import TimeWindowEditor from '@/components/TimeWindowEditor.vue'
+import {windowPayload,localDateTime} from '@/utils/timeWindow'
 import {api,type Envelope} from '@/api'
 import {componentLabels,type ComponentCode} from '@/evaluation/model'
 import {loadDictionaryValues,loadEnabledBusinessUnits,type DictionaryOption} from '@/utils/masterData'
@@ -15,6 +17,7 @@ interface Reviewer{id:number;username:string;display_name:string;role:string}
 interface ScopeRule{id:number;period_month:string;component_type:ManualComponent;target_type:TargetType;target_id:number;targetName:string;due_at?:string;note?:string;reviewers:Reviewer[];matchedEmployeeCount:number;matchedTaskCount:number}
 interface RatingTask{id:number;employee_no:string;employee_name:string;class_id?:number;class_name?:string;class_position_id?:number;class_position_name?:string;batch_name?:string;business_unit_name?:string;scope_name?:string;component_type:ManualComponent;status:string;reviewerCount:number;submittedCount:number;reviewers:Array<{reviewerName:string}>}
 
+const generationOpen=ref(false),generation=reactive<any>({scheduleMode:'IMMEDIATE',startsAt:'',endsAt:'',baseDate:localDateTime().slice(0,10),offsetDays:7})
 const router=useRouter(),loading=ref(false),month=ref(new Date().toISOString().slice(0,7))
 const summaries=ref<Summary[]>([]),batches=ref<any[]>([]),businessUnits=ref<any[]>([])
 const drawerOpen=ref(false),drawerLoading=ref(false),saving=ref(false),activeComponent=ref<ManualComponent>('MENTOR')
@@ -29,13 +32,13 @@ const componentMeta:Record<ManualComponent,{title:string;description:string;colo
   TRAINING:{title:'培训评价任务',description:'为培训评价统一配置一名或多名评分人',color:'green'}
 }
 const targetLabels:Record<TargetType,string>={ALL:'全员默认',BATCH:'指定批次',BUSINESS_UNIT:'指定板块'}
-const statusLabels:Record<string,string>={UNASSIGNED:'未分配',PENDING:'待评分',IN_PROGRESS:'评分中',OVERDUE:'已逾期',COMPLETED:'已完成',CLOSED:'已锁定'}
+const statusLabels:Record<string,string>={UPCOMING:'未开始',UNASSIGNED:'未分配',PENDING:'待评分',IN_PROGRESS:'评分中',OVERDUE:'已逾期',COMPLETED:'已完成',CLOSED:'已锁定'}
 const totals=computed(()=>({tasks:summaries.value.reduce((n,x)=>n+x.taskCount,0),employees:Math.max(0,...summaries.value.map(x=>x.employeeCount)),unassigned:summaries.value.reduce((n,x)=>n+x.unassignedCount,0),rules:summaries.value.reduce((n,x)=>n+x.ruleCount,0)}))
 const filteredTasks=computed(()=>{const q=detailKeyword.value.trim().toLowerCase();return employeeTasks.value.filter(x=>(!detailClassId.value||x.class_id===detailClassId.value)&&(!detailClassPositionId.value||x.class_position_id===detailClassPositionId.value)&&(!q||[x.employee_name,x.employee_no,x.class_name,x.class_position_name,x.batch_name,x.business_unit_name,x.scope_name].some(v=>String(v||'').toLowerCase().includes(q))))})
 
 async function loadOverview(){loading.value=true;try{summaries.value=(await api.get<any,Envelope<Summary[]>>('/evaluation/assignments/overview',{params:{month:month.value}})).data}finally{loading.value=false}}
 async function loadMasters(){const [batchResult,unitOptions,classValues,classPositionValues]=await Promise.all([api.get<any,Envelope<any[]>>('/batches'),loadEnabledBusinessUnits(),loadDictionaryValues('CLASS'),loadDictionaryValues('CLASS_POSITION')]);batches.value=batchResult.data.filter(x=>x.enabled);businessUnits.value=unitOptions;classOptions.value=classValues;classPositionOptions.value=classPositionValues}
-async function generate(){const dueAt=`${month.value}-${String(new Date(Number(month.value.slice(0,4)),Number(month.value.slice(5,7)),0).getDate()).padStart(2,'0')}T23:59:59`;await ElMessageBox.confirm('系统将依据本月已发布评分方案生成三类人工评分任务。已有任务不会重复创建，已配置的范围规则会自动应用。','生成本月评分任务',{type:'info'});const count=(await api.post<any,Envelope<number>>('/evaluation/assignments/generate',{month:month.value,dueAt})).data;ElMessage.success(`已新增 ${count} 个员工评分任务`);await loadOverview()}
+async function generate(){if(!generationOpen.value){generation.endsAt=month.value+'-'+String(new Date(Number(month.value.slice(0,4)),Number(month.value.slice(5,7)),0).getDate()).padStart(2,'0')+'T23:59:59';generationOpen.value=true;return}const window=windowPayload(generation);const count=(await api.post<any,Envelope<number>>('/evaluation/assignments/generate',{month:month.value,dueAt:window.endsAt,...window})).data;ElMessage.success(`已新增 ${count} 个员工评分任务`);generationOpen.value=false;await loadOverview()}
 async function loadComponent(){drawerLoading.value=true;try{const code=activeComponent.value;const [ruleResult,reviewerResult,taskResult]=await Promise.all([
   api.get<any,Envelope<ScopeRule[]>>('/evaluation/assignments/scope-rules',{params:{month:month.value,component:code}}),
   api.get<any,Envelope<Reviewer[]>>('/evaluation/assignments/reviewers',{params:{component:code}}),
@@ -44,7 +47,7 @@ async function loadComponent(){drawerLoading.value=true;try{const code=activeCom
 async function openComponent(row:Summary){activeComponent.value=row.component;resetForm();drawerOpen.value=true;await loadComponent()}
 function resetForm(){editingId.value=null;form.targetType='ALL';form.targetId=null;form.reviewerIds=[];form.dueAt='';form.note=''}
 function editRule(row:ScopeRule){editingId.value=row.id;form.targetType=row.target_type;form.targetId=row.target_type==='ALL'?null:row.target_id;form.reviewerIds=row.reviewers.map(x=>x.id);form.dueAt=row.due_at?String(row.due_at).replace(' ','T').slice(0,19):'';form.note=row.note||''}
-async function saveRule(){if(form.targetType!=='ALL'&&!form.targetId)return ElMessage.warning('请选择具体批次或板块');if(!form.reviewerIds.length)return ElMessage.warning('请至少选择一名评分人');saving.value=true;try{await api.put('/evaluation/assignments/scope-rules',{month:month.value,component:activeComponent.value,targetType:form.targetType,targetId:form.targetType==='ALL'?null:form.targetId,reviewerIds:form.reviewerIds,dueAt:form.dueAt||null,note:form.note||null});ElMessage.success(editingId.value?'范围配置已更新':'范围配置已添加');resetForm();await Promise.all([loadComponent(),loadOverview()])}finally{saving.value=false}}
+async function saveRule(){if(form.targetType!=='ALL'&&!form.targetId)return ElMessage.warning('请选择具体批次或板块');if(!form.reviewerIds.length)return ElMessage.warning('请至少选择一名评分人');saving.value=true;try{await api.put('/evaluation/assignments/scope-rules',{month:month.value,component:activeComponent.value,targetType:form.targetType,targetId:form.targetType==='ALL'?null:form.targetId,reviewerIds:form.reviewerIds,dueAt:null,note:form.note||null});ElMessage.success(editingId.value?'范围配置已更新':'范围配置已添加');resetForm();await Promise.all([loadComponent(),loadOverview()])}finally{saving.value=false}}
 async function removeRule(row:ScopeRule){await ElMessageBox.confirm(`删除“${targetLabels[row.target_type]} · ${row.targetName}”后，系统会重新计算本任务的评分人分配。`,'删除范围配置',{type:'warning'});await api.delete(`/evaluation/assignments/scope-rules/${row.id}`);ElMessage.success('范围配置已删除');if(editingId.value===row.id)resetForm();await Promise.all([loadComponent(),loadOverview()])}
 function targetOptions(type:TargetType){return type==='BATCH'?batches.value:type==='BUSINESS_UNIT'?businessUnits.value:[]}
 function targetLabel(type:unknown){return targetLabels[type as TargetType]||String(type||'-')}
@@ -97,7 +100,7 @@ onMounted(async()=>{await Promise.all([loadOverview(),loadMasters()])})
               <el-form-item label="适用范围"><el-select v-model="form.targetType" :disabled="editingId!==null" filterable style="width:100%" @change="targetChanged"><el-option label="全员默认" value="ALL"/><el-option label="指定批次" value="BATCH"/><el-option label="指定板块" value="BUSINESS_UNIT"/></el-select></el-form-item>
               <el-form-item v-if="form.targetType!=='ALL'" :label="form.targetType==='BATCH'?'选择批次':'选择板块'"><el-select v-model="form.targetId" :disabled="editingId!==null" filterable style="width:100%"><el-option v-for="item in targetOptions(form.targetType)" :key="item.id" :label="item.name" :value="item.id"/></el-select></el-form-item>
               <el-form-item :class="{'wide-field':form.targetType==='ALL'}" label="评分人"><el-select v-model="form.reviewerIds" multiple filterable collapse-tags collapse-tags-tooltip placeholder="可选择多名评分人" style="width:100%"><el-option v-for="item in reviewerOptions" :key="item.id" :label="`${item.display_name}（${item.username}）`" :value="item.id"/></el-select></el-form-item>
-              <el-form-item label="截止时间"><el-date-picker v-model="form.dueAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="留空则沿用任务截止时间" style="width:100%"/></el-form-item>
+              <p class="evaluation-muted">办理时限在生成任务时设置；已生成任务可在任务详情中调整或开放个人补评分。</p>
               <el-form-item class="wide-field" label="任务说明"><el-input v-model="form.note" maxlength="500" show-word-limit placeholder="可填写本范围的评分重点或注意事项"/></el-form-item>
             </div>
             <el-button type="primary" :loading="saving" @click="saveRule">{{editingId?'保存修改':'添加范围配置'}}</el-button>
@@ -131,6 +134,7 @@ onMounted(async()=>{await Promise.all([loadOverview(),loadMasters()])})
       </div>
     </el-drawer>
   </div>
+  <el-dialog v-model="generationOpen" title="生成评分任务 · 设置时限" width="650px"><el-form label-position="top"><TimeWindowEditor :model-value="generation" @update:model-value="Object.assign(generation,$event)"/></el-form><template #footer><el-button type="primary" @click="generate">确认生成</el-button></template></el-dialog>
 </template>
 
 <style scoped>

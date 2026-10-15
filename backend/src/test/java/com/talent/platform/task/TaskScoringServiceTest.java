@@ -44,25 +44,25 @@ class TaskScoringServiceTest {
         .thenReturn(List.of(Map.of("assignment_id", 5L, "status", "PENDING_REVIEW", "task_id", 3L)));
     when(reviewerScopes.isReviewerForAssignment(5L, 7L)).thenReturn(false);
 
-    assertThatThrownBy(() -> service.submitReview(99L, "APPROVE", null, 90))
+    assertThatThrownBy(() -> service.submitReview(99L, "APPROVE", null, new java.math.BigDecimal("90")))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessageContaining("自己范围内");
   }
 
   @Test
-  void averagesAllApprovalsToOneDecimal() {
+  void averagesAllApprovalsToTwoDecimals() {
     prepareAssignedPendingSubmission();
-    when(db.update(startsWith("update task_submission_review"), eq("APPROVE"), eq(90), isNull(), eq(99L), eq(7L)))
+    when(db.update(startsWith("update task_submission_review"), eq("APPROVE"), eq(new BigDecimal("90.00")), isNull(), eq(99L), eq(7L)))
         .thenReturn(1);
     when(db.queryForObject(startsWith("select count(*) from task_submission_review where"), eq(Integer.class), eq(99L)))
         .thenReturn(0);
-    when(db.queryForObject(contains("round(avg(score),1)"), eq(BigDecimal.class), eq(99L)))
-        .thenReturn(new BigDecimal("85.5"));
+    when(db.queryForObject(contains("round(avg(score),2)"), eq(BigDecimal.class), eq(99L)))
+        .thenReturn(new BigDecimal("85.50"));
 
-    service.submitReview(99L, "APPROVE", null, 90);
+    service.submitReview(99L, "APPROVE", null, new java.math.BigDecimal("90"));
 
     verify(db).update("update task_assignment set status='APPROVED',final_score=?,version=version+1 where id=?",
-        new BigDecimal("85.5"), 5L);
+        new BigDecimal("85.50"), 5L);
   }
 
   @Test
@@ -74,7 +74,7 @@ class TaskScoringServiceTest {
     service.submitReview(99L, "RETURN", "请补材料", null);
 
     verify(db).update("update task_submission_review set status='VOIDED' where submission_id=? and status='PENDING'", 99L);
-    verify(db).update("update task_assignment set status='RETURNED',final_score=null,version=version+1 where id=?", 5L);
+    verify(db).update("update task_assignment set status='RETURNED',version=version+1 where id=?", 5L);
   }
 
   @Test

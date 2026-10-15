@@ -37,6 +37,11 @@ final class EvaluationRules {
     if (total.compareTo(new BigDecimal("100")) != 0) throw new BusinessException(400, "季度月份权重之和必须为100");
   }
 
+  static void validateDefenseWeight(boolean enabled,BigDecimal weight){
+    if(weight==null||weight.signum()<0||weight.compareTo(new BigDecimal("100"))>0||enabled&&weight.signum()==0||!enabled&&weight.signum()!=0)
+      throw new BusinessException(400,"季度答辩启用时权重须大于0且不超过100%，关闭时须为0");
+  }
+
   static void validateSourceWeights(Map<Long,BigDecimal> weights) {
     BigDecimal total=BigDecimal.ZERO;
     for (var entry:weights.entrySet()) {
@@ -96,7 +101,7 @@ final class EvaluationRules {
     for(WeightedScore item:items){
       if(!item.enabled()) continue;
       if(item.score()==null) return null;
-      total=total.add(item.score().multiply(item.weight()).divide(new BigDecimal("100"),4,RoundingMode.HALF_UP));
+      total=total.add(item.score().multiply(item.weight()).divide(new BigDecimal("100"),8,RoundingMode.HALF_UP));
     }
     return total.add(bonus).subtract(deduction).max(BigDecimal.ZERO).min(new BigDecimal("100")).setScale(2,RoundingMode.HALF_UP);
   }

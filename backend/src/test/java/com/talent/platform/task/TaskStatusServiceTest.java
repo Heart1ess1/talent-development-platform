@@ -17,15 +17,15 @@ class TaskStatusServiceTest {
 
     service.refreshOverdueAssignments();
 
-    verify(db).update(contains("set a.status='OVERDUE',a.final_score=0"));
-    verify(db).update(contains("where a.status in ('NOT_SUBMITTED','RETURNED') and t.deadline<now()"));
+    verify(db).update(contains("set a.status='OVERDUE',a.final_score=coalesce"));
+    verify(db).update(contains("where a.status in ('NOT_SUBMITTED','RETURNED') and coalesce(a.window_ends_at,t.deadline)<=now()"));
   }
 
   @Test
   void schedulesTheNearestUnsubmittedDeadline() {
     var db = mock(JdbcTemplate.class);
     var scheduler = mock(TaskScheduler.class);
-    when(db.queryForObject(startsWith("select min(t.deadline)"), eq(Object.class)))
+    when(db.queryForObject(startsWith("select min(coalesce(a.window_ends_at,t.deadline))"), eq(Object.class)))
         .thenReturn(LocalDateTime.now().plusHours(1));
     var service = new TaskStatusService(db, scheduler);
 

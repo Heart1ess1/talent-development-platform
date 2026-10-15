@@ -41,6 +41,7 @@ public class TaskController {
   private final UploadTicketService uploadTickets;
   private final TaskScoringService scoring;
   private final TaskReviewerScopeService reviewerScopes;
+  @org.springframework.beans.factory.annotation.Autowired private com.talent.platform.schedule.ScheduleService schedules;
 
   public TaskController(JdbcTemplate db, FileStorageService storage, PermissionService permissions, AuditService audit,
                         TaskStatusService taskStatus, TaskAttachmentService taskAttachments,
@@ -58,7 +59,7 @@ public class TaskController {
   }
 
   public record TaskRequest(@NotBlank String title, @NotBlank String description, String requirements,
-                            @NotNull LocalDateTime deadline) {}
+                            @NotNull @JsonAlias("endsAt") LocalDateTime deadline, String scheduleMode, LocalDateTime startsAt, LocalDate baseDate, Integer offsetDays) {}
   public record AssignRequest(@NotNull Long taskId,
                               @JsonAlias("batchId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
                               @Size(max = 100) List<@NotNull @Positive Long> batchIds,
@@ -71,7 +72,7 @@ public class TaskController {
                               @JsonAlias("stationId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
                               @Size(max = 100) List<@NotNull @Positive Long> stationIds) {}
   public record ManualDispatchRequest(@NotBlank String title, @NotBlank String description, String requirements,
-                                      @NotNull LocalDateTime deadline,
+                                      @NotNull @JsonAlias("endsAt") LocalDateTime deadline,
                                       @JsonAlias("batchId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
                                       @Size(max = 100) List<@NotNull @Positive Long> batchIds,
                                       @JsonAlias("classId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
@@ -83,14 +84,14 @@ public class TaskController {
                                       @JsonAlias("stationId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
                                       @Size(max = 100) List<@NotNull @Positive Long> stationIds,
                                       List<Long> reviewerIds,
-                                      List<TaskReviewerScopeService.ScopeRequest> reviewerScopes) {}
+                                      List<TaskReviewerScopeService.ScopeRequest> reviewerScopes, String scheduleMode, LocalDateTime startsAt, LocalDate baseDate, Integer offsetDays) {}
   public record ManualDispatchResult(Long taskId, int assignedEmployees) {}
   public record ManualDispatchPreview(int targetEmployees, TaskReviewerScopeService.ScopePreview scopePreview) {}
   public record PlanDispatchRequest(
       @NotNull Long planId,
       @NotEmpty List<@NotNull Long> planTaskIds,
       @Size(max = 128) String taskTitle,
-      @NotBlank @Pattern(regexp = "OFFSET|ABSOLUTE") String deadlineMode,
+      @NotBlank @JsonAlias("scheduleMode") @Pattern(regexp = "OFFSET|ABSOLUTE|IMMEDIATE|MANUAL") String deadlineMode,
       LocalDate baseDate,
       @Min(0) Integer offsetDays,
       LocalDate deadlineDate,
@@ -105,7 +106,7 @@ public class TaskController {
       @JsonAlias("stationId") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
       @Size(max = 100) List<@NotNull @Positive Long> stationIds,
       List<Long> reviewerIds,
-      List<TaskReviewerScopeService.ScopeRequest> reviewerScopes) {}
+      List<TaskReviewerScopeService.ScopeRequest> reviewerScopes, LocalDateTime startsAt, LocalDateTime endsAt, @Size(max=64) String dispatchKey) {}
   public record PlanDispatchResult(int targetEmployees, int createdTasks, int createdAssignments) {}
   public record PlanDispatchPreview(
       int targetEmployees,
@@ -117,7 +118,7 @@ public class TaskController {
       List<TaskReviewerScopeService.ScopeRequest> reviewerScopes,
       TaskReviewerScopeService.ScopePreview scopePreview) {}
   public record ReviewRequest(@NotNull @Pattern(regexp = "APPROVE|RETURN") String decision, String comment,
-                              @Min(0) @Max(100) Integer score) {}
+                              @DecimalMin("0") @DecimalMax("100") @Digits(integer=5,fraction=2) java.math.BigDecimal score) {}
   public record DirectUploadRequest(
       @NotBlank @Size(max = 255) String originalName,
       @Size(max = 128) String contentType,
@@ -146,8 +147,9 @@ public class TaskController {
   @PostMapping("/tasks")
   public ApiResponse<Long> create(@Valid @RequestBody TaskRequest q) {
     permissions.require(Permissions.TASK_MANAGE);
-    db.update("insert into challenge_task(title,description,requirements,deadline,created_by) values(?,?,?,?,?)",
-        q.title(), q.description(), q.requirements(), q.deadline(), SecurityUtils.current().id());
+    var window=com.talent.platform.schedule.TimeWindow.resolve(q.scheduleMode(),q.startsAt(),q.deadline(),q.baseDate(),q.offsetDays(),com.talent.platform.schedule.TimeWindow.now());
+    db.update("insert into challenge_task(title,description,requirements,deadline,created_by,starts_at,schedule_mode,base_date,offset_days) values(?,?,?,?,?,?,?,?,?)",
+        q.title(), q.description(), q.requirements(), window.endsAt(), SecurityUtils.current().id(),window.startsAt(),window.mode(),q.baseDate(),q.offsetDays());
     Long id = db.queryForObject("select last_insert_id()", Long.class);
     audit.log("CREATE_TASK", "TASK", id, null, q);
     taskStatus.rescheduleNextDeadline();
@@ -255,6 +257,7 @@ public class TaskController {
   public ApiResponse<Void> updateTask(@PathVariable Long id, @Valid @RequestBody TaskRequest q) {
     permissions.require(Permissions.TASK_MANAGE);
     var before = task(id);
+    if(!asLocalDateTime(before.get("deadline")).equals(q.deadline())) throw new BusinessException(400,"请使用调整时限入口修改截止时间并核对影响");
     db.update("update challenge_task set title=?,description=?,requirements=?,deadline=? where id=?",
         q.title(), q.description(), q.requirements(), q.deadline(), id);
     audit.log("UPDATE_TASK", "TASK", id, before, q);
@@ -284,8 +287,9 @@ public class TaskController {
     var employeeIds = targetEmployees(q.batchIds(), q.classIds(), q.classPositionIds(), q.businessUnitIds(), q.stationIds());
     if (employeeIds.isEmpty()) throw new BusinessException(400, "未匹配到在职员工，无法下发任务");
     var user = SecurityUtils.current();
-    db.update("insert into challenge_task(title,description,requirements,deadline,created_by) values(?,?,?,?,?)",
-        q.title(), q.description(), q.requirements(), q.deadline(), user.id());
+    var window=com.talent.platform.schedule.TimeWindow.resolve(q.scheduleMode(),q.startsAt(),q.deadline(),q.baseDate(),q.offsetDays(),com.talent.platform.schedule.TimeWindow.now());
+    db.update("insert into challenge_task(title,description,requirements,deadline,created_by,starts_at,schedule_mode,base_date,offset_days) values(?,?,?,?,?,?,?,?,?)",
+        q.title(), q.description(), q.requirements(), window.endsAt(), user.id(),window.startsAt(),window.mode(),q.baseDate(),q.offsetDays());
     Long taskId = db.queryForObject("select last_insert_id()", Long.class);
     int assignedEmployees = 0;
     for (Long employeeId : employeeIds) {
@@ -410,17 +414,19 @@ public class TaskController {
     var u = SecurityUtils.current();
     var requestedScopes = scopeRequests(q.reviewerIds(), q.reviewerScopes());
     reviewerScopes.previewEmployees(employees, requestedScopes);
+    var window=com.talent.platform.schedule.TimeWindow.resolve(q.deadlineMode(),q.startsAt(),deadline,q.baseDate(),q.offsetDays(),com.talent.platform.schedule.TimeWindow.now());
+    String dispatchKey=dispatchKey(q,deadline);
     int createdTasks = 0;
     int createdAssignments = 0;
     for (var planTask : planTasks) {
       String title = q.taskTitle() == null || q.taskTitle().isBlank()
           ? String.valueOf(planTask.get("title"))
           : q.taskTitle().trim();
-      int created = db.update("insert ignore into challenge_task(title,description,requirements,deadline,created_by,training_plan_id,training_plan_task_id,source_base_date) values(?,?,?,?,?,?,?,?)",
-          title, planTask.get("description"), planTask.get("requirements"), deadline, u.id(), q.planId(), planTask.get("id"), deadline.toLocalDate());
+      int created = db.update("insert ignore into challenge_task(title,description,requirements,deadline,created_by,training_plan_id,training_plan_task_id,source_base_date,starts_at,schedule_mode,dispatch_key,base_date,offset_days) values(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          title, planTask.get("description"), planTask.get("requirements"), deadline, u.id(), q.planId(), planTask.get("id"), deadline.toLocalDate(),window.startsAt(),window.mode(),dispatchKey,q.baseDate(),q.offsetDays());
       createdTasks += created;
-      Long taskId = db.queryForObject("select id from challenge_task where training_plan_task_id=? and source_base_date=?",
-          Long.class, planTask.get("id"), deadline.toLocalDate());
+      Long taskId = db.queryForObject("select id from challenge_task where training_plan_task_id=? and dispatch_key=?",
+          Long.class, planTask.get("id"), dispatchKey);
       if (created == 0) reviewerScopes.requireCompatible(taskId, requestedScopes);
       taskAttachments.snapshotPlanTaskAttachments(
           ((Number) planTask.get("id")).longValue(), taskId);
@@ -446,19 +452,20 @@ public class TaskController {
     var planTasks = selectedPlanTasks(q);
     var employees = targetEmployees(q.batchIds(), q.classIds(), q.classPositionIds(), q.businessUnitIds(), q.stationIds());
     var deadline = resolveDeadline(q);
+    com.talent.platform.schedule.TimeWindow.resolve(q.deadlineMode(),q.startsAt(),deadline,q.baseDate(),q.offsetDays(),com.talent.platform.schedule.TimeWindow.now());
     var taskIds = planTasks.stream().map(row -> row.get("id")).toList();
     String placeholders = String.join(",", Collections.nCopies(taskIds.size(), "?"));
     var existingArgs = new ArrayList<Object>(taskIds);
-    existingArgs.add(deadline.toLocalDate());
+    existingArgs.add(dispatchKey(q,deadline));
     Integer reusedTasks = db.queryForObject(
         "select count(*) from challenge_task where training_plan_task_id in ("
-            + placeholders + ") and source_base_date=?",
+            + placeholders + ") and dispatch_key=?",
         Integer.class,
         existingArgs.toArray());
     var requestedScopes = scopeRequests(q.reviewerIds(), q.reviewerScopes());
     var scopePreview = reviewerScopes.previewEmployees(employees, requestedScopes);
     var existingTasks = db.queryForList(
-        "select id from challenge_task where training_plan_task_id in (" + placeholders + ") and source_base_date=?",
+        "select id from challenge_task where training_plan_task_id in (" + placeholders + ") and dispatch_key=?",
         existingArgs.toArray());
     for (var existing : existingTasks) {
       reviewerScopes.requireCompatible(((Number) existing.get("id")).longValue(), requestedScopes);
@@ -485,8 +492,8 @@ public class TaskController {
       where += " and a.status=?";
       args.add(status);
     }
-    String sql = "select a.id,a.task_id,a.employee_id,a.status,a.final_score,a.assigned_by,a.assigned_at,a.version,"
-        + "t.title,t.description,t.requirements,t.deadline,e.name employee_name,e.employee_no,"
+    String sql = "select a.id,a.task_id,a.employee_id,a.status,a.final_score,a.assigned_by,a.assigned_at,a.version,a.window_ends_at is not null personal_window,"
+        + "t.title,t.description,t.requirements,coalesce(a.window_ends_at,t.deadline) deadline,coalesce(a.window_starts_at,t.starts_at) starts_at,a.score_month,e.name employee_name,e.employee_no,(select count(*) from submission_opportunity o where o.resource_type='TASK' and o.resource_id=t.id and o.participant_id=a.employee_id and o.status='ACTIVE' and o.starts_at<=now() and o.ends_at>now()) personal_opportunity,"
         + "(select max(s.submission_version) from task_submission s where s.assignment_id=a.id) latest_version,"
         + "(select count(*) from task_reviewer_scope_member m where m.scope_id=a.scoring_scope_id) reviewer_count,"
         + "(select group_concat(su.display_name order by su.display_name separator '、') from task_reviewer_scope_member m join sys_user su on su.id=m.reviewer_user_id where m.scope_id=a.scoring_scope_id) reviewer_names,"
@@ -523,12 +530,8 @@ public class TaskController {
                                   @RequestPart(required = false) List<MultipartFile> files) {
     var u = SecurityUtils.current();
     assertAssignment(id, u, true);
-    var assignment = db.queryForMap("select a.status,t.deadline from task_assignment a join challenge_task t on t.id=a.task_id where a.id=?", id);
+    var assignment = assertSubmissionWindowOpen(id);
     String assignmentStatus = String.valueOf(assignment.get("status"));
-    if (!List.of("NOT_SUBMITTED", "RETURNED", "PENDING_REVIEW").contains(assignmentStatus)) {
-      throw new BusinessException(400, "当前状态不能提交");
-    }
-    if (LocalDateTime.now().isAfter(asLocalDateTime(assignment.get("deadline")))) throw new BusinessException(400, "任务已截止");
     if ((content == null || content.isBlank()) && (files == null || files.isEmpty())) throw new BusinessException(400, "请填写说明或上传成果文件");
     if (files != null && files.size() > 5) throw new BusinessException(400, "单次最多上传 5 个文件");
     if ("PENDING_REVIEW".equals(assignmentStatus)) {
@@ -537,7 +540,7 @@ public class TaskController {
       db.update("update task_submission set status='SUPERSEDED' where assignment_id=? and status='PENDING_REVIEW'", id);
     }
     Integer version = db.queryForObject("select coalesce(max(submission_version),0)+1 from task_submission where assignment_id=?", Integer.class, id);
-    db.update("insert into task_submission(assignment_id,submission_version,content) values(?,?,?)", id, version, content);
+    db.update("insert into task_submission(assignment_id,submission_version,content,opportunity_id) values(?,?,?,?)", id, version, content,assignment.get("opportunityId"));
     Long submissionId = db.queryForObject("select last_insert_id()", Long.class);
     Long taskId = db.queryForObject("select task_id from task_assignment where id=?", Long.class, id);
     scoring.initializeSubmissionReviews(submissionId, taskId);
@@ -547,6 +550,7 @@ public class TaskController {
       db.update("insert into stored_file(submission_id,original_name,content_type,size,storage_key,uploader_user_id) values(?,?,?,?,?,?)",
           submissionId, file.getOriginalFilename(), stored.contentType(), stored.size(), stored.key(), u.id());
     }
+    schedules.consume(assignment.get("opportunityId"));
     db.update("update task_assignment set status='PENDING_REVIEW',version=version+1 where id=?", id);
     return ApiResponse.ok(submissionId);
   }
@@ -588,8 +592,8 @@ public class TaskController {
     Integer version = db.queryForObject(
         "select coalesce(max(submission_version),0)+1 from task_submission where assignment_id=?",
         Integer.class, id);
-    db.update("insert into task_submission(assignment_id,submission_version,content) values(?,?,?)",
-        id, version, request.content());
+    db.update("insert into task_submission(assignment_id,submission_version,content,opportunity_id) values(?,?,?,?)",
+        id, version, request.content(),assignment.get("opportunityId"));
     Long submissionId = db.queryForObject("select last_insert_id()", Long.class);
     Long taskId = db.queryForObject("select task_id from task_assignment where id=?", Long.class, id);
     scoring.initializeSubmissionReviews(submissionId, taskId);
@@ -603,6 +607,7 @@ public class TaskController {
           """, submissionId, upload.originalName(), upload.contentType(), upload.size(),
           upload.storageKey(), user.id());
     }
+    schedules.consume(assignment.get("opportunityId"));
     db.update("update task_assignment set status='PENDING_REVIEW',version=version+1 where id=?", id);
     audit.log("SUBMIT_TASK", "TASK_SUBMISSION", submissionId, null,
         Map.of("assignmentId", id, "files", ticketIds.size(), "transfer", "OSS_DIRECT"));
@@ -649,14 +654,14 @@ public class TaskController {
     return db.update("""
         insert ignore into task_assignment(
           task_id,employee_id,batch_id_snapshot,batch_name_snapshot,
-          business_unit_id_snapshot,business_unit_name_snapshot,class_id_snapshot,class_name_snapshot,assigned_by)
-        select ?,e.id,e.batch_id,b.name,e.business_unit_id,bu.name,e.class_id,cls.label,?
+          business_unit_id_snapshot,business_unit_name_snapshot,class_id_snapshot,class_name_snapshot,assigned_by,score_month)
+        select ?,e.id,e.batch_id,b.name,e.business_unit_id,bu.name,e.class_id,cls.label,?,(select date_format(t.deadline,'%Y-%m-01') from challenge_task t where t.id=?)
         from employee e
         left join talent_batch b on b.id=e.batch_id
         left join business_unit bu on bu.id=e.business_unit_id
         left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS'
         where e.id=?
-        """, taskId, assignedBy, employeeId);
+        """, taskId, assignedBy, taskId, employeeId);
   }
 
   private List<TaskReviewerScopeService.ScopeRequest> scopeRequests(
@@ -695,11 +700,17 @@ public class TaskController {
     return planTasks;
   }
 
+  private String dispatchKey(PlanDispatchRequest q,LocalDateTime deadline){return q.dispatchKey()==null||q.dispatchKey().isBlank()?"legacy:"+q.planId()+":"+deadline.toLocalDate():q.dispatchKey();}
+
   private LocalDateTime resolveDeadline(PlanDispatchRequest q) {
     return switch (q.deadlineMode()) {
       case "OFFSET" -> {
         if (q.baseDate() == null || q.offsetDays() == null) throw new BusinessException(400, "日期偏移方式需要填写基准日期和偏移天数");
         yield q.baseDate().plusDays(q.offsetDays()).atTime(23, 59, 59);
+      }
+      case "IMMEDIATE", "MANUAL" -> {
+        if(q.endsAt()==null)throw new BusinessException(400,"请填写截止时间");
+        yield q.endsAt();
       }
       case "ABSOLUTE" -> {
         if (q.deadlineDate() == null) throw new BusinessException(400, "绝对日期方式需要填写截止日期");
@@ -804,20 +815,7 @@ public class TaskController {
   }
 
   private Map<String, Object> assertSubmissionWindowOpen(Long assignmentId) {
-    var assignment = db.queryForMap("""
-        select a.status,t.deadline
-        from task_assignment a
-        join challenge_task t on t.id=a.task_id
-        where a.id=?
-        """, assignmentId);
-    String status = String.valueOf(assignment.get("status"));
-    if (!List.of("NOT_SUBMITTED", "RETURNED", "PENDING_REVIEW").contains(status)) {
-      throw new BusinessException(400, "当前状态不能提交");
-    }
-    if (LocalDateTime.now().isAfter(asLocalDateTime(assignment.get("deadline")))) {
-      throw new BusinessException(400, "任务已截止");
-    }
-    return assignment;
+    return schedules.assertTaskOpen(assignmentId);
   }
 
   private LocalDateTime asLocalDateTime(Object value) {

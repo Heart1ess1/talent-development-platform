@@ -56,7 +56,7 @@ class ExamScoringServiceTest {
 
   @Test void endedObjectiveResultsArePublishedInOneServerSideUpdate(){
     JdbcTemplate db=mock(JdbcTemplate.class);
-    when(db.update(contains("p.ends_at<=now()"))).thenReturn(3);
+    when(db.update(contains("coalesce(ea.window_ends_at,p.ends_at)<=now()"))).thenReturn(3);
 
     int published=new ExamScoringService(db,mapper).publishEndedResults();
 

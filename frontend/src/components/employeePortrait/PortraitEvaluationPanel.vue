@@ -2,6 +2,8 @@
 import {onMounted,ref,watch} from 'vue'
 import {usePortraitPage,dateTime,score} from './usePortraitPage'
 
+function showDefense(row:any){if(row.defenseScore!=null)return true;try{return JSON.parse(row.componentSnapshot||'{}').components?.some((c:any)=>c.code==='DEFENSE'&&c.enabled)}catch{return false}}
+function quarterSnapshot(row:any){try{return typeof row.quarterSnapshot==='string'?JSON.parse(row.quarterSnapshot):row.quarterSnapshot||{}}catch{return {}}}
 const props=defineProps<{employeeId:number}>()
 const type=ref<'MONTH'|'QUARTER'>('MONTH')
 const dateRange=ref<string[]>([])
@@ -17,10 +19,10 @@ onMounted(()=>q.load())
       <template #default><el-button link type="primary" @click="q.load(q.page.value)">重试</el-button></template>
     </el-alert>
     <el-table v-else :data="q.records.value" v-loading="q.loading.value" height="100%" stripe empty-text="暂无评价记录">
-      <el-table-column type="expand"><template #default="s"><div class="evaluation-detail" v-if="type==='MONTH'"><span>考试：{{score(s.row.examScore)}}</span><span>任务：{{score(s.row.taskScore)}}</span><span>导师：{{score(s.row.mentorScore)}}</span><span>服务站：{{score(s.row.stationScore)}}</span><span>培训：{{score(s.row.trainingScore)}}</span><span>加分：{{s.row.bonus??0}}</span><span>扣分：{{s.row.deduction??0}}</span></div><div v-else class="evaluation-detail"><span>季度组成快照：{{s.row.quarterSnapshot||'暂无快照'}}</span></div></template></el-table-column>
+      <el-table-column type="expand"><template #default="s"><div class="evaluation-detail" v-if="type==='MONTH'"><span>考试：{{score(s.row.examScore)}}</span><span>任务：{{score(s.row.taskScore)}}</span><span>导师：{{score(s.row.mentorScore)}}</span><span>服务站：{{score(s.row.stationScore)}}</span><span>培训：{{score(s.row.trainingScore)}}</span><span v-if="showDefense(s.row)">答辩：{{score(s.row.defenseScore)}}</span><span>加分：{{score(s.row.bonus??0)}}</span><span>扣分：{{score(s.row.deduction??0)}}</span></div><div v-else class="evaluation-detail"><span v-for="item in quarterSnapshot(s.row).months||[]" :key="item.month">{{item.month}}：{{score(item.score)}}（月评汇总权重 {{item.weight}}%）</span><template v-if="quarterSnapshot(s.row).monthlyWeight!=null"><span>月评汇总：{{score(quarterSnapshot(s.row).monthlyBaseScore)}}，占季评 {{quarterSnapshot(s.row).monthlyWeight}}%</span><span v-if="quarterSnapshot(s.row).defense?.enabled">季度答辩：{{score(quarterSnapshot(s.row).defense.score)}} / {{score(quarterSnapshot(s.row).defense.fullScore)}}，占季评 {{quarterSnapshot(s.row).defense.weight}}%</span></template><span v-if="!quarterSnapshot(s.row).months?.length">暂无组成快照</span></div></template></el-table-column>
       <el-table-column prop="period" label="周期" min-width="120"><template #default="s"><span>{{s.row.period}}</span><el-tag v-if="s.row.sourceType==='HISTORICAL'" size="small" type="warning" effect="plain" class="history-tag">历史导入</el-tag></template></el-table-column>
       <el-table-column prop="version" label="版本" width="80"/>
-      <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="s.row.provisional?'warning':'success'">{{s.row.provisional?'暂定':'已发布'}}</el-tag></template></el-table-column>
+      <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="s.row.status==='SUPERSEDED'?'info':s.row.provisional?'warning':'success'">{{s.row.status==='SUPERSEDED'?'历史版本':s.row.provisional?'暂定':'已发布'}}</el-tag></template></el-table-column>
       <el-table-column label="最终得分" width="110"><template #default="s"><strong>{{score(s.row.finalScore)}}</strong></template></el-table-column>
       <el-table-column prop="missingItems" label="缺项" min-width="180"><template #default="s">{{s.row.missingItems||'-'}}</template></el-table-column>
       <el-table-column label="生成 / 发布时间" min-width="190"><template #default="s">{{dateTime(s.row.generatedAt)}}<br>{{dateTime(s.row.publishedAt)}}</template></el-table-column>

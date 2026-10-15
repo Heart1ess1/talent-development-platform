@@ -1,14 +1,17 @@
 <script setup lang="ts">
+import {scoreText} from '@/evaluation/model'
 import {computed,nextTick,onMounted,reactive,ref} from 'vue'
 import {useRoute,useRouter} from 'vue-router'
 import {ElMessage} from 'element-plus'
 import {ArrowRight,Calendar,CircleCheck,Download,Histogram,Search,Timer} from '@element-plus/icons-vue'
+import ScheduleDialog from '@/components/ScheduleDialog.vue'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData'
 import {dateTimeParts,resultStatusLabels,scoreMonth} from './examUi'
 import '@/styles/exam-center.css'
 
+const scheduleDialog=ref<InstanceType<typeof ScheduleDialog>>()
 const auth=useAuthStore(),route=useRoute(),router=useRouter(),canManage=computed(()=>auth.can('exam:manage'))
 const plans=ref<any[]>([]),results=ref<any[]>([]),planResults=ref<any[]>([])
 const reviewQueue=ref<any[]>([]),reviewVisible=ref(false),reviewLoading=ref(false),reviewAttempt=ref<any>(),grades=reactive<Record<number,{score:number;comment:string}>>({})
@@ -96,7 +99,7 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
       <section v-if="pendingReviews.length" id="exam-review-queue" class="exam-workspace review-workspace">
         <div class="exam-workspace-head"><div><span class="card-title">待阅卷答卷</span><span class="header-tip">主观题评分完成后，系统自动合成考试总分</span></div><el-tag type="warning" effect="plain">{{pendingReviews.length}} 份待处理</el-tag></div>
         <el-table :data="pendingReviews" empty-text="暂无待阅卷答卷">
-          <el-table-column prop="exam_name" label="考试" min-width="160"/><el-table-column prop="employee_name" label="员工" min-width="110"/><el-table-column prop="objective_score" label="客观题得分" width="110"/><el-table-column label="监考模式" width="104"><template #default="s"><el-tag :type="proctorMode(s.row).type" effect="plain">{{proctorMode(s.row).label}}</el-tag></template></el-table-column><el-table-column prop="event_count" label="异常次数" width="90"/><el-table-column label="提交时间" width="150"><template #default="s">{{dateTimeParts(s.row.submitted_at).date}} {{dateTimeParts(s.row.submitted_at).time}}</template></el-table-column><el-table-column label="操作" width="90"><template #default="s"><el-button link type="primary" @click="openReview(s.row)">开始阅卷</el-button></template></el-table-column>
+          <el-table-column prop="exam_name" label="考试" min-width="160"/><el-table-column prop="employee_name" label="员工" min-width="110"/><el-table-column prop="objective_score" label="客观题得分" width="110"><template #default="{row}">{{scoreText(row.objective_score)}}</template></el-table-column><el-table-column label="监考模式" width="104"><template #default="s"><el-tag :type="proctorMode(s.row).type" effect="plain">{{proctorMode(s.row).label}}</el-tag></template></el-table-column><el-table-column prop="event_count" label="异常次数" width="90"/><el-table-column label="提交时间" width="150"><template #default="s">{{dateTimeParts(s.row.submitted_at).date}} {{dateTimeParts(s.row.submitted_at).time}}</template></el-table-column><el-table-column label="操作" width="90"><template #default="s"><el-button link type="primary" @click="openReview(s.row)">开始阅卷</el-button></template></el-table-column>
         </el-table>
       </section>
       <section class="exam-workspace">
@@ -129,14 +132,14 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
       </section>
       <section v-if="historicalResults.length" class="exam-workspace history-results-workspace">
         <div class="exam-workspace-head"><div><span class="card-title">历史导入成绩</span><span class="header-tip">已发布历史记录只读展示</span></div><el-button :icon="Download" :loading="exporting" @click="exportResults()">导出全部成绩</el-button></div>
-        <el-table :data="historicalResults" empty-text="暂无历史成绩"><el-table-column prop="exam_name" label="考试" min-width="180"/><el-table-column prop="employee_name" label="员工" min-width="110"/><el-table-column prop="employee_no" label="工号" width="110"/><el-table-column prop="total_score" label="成绩" width="90"/><el-table-column prop="score_month" label="成绩月份" width="110"/><el-table-column label="来源" width="100"><template #default><el-tag type="warning" effect="plain">历史导入</el-tag></template></el-table-column></el-table>
+        <el-table :data="historicalResults" empty-text="暂无历史成绩"><el-table-column prop="exam_name" label="考试" min-width="180"/><el-table-column prop="employee_name" label="员工" min-width="110"/><el-table-column prop="employee_no" label="工号" width="110"/><el-table-column prop="total_score" label="成绩" width="90"><template #default="{row}">{{scoreText(row.total_score)}}</template></el-table-column><el-table-column prop="score_month" label="成绩月份" width="110"/><el-table-column label="来源" width="100"><template #default><el-tag type="warning" effect="plain">历史导入</el-tag></template></el-table-column></el-table>
       </section>
     </template>
 
     <el-card v-else>
       <template #header>已发布成绩</template>
       <el-table :data="results" empty-text="暂无已发布成绩">
-        <el-table-column prop="exam_name" label="考试"><template #default="s"><span>{{s.row.exam_name}}</span><el-tag v-if="s.row.source_type==='HISTORICAL'" size="small" type="warning" effect="plain" class="history-tag">历史导入</el-tag></template></el-table-column><el-table-column prop="total_score" label="成绩"/>
+        <el-table-column prop="exam_name" label="考试"><template #default="s"><span>{{s.row.exam_name}}</span><el-tag v-if="s.row.source_type==='HISTORICAL'" size="small" type="warning" effect="plain" class="history-tag">历史导入</el-tag></template></el-table-column><el-table-column prop="total_score" label="成绩"><template #default="{row}">{{scoreText(row.total_score)}}</template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="resultStatus(s.row).type" effect="plain">{{resultStatus(s.row).label}}</el-tag></template></el-table-column>
         <el-table-column label="计分月份"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column>
       </el-table>
@@ -171,11 +174,12 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
         <el-table-column label="完成状态" width="92"><template #default="s"><el-tag :type="participation(s.row).type" effect="plain">{{participation(s.row).label}}</el-tag></template></el-table-column>
         <el-table-column label="监考模式" width="104"><template #default="s"><el-tag v-if="s.row.id" :type="proctorMode(s.row).type" effect="plain">{{proctorMode(s.row).label}}</el-tag><span v-else>--</span></template></el-table-column>
         <el-table-column prop="attempt_no" label="考试次数" width="82" align="center"><template #default="s">{{s.row.attempt_no??'--'}}</template></el-table-column>
-        <el-table-column prop="total_score" label="成绩" width="74" align="center"><template #default="s"><strong v-if="s.row.total_score!==null&&s.row.total_score!==undefined">{{s.row.total_score}}</strong><span v-else>--</span></template></el-table-column>
+        <el-table-column prop="total_score" label="成绩" width="74" align="center"><template #default="s"><strong v-if="s.row.total_score!==null&&s.row.total_score!==undefined">{{scoreText(s.row.total_score)}}</strong><span v-else>--</span></template></el-table-column>
         <el-table-column prop="event_count" label="异常次数" width="82" align="center"><template #default="s">{{s.row.event_count??0}}</template></el-table-column>
         <el-table-column label="开始时间" width="118"><template #default="s"><span class="datetime-cell"><span>{{dateTimeParts(s.row.started_at).date}}</span><span>{{dateTimeParts(s.row.started_at).time}}</span></span></template></el-table-column>
         <el-table-column label="提交时间" width="118"><template #default="s"><span class="datetime-cell"><span>{{dateTimeParts(s.row.submitted_at).date}}</span><span>{{dateTimeParts(s.row.submitted_at).time}}</span></span></template></el-table-column>
         <el-table-column label="员工可见" width="108"><template #default="s"><el-tag v-if="s.row.participation_status==='COMPLETED'" :type="isPublished(s.row)?'success':'info'" effect="plain">{{isPublished(s.row)?'已下发':'考试结束后'}}</el-tag><span v-else>--</span></template></el-table-column>
+        <el-table-column v-if="canManage" label="操作" width="135" fixed="right"><template #default="s"><el-button link type="primary" @click="scheduleDialog?.open('EXAM',selectedPlan.id,s.row.employee_id)">开放一次补考</el-button></template></el-table-column>
       </el-table>
     </el-drawer>
 
@@ -184,7 +188,7 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
       <div v-loading="reviewLoading">
         <el-alert title="逐题保存评分；最后一道主观题保存后，系统自动计算总分。" type="info" :closable="false" show-icon/>
         <div v-for="(question,index) in reviewAttempt?.questions?.filter((x:any)=>x.question_type==='SHORT')||[]" :key="question.id" class="subjective-question">
-          <div class="question-title"><span>{{index+1}}</span><div><strong>{{question.stem}}</strong><small>满分 {{question.score}} 分</small></div></div>
+          <div class="question-title"><span>{{index+1}}</span><div><strong>{{question.stem}}</strong><small>满分 {{scoreText(question.score)}} 分</small></div></div>
           <div class="answer-box"><span>员工答案</span><p>{{answerText(question.saved_answer)}}</p></div>
           <div class="grade-form"><el-input-number v-model="grades[question.id]!.score" :min="0" :max="Number(question.score)" :precision="2" controls-position="right"/><el-input v-model="grades[question.id]!.comment" placeholder="阅卷意见（可选）" maxlength="500"/><el-button type="primary" @click="gradeQuestion(question)">保存本题</el-button></div>
         </div>
@@ -192,6 +196,7 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
       </div>
     </el-drawer>
   </div>
+  <ScheduleDialog ref="scheduleDialog" @changed="async()=>{await load();if(selectedPlan)await openPlan(selectedPlan)}"/>
 </template>
 
 <style scoped>

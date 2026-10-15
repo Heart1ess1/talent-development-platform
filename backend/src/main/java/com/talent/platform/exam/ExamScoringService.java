@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.*;import org.springframework.jdbc.core.Jdb
 
 @Service
 public class ExamScoringService {
+  @org.springframework.beans.factory.annotation.Autowired private com.talent.platform.evaluation.EvaluationRevisionService revisions;
   private final JdbcTemplate db;private final ObjectMapper mapper;public ExamScoringService(JdbcTemplate db,ObjectMapper mapper){this.db=db;this.mapper=mapper;}
   @Transactional
   public Map<String,Object> score(Long id,String submittedStatus)throws Exception{
@@ -48,11 +49,16 @@ public class ExamScoringService {
     return Map.of("status",status,"objectiveScore",objective,"submission",submittedStatus);
   }
   @Transactional public int scoreExpired(){var rows=db.queryForList("select id,(deadline_at<=now()) exam_expired from exam_attempt where status='IN_PROGRESS' and (deadline_at<=now() or violation_deadline_at<=now())");for(var row:rows)try{Long id=((Number)row.get("id")).longValue();Object expired=row.get("exam_expired");boolean examExpired=Boolean.TRUE.equals(expired)||(expired instanceof Number number&&number.intValue()!=0);score(id,examExpired?"TIMEOUT":"ANTI_CHEAT_TIMEOUT");}catch(Exception e){throw new IllegalStateException(e);}return rows.size();}
-  @Transactional public int publishEndedResults(){return db.update("""
+  @Transactional public int publishEndedResults(){
+    var rows=db.queryForList("select distinct a.employee_id,coalesce(ea.score_month,p.score_month) score_month from exam_attempt a join exam_plan p on p.id=a.plan_id join exam_assignment ea on ea.plan_id=p.id and ea.employee_id=a.employee_id where a.status='GRADED' and a.published=false and p.status='PUBLISHED' and coalesce(ea.window_ends_at,p.ends_at)<=now()");
+    int count=db.update("""
       update exam_attempt a join exam_plan p on p.id=a.plan_id
+      join exam_assignment ea on ea.plan_id=p.id and ea.employee_id=a.employee_id
       set a.published=true,a.version=a.version+1
-      where a.status='GRADED' and a.published=false and p.status='PUBLISHED' and p.ends_at<=now()
-      """);}
+      where a.status='GRADED' and a.published=false and p.status='PUBLISHED' and coalesce(ea.window_ends_at,p.ends_at)<=now()
+      """);
+    if(count>0&&revisions!=null){Map<Long,Set<java.time.YearMonth>> affected=new LinkedHashMap<>();for(var row:rows)affected.computeIfAbsent(((Number)row.get("employee_id")).longValue(),k->new LinkedHashSet<>()).add(java.time.YearMonth.parse(row.get("score_month").toString().substring(0,7)));revisions.changed(affected,"发布考试成绩");}return count;
+  }
   static boolean answersMatch(String type,JsonNode expected,JsonNode actual){if(!"MULTIPLE".equals(type))return Objects.equals(expected,actual);if(expected==null||actual==null||!expected.isArray()||!actual.isArray()||expected.size()!=actual.size())return false;var expectedValues=new HashSet<String>();var actualValues=new HashSet<String>();expected.forEach(x->expectedValues.add(x.toString()));actual.forEach(x->actualValues.add(x.toString()));return expectedValues.size()==expected.size()&&actualValues.size()==actual.size()&&expectedValues.equals(actualValues);}
   private JsonNode tree(Object x)throws Exception{return x==null?null:mapper.readTree(String.valueOf(x));}
 }

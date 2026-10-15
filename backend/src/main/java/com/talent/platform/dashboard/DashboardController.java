@@ -77,7 +77,10 @@ public class DashboardController {
 
     Map<String, Object> task = db.queryForMap("""
         select count(*) task_total,
-          coalesce(sum(a.status<>'APPROVED'),0) pending_tasks,
+          coalesce(sum(a.status<>'APPROVED' or exists(
+            select 1 from submission_opportunity o where o.resource_type='TASK' and o.resource_id=a.task_id
+              and o.participant_id=a.employee_id and o.status='ACTIVE' and o.ends_at>now()
+          )),0) pending_tasks,
           coalesce(sum(a.status='PENDING_REVIEW'),0) awaiting_review_tasks,
           coalesce(sum(a.status='APPROVED'),0) completed_tasks,
           coalesce(sum(a.status='OVERDUE'),0) overdue_tasks
@@ -96,14 +99,13 @@ public class DashboardController {
         """, employeeId);
     var examRows = db.queryForList("""
         select count(*) assigned_exams,
-          coalesce(sum(p.status='PUBLISHED' and p.ends_at>=now() and not exists(
+          coalesce(sum(p.status='PUBLISHED' and coalesce(ea.window_ends_at,p.ends_at)>now() and (not exists(
             select 1 from exam_attempt x where x.plan_id=p.id and x.employee_id=ea.employee_id and x.status='GRADED'
-          )),0) pending_exams,
+          ) or exists(select 1 from submission_opportunity o where o.resource_type='EXAM' and o.resource_id=p.id
+            and o.participant_id=ea.employee_id and o.status='ACTIVE' and o.ends_at>now()))),0) pending_exams,
           coalesce(sum(exists(
             select 1 from exam_attempt x where x.plan_id=p.id and x.employee_id=ea.employee_id and x.status='GRADED'
-          )),0) completed_exams,
-          coalesce((select round(avg(x.total_score),1) from exam_attempt x
-            where x.employee_id=ea.employee_id and x.status='GRADED' and x.published=true),0) exam_average
+          )),0) completed_exams
         from exam_assignment ea
         join exam_plan p on p.id=ea.plan_id
         where ea.employee_id=?
@@ -125,22 +127,29 @@ public class DashboardController {
     metrics.put("task_completion_rate", percent(task.get("completed_tasks"), task.get("task_total")));
     metrics.put("course_attendance_rate", percent(course.get("attended_courses"), course.get("finished_courses")));
     metrics.put("exam_completion_rate", percent(exam.get("completed_exams"), exam.get("assigned_exams")));
-    metrics.put("exam_average", number(exam.get("exam_average")));
+    metrics.put("exam_average", number(scalarOrNull("""
+        select round(avg(best.score),2) from (
+          select max(total_score) score from exam_attempt
+          where employee_id=? and status='GRADED' and published=true group by plan_id
+        ) best
+        """, employeeId)));
     result.put("metrics", metrics);
 
     var actions = new ArrayList<Map<String, Object>>();
     for (var row : db.queryForList("""
-        select a.id,t.title,t.deadline,a.status
+        select a.id,t.title,coalesce(a.window_ends_at,t.deadline) deadline,a.status,exists(select 1 from submission_opportunity o where o.resource_type='TASK' and o.resource_id=t.id and o.participant_id=a.employee_id and o.status='ACTIVE' and o.ends_at>now()) personal_opportunity
         from task_assignment a join challenge_task t on t.id=a.task_id
-        where a.employee_id=? and a.status<>'APPROVED'
-        order by field(a.status,'OVERDUE','RETURNED','NOT_SUBMITTED','PENDING_REVIEW'),t.deadline
+        where a.employee_id=? and (a.status<>'APPROVED' or exists(select 1 from submission_opportunity o where o.resource_type='TASK' and o.resource_id=t.id and o.participant_id=a.employee_id and o.status='ACTIVE' and o.ends_at>now()))
+        order by field(a.status,'OVERDUE','RETURNED','NOT_SUBMITTED','PENDING_REVIEW'),coalesce(a.window_ends_at,t.deadline)
         limit 6
         """, employeeId)) {
       String status = text(row.get("status"));
+      boolean personalOpportunity = truthy(row.get("personal_opportunity"));
+      if (personalOpportunity) status = "NOT_SUBMITTED";
       actions.add(action(
           "TASK",
           text(row.get("title")),
-          switch (status) {
+          personalOpportunity ? "已开放一次个人补交，请在个人截止时间前提交" : switch (status) {
             case "OVERDUE" -> "任务已逾期，请尽快补交并说明情况";
             case "RETURNED" -> "成果已退回，请根据审核意见修改后重新提交";
             case "PENDING_REVIEW" -> "成果已提交，正在等待审核";
@@ -153,12 +162,12 @@ public class DashboardController {
       ));
     }
     for (var row : db.queryForList("""
-        select p.id,p.name,p.starts_at,p.ends_at,
+        select p.id,p.name,coalesce(ea.window_starts_at,p.starts_at) starts_at,coalesce(ea.window_ends_at,p.ends_at) ends_at,
           case when exists(select 1 from exam_attempt x where x.plan_id=p.id and x.employee_id=ea.employee_id and x.status='IN_PROGRESS') then 'IN_PROGRESS'
-               when p.starts_at>now() then 'UPCOMING' else 'READY' end status
+               when coalesce(ea.window_starts_at,p.starts_at)>now() then 'UPCOMING' else 'READY' end status
         from exam_assignment ea join exam_plan p on p.id=ea.plan_id
-        where ea.employee_id=? and p.status='PUBLISHED' and p.ends_at>=now()
-          and not exists(select 1 from exam_attempt x where x.plan_id=p.id and x.employee_id=ea.employee_id and x.status='GRADED')
+        where ea.employee_id=? and p.status='PUBLISHED' and coalesce(ea.window_ends_at,p.ends_at)>=now()
+          and (not exists(select 1 from exam_attempt x where x.plan_id=p.id and x.employee_id=ea.employee_id and x.status='GRADED') or exists(select 1 from submission_opportunity o where o.resource_type='EXAM' and o.resource_id=p.id and o.participant_id=ea.employee_id and o.status='ACTIVE' and o.ends_at>now()))
         order by p.starts_at limit 4
         """, employeeId)) {
       String status = text(row.get("status"));
@@ -184,12 +193,12 @@ public class DashboardController {
       schedule.add(row);
     }
     for (var row : db.queryForList("""
-        select p.id,p.name title,ep.name exam_name,p.starts_at,p.ends_at
+        select p.id,p.name title,ep.name exam_name,coalesce(ea.window_starts_at,p.starts_at) starts_at,coalesce(ea.window_ends_at,p.ends_at) ends_at
         from exam_assignment ea
         join exam_plan p on p.id=ea.plan_id
         join exam_paper ep on ep.id=p.paper_id
-        where ea.employee_id=? and p.status='PUBLISHED' and p.ends_at>=now()
-          and p.starts_at<date_add(now(),interval 30 day)
+        where ea.employee_id=? and p.status='PUBLISHED' and coalesce(ea.window_ends_at,p.ends_at)>=now()
+          and coalesce(ea.window_starts_at,p.starts_at)<date_add(now(),interval 30 day)
         order by p.starts_at limit 8
         """, employeeId)) {
       row.put("type", "EXAM");
@@ -216,7 +225,7 @@ public class DashboardController {
         order by m.period_month desc limit 4
         """, employeeId));
     result.put("completed_tasks", db.queryForList("""
-        select a.id,t.title,t.deadline,a.final_score,
+        select a.id,t.title,coalesce(a.window_ends_at,t.deadline) deadline,a.final_score,
           (select max(s.reviewed_at) from task_submission s where s.assignment_id=a.id and s.status='APPROVED') completed_at
         from task_assignment a join challenge_task t on t.id=a.task_id
         where a.employee_id=? and a.status='APPROVED'
@@ -272,7 +281,7 @@ public class DashboardController {
             and s.period_key=? and s.status='PUBLISHED')),0) published_total,
           coalesce(sum(exists(select 1 from score_summary s where s.employee_id=e.id and s.summary_type='MONTH'
             and s.period_key=? and s.status='DRAFT')),0) draft_total,
-          coalesce((select round(avg(s.final_score),1) from score_summary s join employee x on x.id=s.employee_id
+          coalesce((select round(avg(s.final_score),2) from score_summary s join employee x on x.id=s.employee_id
             where s.summary_type='MONTH' and s.period_key=? and s.status='PUBLISHED'
         """ + scope.sql().replace("e.", "x.") + """
           ),0) average_score
@@ -478,7 +487,8 @@ public class DashboardController {
         "and s.status='PUBLISHED' and s.effective_month<=? order by s.effective_month desc,s.version desc limit 1),false)=true " +
         "and not exists(select 1 from monthly_evaluation m where m.employee_id=e.id and m.period_month=? and m.evaluator_type=?)" +
         scope.sql(), Number.class, args.toArray());
-    return number(value).longValue();
+    Number assigned=db.queryForObject("select count(distinct t.employee_id) from evaluation_rating_task t join evaluation_rating_reviewer r on r.task_id=t.id and r.status='ACTIVE' where r.reviewer_user_id=? and t.period_month=? and t.component_type=? and t.status='ACTIVE' and exists(select 1 from monthly_evaluation m where m.employee_id=t.employee_id and m.period_month=t.period_month and m.evaluator_type=t.component_type) and (not exists(select 1 from monthly_evaluation mine where mine.employee_id=t.employee_id and mine.period_month=t.period_month and mine.evaluator_type=t.component_type and mine.scope_id=t.scope_id and mine.evaluator_user_id=r.reviewer_user_id) or exists(select 1 from submission_opportunity o where o.resource_type='EVALUATION' and o.resource_id=t.id and o.participant_id=r.reviewer_user_id and o.status='ACTIVE' and o.starts_at<=now() and o.ends_at>now()))",Number.class,user.id(),month+"-01",component);
+    return number(value).longValue()+number(assigned).longValue();
   }
 
   private Object[] evaluationQueryArgs(String month, PermissionService.ScopeFilter scope) {

@@ -2,12 +2,14 @@
 import {computed,onMounted,ref} from 'vue'
 import {useRoute,useRouter} from 'vue-router'
 import {ArrowLeft,EditPen,Right,UserFilled} from '@element-plus/icons-vue'
+import ScheduleDialog from '@/components/ScheduleDialog.vue'
 import {api,type Envelope} from '@/api'
 import {componentLabels,scoreText,type ComponentCode} from '@/evaluation/model'
 import '@/styles/evaluation-center.css'
 
+const scheduleDialog=ref<InstanceType<typeof ScheduleDialog>>()
 const route=useRoute(),router=useRouter(),loading=ref(false),detail=ref<any>()
-const statusLabels:Record<string,string>={UNASSIGNED:'未分配',PENDING:'待评分',IN_PROGRESS:'评分中',OVERDUE:'已逾期',COMPLETED:'已完成',CLOSED:'已锁定'}
+const statusLabels:Record<string,string>={UPCOMING:'未开始',UNASSIGNED:'未分配',PENDING:'待评分',IN_PROGRESS:'评分中',OVERDUE:'已逾期',COMPLETED:'已完成',CLOSED:'已锁定'}
 const progress=computed(()=>detail.value?.reviewerCount?Math.round(detail.value.submittedCount*100/detail.value.reviewerCount):0)
 const assignedByScope=computed(()=>detail.value?.reviewers?.some((row:any)=>row.assignmentSource==='SCOPE_RULE'))
 async function load(){loading.value=true;try{detail.value=(await api.get<any,Envelope<any>>(`/evaluation/assignments/${route.params.id}`)).data}finally{loading.value=false}}
@@ -20,7 +22,7 @@ onMounted(load)
   <div class="evaluation-module-page" v-loading="loading">
     <header class="evaluation-page-head">
       <div><el-button link :icon="ArrowLeft" @click="router.push('/evaluation/assignments')">返回评分任务</el-button><span class="eyebrow">综合评价 · 任务详情</span><h1>{{detail?.employee_name||'评分任务'}}</h1><p v-if="detail">{{detail.employee_no}} · {{componentLabels[detail.component_type as ComponentCode]}}<template v-if="detail.scope_name"> · {{detail.scope_name}}</template> · {{String(detail.period_month).slice(0,7)}}</p></div>
-      <div v-if="detail" class="evaluation-head-actions"><el-tag effect="plain" size="large">{{statusLabels[detail.status]}}</el-tag><el-button type="primary" :icon="Right" @click="goScore">进入月度评分</el-button></div>
+      <div v-if="detail" class="evaluation-head-actions"><el-button @click="scheduleDialog?.open('EVALUATION',Number(route.params.id))">调整时限／个人补评分</el-button><el-tag effect="plain" size="large">{{statusLabels[detail.status]}}</el-tag><el-button type="primary" :icon="Right" @click="goScore">进入月度评分</el-button></div>
     </header>
 
     <template v-if="detail">
@@ -60,6 +62,7 @@ onMounted(load)
       </div>
     </template>
   </div>
+  <ScheduleDialog ref="scheduleDialog" @changed="load"/>
 </template>
 
 <style scoped>

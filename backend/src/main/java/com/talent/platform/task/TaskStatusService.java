@@ -32,15 +32,15 @@ public class TaskStatusService {
 
   public int refreshOverdueAssignments() {
     return db.update("update task_assignment a join challenge_task t on t.id=a.task_id "
-        + "set a.status='OVERDUE',a.final_score=0,a.version=a.version+1 "
-        + "where a.status in ('NOT_SUBMITTED','RETURNED') and t.deadline<now()");
+        + "set a.status='OVERDUE',a.final_score=coalesce((select s.score from task_submission s where s.assignment_id=a.id and s.status='APPROVED' order by s.submission_version desc limit 1),0),a.version=a.version+1 "
+        + "where a.status in ('NOT_SUBMITTED','RETURNED') and coalesce(a.window_ends_at,t.deadline)<=now()");
   }
 
   public synchronized void rescheduleNextDeadline() {
     refreshOverdueAssignments();
     if (nextDeadlineJob != null) nextDeadlineJob.cancel(false);
-    Object value = db.queryForObject("select min(t.deadline) from task_assignment a "
-        + "join challenge_task t on t.id=a.task_id where a.status in ('NOT_SUBMITTED','RETURNED') and t.deadline>now()", Object.class);
+    Object value = db.queryForObject("select min(coalesce(a.window_ends_at,t.deadline)) from task_assignment a "
+        + "join challenge_task t on t.id=a.task_id where a.status in ('NOT_SUBMITTED','RETURNED') and coalesce(a.window_ends_at,t.deadline)>now()", Object.class);
     LocalDateTime deadline = asLocalDateTime(value);
     nextDeadlineJob = deadline == null ? null : scheduler.schedule(this::rescheduleNextDeadline,
         Instant.from(deadline.atZone(ZONE)));

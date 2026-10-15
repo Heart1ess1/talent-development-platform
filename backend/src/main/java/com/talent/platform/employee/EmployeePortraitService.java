@@ -140,12 +140,12 @@ public class EmployeePortraitService {
     requireDateRange(dateFrom,dateTo);int limit=limit(size),offset=offset(page,limit);String selected=normalize(type,"MONTH",Set.of("MONTH","QUARTER"));boolean manage=SecurityUtils.current().can(Permissions.EVALUATION_MANAGE);
     String visibility=manage?" and status<>'REVOKED'":" and status='PUBLISHED'";var args=new ArrayList<Object>();args.add(employeeId);args.add(selected);visibility+=dateFilter("generated_at",dateFrom,dateTo,args);long total=query.count("select count(*) from score_summary where employee_id=? and summary_type=?"+visibility,args.toArray());args.add(limit);args.add(offset);
     var rows=query.rows("""
-      select id,summary_type,period_key,version,status,source_type,read_only,exam_score,task_score,mentor_score,station_score,training_score,
+      select id,summary_type,period_key,version,status,source_type,read_only,exam_score,task_score,mentor_score,station_score,training_score,defense_score,
         bonus,deduction,final_score,missing_items,cast(component_snapshot as char) component_snapshot,
         cast(quarter_snapshot as char) quarter_snapshot,generated_at,published_at
       from score_summary where employee_id=? and summary_type=?
       """+visibility+" order by period_key desc,version desc limit ? offset ?",args.toArray());
-    var data=rows.stream().map(x->new Evaluation(nl(x,"id"),s(x,"summary_type"),s(x,"period_key"),integer(x,"version"),s(x,"status"),decimal(x,"exam_score"),decimal(x,"task_score"),decimal(x,"mentor_score"),decimal(x,"station_score"),decimal(x,"training_score"),decimal(x,"bonus"),decimal(x,"deduction"),decimal(x,"final_score"),s(x,"missing_items"),s(x,"component_snapshot"),s(x,"quarter_snapshot"),dt(x,"generated_at"),dt(x,"published_at"),!"PUBLISHED".equals(s(x,"status")),s(x,"source_type"),bool(x,"read_only"))).toList();
+    var data=rows.stream().map(x->new Evaluation(nl(x,"id"),s(x,"summary_type"),s(x,"period_key"),integer(x,"version"),s(x,"status"),decimal(x,"exam_score"),decimal(x,"task_score"),decimal(x,"mentor_score"),decimal(x,"station_score"),decimal(x,"training_score"),decimal(x,"defense_score"),decimal(x,"bonus"),decimal(x,"deduction"),decimal(x,"final_score"),s(x,"missing_items"),s(x,"component_snapshot"),s(x,"quarter_snapshot"),dt(x,"generated_at"),dt(x,"published_at"),"DRAFT".equals(s(x,"status")),s(x,"source_type"),bool(x,"read_only"))).toList();
     return new PageResult<>(data,total,page,limit);
   }
 

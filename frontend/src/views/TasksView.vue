@@ -17,6 +17,10 @@ import {
   UserFilled,
   View
 } from '@element-plus/icons-vue'
+import TimeWindowEditor from '@/components/TimeWindowEditor.vue'
+import ScheduleDialog from '@/components/ScheduleDialog.vue'
+import {windowPayload,localDateTime} from '@/utils/timeWindow'
+import {scoreText} from '@/evaluation/model'
 import {api, type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import TaskAttachmentsPanel from '@/components/TaskAttachmentsPanel.vue'
@@ -89,8 +93,9 @@ const planReviewerMode=ref<ReviewerScopeMode>('NONE'),manualReviewerMode=ref<Rev
 const planReviewerScopes=ref<ReviewerScopeDraft[]>([]),manualReviewerScopes=ref<ReviewerScopeDraft[]>([])
 const planScopePreview=ref<any>(),manualScopePreview=ref<any>()
 
-const manualDispatch = reactive<any>({title: '', description: '', requirements: '', deadline: '', batchIds: [], classIds: [], classPositionIds: [], businessUnitIds: [], stationIds: [], reviewerIds: []})
-const dispatch = reactive<any>({planTaskIds: [], taskTitle: '', deadlineMode: 'OFFSET', baseDate: new Date().toISOString().slice(0, 10), offsetDays: 7, deadlineDate: '', batchIds: [], classIds: [], classPositionIds: [], businessUnitIds: [], stationIds: [], reviewerIds: []})
+const manualDispatch = reactive<any>({title: '', description: '', requirements: '', deadline: '', scheduleMode:'IMMEDIATE',startsAt:'',baseDate:localDateTime().slice(0,10),offsetDays:7,batchIds: [], classIds: [], classPositionIds: [], businessUnitIds: [], stationIds: [], reviewerIds: []})
+const dispatch = reactive<any>({planTaskIds: [], taskTitle: '', deadlineMode: 'IMMEDIATE',startsAt:'',endsAt:'',dispatchKey:(globalThis.crypto?.randomUUID?.()??`dispatch-${Date.now()}-${Math.random().toString(36).slice(2)}`), baseDate: new Date().toISOString().slice(0, 10), offsetDays: 7, deadlineDate: '', batchIds: [], classIds: [], classPositionIds: [], businessUnitIds: [], stationIds: [], reviewerIds: []})
+const scheduleDialog=ref<InstanceType<typeof ScheduleDialog>>()
 const submit = reactive({content: ''})
 const taskDetail = reactive<any>({title: '', description: '', requirements: '', deadline: '', attachments: []})
 
@@ -170,13 +175,13 @@ const planDispatchReady = computed(() => Boolean(
   && hasDispatchTarget.value
   && (
     (dispatch.deadlineMode === 'OFFSET' && dispatch.baseDate && dispatch.offsetDays !== null)
-    || (dispatch.deadlineMode === 'ABSOLUTE' && dispatch.deadlineDate)
+    || (['IMMEDIATE','MANUAL'].includes(dispatch.deadlineMode) && dispatch.endsAt && (dispatch.deadlineMode!=='MANUAL'||dispatch.startsAt))
   )
 ))
 const manualDispatchReady = computed(() => Boolean(
   manualDispatch.title?.trim()
   && manualDispatch.description?.trim()
-  && manualDispatch.deadline
+  && windowPayload(manualDispatch,'scheduleMode','deadline').endsAt
   && hasManualTarget.value
 ))
 const taskMetrics = computed(() => {
@@ -318,14 +323,14 @@ async function dispatchManualTask() {
   }
 }
 
-function manualDispatchPayload(){return {...manualDispatch,reviewerIds:undefined,reviewerScopes:reviewerScopePayload(manualReviewerScopes.value)}}
+function manualDispatchPayload(){const window=windowPayload(manualDispatch,'scheduleMode','deadline');return {...manualDispatch,...window,deadline:window.endsAt,reviewerIds:undefined,reviewerScopes:reviewerScopePayload(manualReviewerScopes.value)}}
 async function previewManualReviewerScopes(){
   if(!hasManualTarget.value)return ElMessage.warning('请先选择下发对象')
   manualScopePreview.value=(await api.post<any,Envelope<any>>('/tasks/dispatch-manual/preview',manualDispatchPayload())).data.scopePreview
 }
 
 function planDispatchPayload() {
-  return {...dispatch,reviewerIds:undefined,reviewerScopes:reviewerScopePayload(planReviewerScopes.value), planId: selectedPlanId.value}
+  return {...dispatch,...windowPayload(dispatch,'deadlineMode'),reviewerIds:undefined,reviewerScopes:reviewerScopePayload(planReviewerScopes.value), planId: selectedPlanId.value}
 }
 
 async function previewPlanDispatch() {
@@ -348,6 +353,7 @@ async function dispatchPlanTasks() {
     const response = await api.post<any, Envelope<any>>('/tasks/dispatch-plan', planDispatchPayload())
     previewOpen.value = false
     ElMessage.success(`已向 ${response.data.targetEmployees} 人下发，新增 ${response.data.createdAssignments} 项任务分配`)
+    dispatch.dispatchKey=(globalThis.crypto?.randomUUID?.()??`dispatch-${Date.now()}-${Math.random().toString(36).slice(2)}`)
     dispatch.planTaskIds = []
     dispatch.taskTitle = ''
     planReviewerMode.value='NONE';planReviewerScopes.value=[];planScopePreview.value=undefined
@@ -770,19 +776,8 @@ onMounted(async () => {
           </article>
 
           <article class="dispatch-step">
-            <div class="step-heading"><span>2</span><div><h3>设置完成时限</h3><p>支持按入职或安排日期计算，也可统一指定截止日</p></div></div>
-            <div class="deadline-grid">
-              <el-select v-model="dispatch.deadlineMode" filterable>
-                <el-option label="按基准日期偏移" value="OFFSET"/>
-                <el-option label="统一截止日期" value="ABSOLUTE"/>
-              </el-select>
-              <template v-if="dispatch.deadlineMode==='OFFSET'">
-                <el-date-picker v-model="dispatch.baseDate" type="date" value-format="YYYY-MM-DD" placeholder="基准日期" style="width:100%"/>
-                <el-input-number v-model="dispatch.offsetDays" :min="0" :max="365" controls-position="right" style="width:100%"/>
-              </template>
-              <el-date-picker v-else v-model="dispatch.deadlineDate" type="date" value-format="YYYY-MM-DD" placeholder="截止日期" style="width:100%"/>
-            </div>
-            <p class="field-note">{{dispatch.deadlineMode==='OFFSET'?`将在 ${dispatch.baseDate||'基准日期'} 后第 ${dispatch.offsetDays??'-'} 天 23:59 截止`:'所选任务使用同一个固定截止日期'}}</p>
+            <div class="step-heading"><span>2</span><div><h3>设置完成时限</h3><p>下发即开始、按基准日期偏移或手动设置起止时间</p></div></div>
+            <el-form label-position="top"><TimeWindowEditor :model-value="dispatch" mode-key="deadlineMode" @update:model-value="Object.assign(dispatch,$event)"/></el-form>
           </article>
 
           <article class="dispatch-step">
@@ -831,8 +826,9 @@ onMounted(async () => {
           <div class="step-heading"><span>1</span><div><h3>任务内容与资料</h3><p>适用于不属于标准培养计划的一次性任务</p></div></div>
           <div class="manual-title-grid">
             <el-input v-model="manualDispatch.title" maxlength="128" placeholder="任务名称"/>
-            <el-date-picker v-model="manualDispatch.deadline" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="截止时间" style="width:100%"/>
+
           </div>
+          <el-form label-position="top"><TimeWindowEditor :model-value="manualDispatch" end-key="deadline" @update:model-value="Object.assign(manualDispatch,$event)"/></el-form>
           <el-input v-model="manualDispatch.description" type="textarea" :rows="4" maxlength="4000" show-word-limit placeholder="任务说明"/>
           <el-input v-model="manualDispatch.requirements" type="textarea" :rows="3" maxlength="4000" show-word-limit placeholder="成果要求（可选）"/>
           <div class="manual-upload">
@@ -872,7 +868,7 @@ onMounted(async () => {
           <el-table-column label="执行进度" min-width="210"><template #default="{row}"><div class="progress-cell"><strong>{{row.approved_count}} / {{row.assigned_count}} 完成</strong><el-progress :percentage="Number(row.assigned_count)?Math.round(Number(row.approved_count)/Number(row.assigned_count)*100):0" :stroke-width="6" :show-text="false"/><span>{{row.submitted_count}} 项已提交</span></div></template></el-table-column>
           <el-table-column label="评分范围" min-width="190"><template #default="{row}"><span v-if="row.reviewer_scope_count">{{row.reviewer_scope_count}} 个范围 / {{row.reviewer_count}} 名评分人</span><span v-else>待分配</span><br><small v-if="row.reviewer_names">{{row.reviewer_names}}</small></template></el-table-column>
           <el-table-column label="状态" width="105"><template #default="{row}"><el-tag :type="managerTaskStateType(row)">{{managerTaskStateLabel(row)}}</el-tag></template></el-table-column>
-          <el-table-column label="操作" width="270" fixed="right"><template #default="{row}"><div class="task-actions"><el-button size="small" text @click="openTaskDetail(row)">详情</el-button><el-button size="small" text type="primary" @click="showTaskProgress(row)">员工进度</el-button><el-button v-if="canManage" size="small" text type="danger" @click="deleteTask(row)">删除</el-button></div></template></el-table-column>
+          <el-table-column label="操作" width="360" fixed="right"><template #default="{row}"><div class="task-actions"><el-button size="small" text @click="openTaskDetail(row)">详情</el-button><el-button size="small" text type="primary" @click="showTaskProgress(row)">员工进度</el-button><el-button v-if="canManage" size="small" text @click="scheduleDialog?.open('TASK',row.id)">{{new Date(row.deadline)<=new Date()?'重新开放':'调整时限'}}</el-button><el-button v-if="canManage" size="small" text type="danger" @click="deleteTask(row)">删除</el-button></div></template></el-table-column>
         </el-table>
       </section>
     </template>
@@ -883,9 +879,9 @@ onMounted(async () => {
         <el-table-column label="任务" min-width="280"><template #default="{row}"><div class="task-name-cell"><strong @click="openTaskDetail(row)">{{row.title}}</strong><span>{{row.description}}</span><TaskAttachmentsPanel v-if="row.attachments?.length" compact :items="row.attachments"/></div></template></el-table-column>
         <el-table-column label="截止时间" min-width="170"><template #default="{row}">{{formatDate(row.deadline)}}</template></el-table-column>
         <el-table-column label="状态" min-width="150"><template #default="{row}"><el-tag :type="statusTagType(row.status)">{{employeeTaskStatusLabel(row)}}</el-tag></template></el-table-column>
-        <el-table-column prop="final_score" label="最终平均分" width="110"><template #default="{row}">{{row.final_score??'--'}}</template></el-table-column>
+        <el-table-column prop="final_score" label="最终平均分" width="110"><template #default="{row}">{{scoreText(row.final_score)}}</template></el-table-column>
         <el-table-column prop="review_comments" label="评分意见" min-width="180" show-overflow-tooltip><template #default="{row}">{{row.review_comments||'--'}}</template></el-table-column>
-        <el-table-column label="操作" width="250" fixed="right"><template #default="{row}"><el-button link @click="openTaskDetail(row)">详情</el-button><el-button link @click="open(row,'VIEW')">提交记录</el-button><el-button v-if="['NOT_SUBMITTED','RETURNED'].includes(row.status)" link type="primary" @click="open(row,'SUBMIT')">提交成果</el-button><el-button v-else-if="row.status==='PENDING_REVIEW'&&!Number(row.submitted_review_count)" link @click="open(row,'RESUBMIT')">重新提交</el-button><span v-else-if="row.status==='PENDING_REVIEW'" class="no-submission">评分中</span></template></el-table-column>
+        <el-table-column label="操作" width="250" fixed="right"><template #default="{row}"><el-button link @click="openTaskDetail(row)">详情</el-button><el-button link @click="open(row,'VIEW')">提交记录</el-button><el-button v-if="Number(row.personal_opportunity)>0||(!Number(row.personal_window)&&['NOT_SUBMITTED','RETURNED'].includes(row.status)&&(!row.starts_at||new Date(row.starts_at)<=new Date())&&new Date(row.deadline)>new Date())" link type="primary" @click="open(row,'SUBMIT')">提交成果</el-button><el-button v-else-if="row.status==='PENDING_REVIEW'&&!Number(row.submitted_review_count)&&!Number(row.personal_window)&&(!row.starts_at||new Date(row.starts_at)<=new Date())&&new Date(row.deadline)>new Date()" link @click="open(row,'RESUBMIT')">重新提交</el-button><span v-else-if="row.status==='PENDING_REVIEW'" class="no-submission">评分中</span></template></el-table-column>
       </el-table>
     </section>
 
@@ -1045,8 +1041,8 @@ onMounted(async () => {
           <el-table-column label="操作" width="118" fixed="right">
             <template #default="scope">
               <div class="progress-row-actions">
-                <el-button v-if="scope.row.submission_id && Number(scope.row.file_count)" link type="primary" @click="previewEmployeeSubmission(scope.row)">预览</el-button>
-                <el-button v-if="scope.row.submission_id && Number(scope.row.file_count)" link :loading="downloadingAssignmentId===scope.row.id" @click="downloadEmployeeSubmissionFiles(scope.row)">下载</el-button>
+                <el-button v-if="canManage" link type="primary" @click="scheduleDialog?.open('TASK',selectedTask.id,scope.row.employee_id)">开放一次补交</el-button><el-button v-if="scope.row.submission_id && Number(scope.row.file_count)" link type="primary" @click="previewEmployeeSubmission(scope.row)">预览</el-button>
+                <el-button v-if="canManage" link type="primary" @click="scheduleDialog?.open('TASK',selectedTask.id,scope.row.employee_id)">开放一次补交</el-button><el-button v-if="scope.row.submission_id && Number(scope.row.file_count)" link :loading="downloadingAssignmentId===scope.row.id" @click="downloadEmployeeSubmissionFiles(scope.row)">下载</el-button>
                 <span v-if="!scope.row.submission_id" class="no-submission">尚未提交</span>
                 <span v-else-if="!Number(scope.row.file_count)" class="no-submission">无附件</span>
               </div>
@@ -1062,7 +1058,7 @@ onMounted(async () => {
       <template v-else>
         <div v-if="canManage" class="form-stack task-detail-form">
           <el-input v-model="taskDetail.title" placeholder="任务标题" />
-          <el-date-picker v-model="taskDetail.deadline" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="截止时间" style="width: 100%" />
+          <p>截止时间：{{formatDate(taskDetail.deadline)}}（通过“调整时限”修改）</p>
           <el-input v-model="taskDetail.description" type="textarea" :rows="5" placeholder="任务说明" />
           <el-input v-model="taskDetail.requirements" type="textarea" :rows="5" placeholder="成果要求" />
         </div>
@@ -1086,6 +1082,7 @@ onMounted(async () => {
       <template #footer><el-button @click="detailDialog = false">{{ canManage ? '取消' : '关闭' }}</el-button><el-button v-if="canManage&&!detailLoading&&!detailError" type="primary" :disabled="!taskDetail.title || !taskDetail.description || !taskDetail.deadline" @click="saveTaskDetail">保存修改</el-button></template>
     </el-dialog>
   </div>
+  <ScheduleDialog ref="scheduleDialog" @changed="async()=>{await load();if(progressDialog&&selectedTask)await showTaskProgress(selectedTask)}"/>
 </template>
 
 <style scoped>
