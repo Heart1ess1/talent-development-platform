@@ -42,10 +42,10 @@ class EvaluationAssignmentControllerTest {
   @Test void generateDelegatesMonthAndDeadline() {
     YearMonth month=YearMonth.of(2026,8);
     LocalDateTime deadline=LocalDateTime.of(2026,8,28,18,0);
-    when(service.generateMonth(month,deadline)).thenReturn(6);
+    when(service.generateScheduled(eq(month),any(),isNull(),isNull())).thenReturn(6);
 
-    assertEquals(6,controller.generate(new EvaluationAssignmentController.GenerateRequest(month,deadline)).data());
-    verify(service).generateMonth(month,deadline);
+    assertEquals(6,controller.generate(new EvaluationAssignmentController.GenerateRequest(month,deadline,"MANUAL",deadline.minusDays(2),null,null)).data());
+    verify(service).generateScheduled(eq(month),argThat(w->w.endsAt().equals(deadline)),isNull(),isNull());
   }
 
   @Test void assigningMultipleReviewersPreservesTheRequestedMode() {
@@ -65,5 +65,11 @@ class EvaluationAssignmentControllerTest {
 
     assertEquals(31L,controller.saveScopeRule(request).data());
     verify(service).saveScopeRule(month,"MENTOR","BUSINESS_UNIT",9L,List.of(21L,22L),null,"板块联合评分");
+  }
+
+  @Test void reviewerAssignmentCannotBypassAuditedScheduleChanges(){
+    var request=new EvaluationAssignmentController.AssignRequest(List.of(10L),List.of(21L),"ADD",LocalDateTime.now().plusDays(1),null);
+    org.junit.jupiter.api.Assertions.assertThrows(com.talent.platform.common.BusinessException.class,()->controller.assign(request));
+    verifyNoInteractions(service);
   }
 }

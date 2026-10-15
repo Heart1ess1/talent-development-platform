@@ -40,7 +40,7 @@ const operationCards=computed(()=>[
 async function load(){loading.value=true;try{data.value=(await api.get<any,Envelope<DashboardPayload>>('/dashboard')).data}finally{loading.value=false}}
 function open(route?:string){if(route)router.push(route)}
 function percent(value:any){return `${Number(value||0).toFixed(Number(value||0)%1?1:0)}%`}
-function score(value:any){return value===null||value===undefined||value===''?'—':Number(value).toFixed(1)}
+function score(value:any){return value===null||value===undefined||value===''?'—':Number(value).toFixed(2)}
 function dateTime(value:any){if(!value)return '时间待定';return new Intl.DateTimeFormat('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value))}
 function shortDate(value:any){if(!value)return '—';return new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value))}
 function statusLabel(value:string){return ({OVERDUE:'已逾期',RETURNED:'需修改',NOT_SUBMITTED:'待提交',PENDING_REVIEW:'待审核',IN_PROGRESS:'进行中',UPCOMING:'即将开始',READY:'可参加'} as AnyRecord)[value]||value}

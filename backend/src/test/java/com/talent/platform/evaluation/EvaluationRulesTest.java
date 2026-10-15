@@ -8,6 +8,13 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EvaluationRulesTest {
+  @Test void quarterlyDefenseWeightIsIndependentOfMonthlyWeights(){
+    assertDoesNotThrow(()->EvaluationRules.validateDefenseWeight(true,d("20")));
+    assertDoesNotThrow(()->EvaluationRules.validateDefenseWeight(false,d("0")));
+    assertThrows(BusinessException.class,()->EvaluationRules.validateDefenseWeight(true,d("0")));
+    assertThrows(BusinessException.class,()->EvaluationRules.validateDefenseWeight(true,d("100.01")));
+    assertThrows(BusinessException.class,()->EvaluationRules.validateDefenseWeight(false,d("20")));
+  }
   @Test void enabledWeightsMustTotalOneHundred() {
     assertDoesNotThrow(() -> EvaluationRules.validateComponentWeights(List.of(
       item(true,"40"),item(false,"0"),item(true,"60"))));

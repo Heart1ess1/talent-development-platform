@@ -8,8 +8,8 @@ import {useAuthStore} from '@/stores/auth'
 import '@/styles/evaluation-center.css'
 
 const router=useRouter(),auth=useAuthStore(),loading=ref(false),rows=ref<any[]>([]),month=ref(new Date().toISOString().slice(0,7)),status=ref(''),component=ref('')
-const statusLabels:Record<string,string>={PENDING:'待评分',IN_PROGRESS:'评分中',OVERDUE:'已逾期',COMPLETED:'已完成',CLOSED:'已锁定'}
-const statusTypes:Record<string,''|'success'|'warning'|'info'|'danger'>={PENDING:'warning',IN_PROGRESS:'info',OVERDUE:'danger',COMPLETED:'success',CLOSED:''}
+const statusLabels:Record<string,string>={UPCOMING:'未开始',PENDING:'待评分',IN_PROGRESS:'评分中',OVERDUE:'已逾期',COMPLETED:'已完成',CLOSED:'已锁定'}
+const statusTypes:Record<string,''|'success'|'warning'|'info'|'danger'>={UPCOMING:'info',PENDING:'warning',IN_PROGRESS:'info',OVERDUE:'danger',COMPLETED:'success',CLOSED:''}
 const metrics=computed(()=>({pending:rows.value.filter(x=>['PENDING','IN_PROGRESS'].includes(x.status)).length,overdue:rows.value.filter(x=>x.status==='OVERDUE').length,completed:rows.value.filter(x=>['COMPLETED','CLOSED'].includes(x.status)).length}))
 async function load(){loading.value=true;try{rows.value=(await api.get<any,Envelope<any[]>>('/evaluation/assignments/mine',{params:{month:month.value,status:status.value||undefined,component:component.value||undefined}})).data}finally{loading.value=false}}
 function score(row:any){router.push({path:'/evaluation/monthly',query:{employeeId:String(row.employee_id),month:String(row.period_month).slice(0,7)}})}
@@ -40,7 +40,7 @@ watch([month,status,component],load);onMounted(load)
           <div class="task-person"><span>{{row.employee_name.slice(0,1)}}</span><div><strong>{{row.employee_name}} <small>{{row.employee_no}}</small></strong><p>{{row.batch_name||'未分配批次'}} · {{row.station_name||'未分配站点'}}</p></div></div>
           <div class="task-scope"><strong>{{componentLabels[row.component_type as ComponentCode]}}</strong><span v-if="row.scope_name">{{row.scope_name}}</span><p v-if="row.note">{{row.note}}</p></div>
           <div class="task-progress"><span>团队进度 {{row.submittedCount}} / {{row.reviewerCount}}</span><el-progress :percentage="row.reviewerCount?Math.round(row.submittedCount*100/row.reviewerCount):0" :show-text="false"/><small>当前平均 {{scoreText(row.averageScore)}} · 我的评分 {{scoreText(myScore(row))}}</small></div>
-          <div class="task-action"><el-tag :type="statusTypes[row.status]" effect="plain">{{statusLabels[row.status]}}</el-tag><span>{{dueText(row.due_at)}}</span><el-button v-if="!row.locked" type="primary" @click="score(row)">{{myScore(row)===null?'开始评分':'修改评分'}}</el-button><el-button v-else @click="score(row)">查看结果</el-button></div>
+          <div class="task-action"><el-tag :type="statusTypes[row.status]" effect="plain">{{statusLabels[row.status]}}</el-tag><span>{{dueText(row.due_at)}}</span><el-button v-if="!row.locked" type="primary" @click="score(row)">{{row.personal_opportunity?'补评分一次':row.status==='UPCOMING'?'查看安排':myScore(row)===null?'开始评分':'修改评分'}}</el-button><el-button v-else @click="score(row)">查看结果</el-button></div>
         </article>
       </div>
       <el-empty v-else description="当前筛选条件下没有分配给你的评分任务"/>

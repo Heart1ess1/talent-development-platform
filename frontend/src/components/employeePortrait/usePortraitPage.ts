@@ -13,7 +13,7 @@ export function usePortraitPage<T>(employeeId:()=>number|undefined,endpoint:stri
 }
 export const dateTime=(value?:string)=>value?value.replace('T',' ').substring(0,16):'-'
 export const date=(value?:string)=>value?value.substring(0,10):'-'
-export const score=(value:any)=>value===null||value===undefined?'待评分':String(value)
+export const score=(value:any)=>value===null||value===undefined?'待评分':Number(value).toFixed(2)
 const labels:Record<string,string>={
   NOT_SUBMITTED:'待提交',OVERDUE:'逾期未完成',PENDING_REVIEW:'待评分',RETURNED:'已退回',APPROVED:'已通过',
   UPCOMING:'未开始',OPEN:'进行中',ENDED:'已结束',DRAFT:'草稿',

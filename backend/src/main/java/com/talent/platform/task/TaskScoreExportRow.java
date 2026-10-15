@@ -22,7 +22,7 @@ public class TaskScoreExportRow {
   @ExcelProperty("评分状态") private String status;
   @ExcelProperty("已评分人数") private Integer submittedReviewCount;
   @ExcelProperty("应评分人数") private Integer reviewerCount;
-  @ExcelProperty("最终平均分") private BigDecimal finalScore;
+  @ExcelProperty("最终平均分") @com.alibaba.excel.annotation.format.NumberFormat("0.00") private BigDecimal finalScore;
 
   static TaskScoreExportRow from(String title, Map<String, Object> row) {
     var out = new TaskScoreExportRow();

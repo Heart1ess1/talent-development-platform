@@ -24,7 +24,7 @@ public class TaskProgressExportRow {
   private String status;
 
   @ExcelProperty(value = "评分", index = 5)
-  private BigDecimal score;
+  @com.alibaba.excel.annotation.format.NumberFormat("0.00") private BigDecimal score;
 
   @ExcelProperty(value = "最新版本", index = 6)
   private Integer submissionVersion;

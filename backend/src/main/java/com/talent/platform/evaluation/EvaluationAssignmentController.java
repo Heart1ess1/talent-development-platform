@@ -26,7 +26,7 @@ public class EvaluationAssignmentController {
 
   public EvaluationAssignmentController(EvaluationAssignmentService service,PermissionService permissions,AuditService audit){this.service=service;this.permissions=permissions;this.audit=audit;}
 
-  public record GenerateRequest(@NotNull YearMonth month,LocalDateTime dueAt){}
+  public record GenerateRequest(@NotNull YearMonth month,LocalDateTime dueAt,String scheduleMode,LocalDateTime startsAt,java.time.LocalDate baseDate,Integer offsetDays){}
   public record AssignRequest(
     @NotEmpty List<@NotNull Long> taskIds,
     List<@NotNull Long> reviewerIds,
@@ -70,16 +70,18 @@ public class EvaluationAssignmentController {
 
   @PostMapping("/generate")
   public ApiResponse<Integer> generate(@Valid @RequestBody GenerateRequest request){
-    permissions.require(Permissions.EVALUATION_MANAGE);int created=service.generateMonth(request.month(),request.dueAt());audit.log("GENERATE_EVALUATION_RATING_TASKS","EVALUATION_MONTH",null,null,Map.of("month",request.month(),"created",created));return ApiResponse.ok(created);
+    permissions.require(Permissions.EVALUATION_MANAGE);int created=service.generateScheduled(request.month(),com.talent.platform.schedule.TimeWindow.resolve(request.scheduleMode(),request.startsAt(),request.dueAt()==null?request.month().atEndOfMonth().atTime(23,59,59):request.dueAt(),request.baseDate(),request.offsetDays(),com.talent.platform.schedule.TimeWindow.now()),request.baseDate(),request.offsetDays());audit.log("GENERATE_EVALUATION_RATING_TASKS","EVALUATION_MONTH",null,null,Map.of("month",request.month(),"created",created));return ApiResponse.ok(created);
   }
 
   @PutMapping("/reviewers")
   public ApiResponse<Void> assign(@Valid @RequestBody AssignRequest request){
+    if(request.dueAt()!=null)throw new com.talent.platform.common.BusinessException(400,"请通过调整时限入口设置评分任务时间并填写原因");
     permissions.require(Permissions.EVALUATION_MANAGE);service.assign(request.taskIds(),request.reviewerIds(),request.mode(),request.dueAt(),request.note());audit.log("ASSIGN_EVALUATION_REVIEWERS","EVALUATION_RATING_TASK",null,null,request);return ApiResponse.ok(null);
   }
 
   @PutMapping("/scope-rules")
   public ApiResponse<Long> saveScopeRule(@Valid @RequestBody ScopeRuleRequest request){
+    if(request.dueAt()!=null)throw new com.talent.platform.common.BusinessException(400,"请通过调整时限入口设置评分任务时间并填写原因");
     permissions.require(Permissions.EVALUATION_MANAGE);Long id=service.saveScopeRule(request.month(),request.component(),request.targetType(),request.targetId(),request.reviewerIds(),request.dueAt(),request.note());audit.log("SAVE_EVALUATION_REVIEWER_SCOPE","EVALUATION_REVIEWER_SCOPE",id,null,request);return ApiResponse.ok(id);
   }
 

@@ -2,7 +2,7 @@ package com.talent.platform.task;
 
 import com.talent.platform.common.ApiResponse;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -26,7 +26,7 @@ public class TaskScoringController {
   public record ReviewerScopesRequest(List<TaskReviewerScopeService.ScopeRequest> scopes) {}
   public record ScoreRequest(
       @NotNull @Pattern(regexp = "APPROVE|RETURN") String decision,
-      @Min(0) @Max(100) Integer score,
+      @DecimalMin("0") @DecimalMax("100") @Digits(integer=5,fraction=2) java.math.BigDecimal score,
       String comment
   ) {}
 

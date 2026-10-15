@@ -44,7 +44,7 @@ function editable(component:ScoreComponent){
   if(component.code!=='TRAINING')return true
   return component.canEvaluate===true||(component.requiredCount===1&&!component.breakdown?.length)
 }
-function jump(component:ScoreComponent){router.push(component.code==='EXAM'?'/exams/results':'/task-scoring?status=MY_PENDING')}
+function jump(component:ScoreComponent){router.push(component.code==='DEFENSE'?'/evaluation/defenses':component.code==='EXAM'?'/exams/results':'/task-scoring?status=MY_PENDING')}
 function candidateProgress(row:Candidate){return row.enabledCount?Math.round(row.completedCount*100/row.enabledCount):0}
 function chooseCandidate(id:number){selected.value=id}
 
@@ -103,6 +103,7 @@ onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promis
           <div class="detail-person-head"><div><span class="eyebrow">当前评价对象</span><h2>{{selectedCandidate.name}} <small>{{selectedCandidate.employee_no}}</small></h2><p>{{selectedCandidate.batch_name||'未分配批次'}} · {{selectedCandidate.station_name||'未分配站点'}} · {{month}}</p></div><el-tag :type="candidateStatusTypes[selectedCandidate.status]" effect="plain" size="large">{{candidateStatusLabels[selectedCandidate.status]}}</el-tag></div>
           <el-alert v-if="loadError" :title="loadError" description="请先在“评价模板”中把模板应用到该员工所属批次和月份，并发布方案。" type="warning" :closable="false" show-icon/>
           <template v-else-if="detail">
+            <el-alert v-if="detail.pendingRevision" title="本月存在关联修订，正式结果在成组审核发布前保持不变。" type="info" :closable="false"/>
             <el-alert v-if="detail.locked" title="该月结果已经发布并锁定" description="如确需修改，请由管理员在结果中心重开。" type="warning" :closable="false" show-icon/>
             <div class="evaluation-summary-grid compact">
               <article class="evaluation-summary-card blue"><span class="summary-icon"><el-icon><Document/></el-icon></span><div><small>当前模板</small><strong class="template-name">{{detail.templateName||`方案 V${detail.schemeVersion}`}}</strong><span>方案版本 V{{detail.schemeVersion}}</span></div></article>
@@ -121,8 +122,8 @@ onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promis
                   <div v-if="component.breakdown?.length" class="source-breakdown">
                     <div v-for="row in component.breakdown" :key="row.sourceId" class="source-breakdown-row"><span><strong>{{row.name}}</strong><small>{{row.status==='PENDING'?'等待成绩':'内部权重 '+row.weight+'%'}}</small></span><b>{{scoreText(row.scorePercent)}}</b><em>{{row.contribution===null?'—':`贡献 ${scoreText(row.contribution)}`}}</em></div>
                   </div>
-                  <p v-else class="evaluation-muted">本月暂无已分配的{{component.code==='EXAM'?'考试':'任务'}}。</p>
-                  <el-button link type="primary" @click="jump(component)">前往{{component.code==='EXAM'?'考试成绩':'任务审核'}} <el-icon><Right/></el-icon></el-button>
+                  <p v-else class="evaluation-muted">本月暂无已分配的{{component.code==='DEFENSE'?'答辩成绩':component.code==='EXAM'?'考试':'任务'}}。</p>
+                  <el-button link type="primary" @click="jump(component)">前往{{component.code==='DEFENSE'?'答辩评价':component.code==='EXAM'?'考试成绩':'任务审核'}} <el-icon><Right/></el-icon></el-button>
                 </template>
 
                 <template v-else-if="component.enabled&&component.code==='MENTOR'">
@@ -136,7 +137,7 @@ onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promis
                 </template>
 
                 <template v-else-if="component.enabled&&component.code==='STATION'">
-                  <div class="manual-progress">{{stationModeLabels[component.aggregationMode]||component.aggregationMode}}<el-button v-if="isAdmin&&!detail.locked&&component.breakdown?.length" link type="primary" @click="openStationWeights">调整权重</el-button></div>
+                  <div class="manual-progress">{{stationModeLabels[component.aggregationMode]||component.aggregationMode}}<el-button v-if="isAdmin&&!detail.locked&&!detail.pendingRevision&&component.breakdown?.length" link type="primary" @click="openStationWeights">调整权重</el-button></div>
                   <div v-for="row in component.breakdown||[]" :key="row.stationId" class="station-review-row">
                     <div class="manual-review-head"><strong>{{row.stationName}}</strong><span>{{row.days}} 天 · 权重 {{row.weight}}%</span></div>
                     <p v-if="row.reviewerCount" class="evaluation-muted">评分进度：{{row.submittedCount||0}} / {{row.reviewerCount}}<span v-if="row.evaluations?.some((x:any)=>x.score!==null)"> · 已评：{{row.evaluations.filter((x:any)=>x.score!==null).map((x:any)=>`${x.evaluatorName} ${scoreText(x.score)}分`).join('、')}}</span></p>
@@ -157,13 +158,13 @@ onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promis
                 </template>
 
                 <p v-if="component.overrideScore!==null" class="evaluation-warning">已人工核定：{{component.overrideReason}}（{{component.overrideBy}}）</p>
-                <div v-if="isAdmin&&component.enabled&&!detail.locked" class="evaluation-head-actions override-actions"><el-button size="small" @click="override(component)">{{component.overrideScore===null?'人工核定':'修改核定'}}</el-button><el-button v-if="component.overrideScore!==null" size="small" @click="removeOverride(component)">撤销</el-button></div>
+                <div v-if="isAdmin&&component.enabled&&!detail.locked&&!detail.pendingRevision" class="evaluation-head-actions override-actions"><el-button size="small" @click="override(component)">{{component.overrideScore===null?'人工核定':'修改核定'}}</el-button><el-button v-if="component.overrideScore!==null" size="small" @click="removeOverride(component)">撤销</el-button></div>
               </article>
             </div>
 
             <div class="evaluation-total-card"><div><span>当前月度综合分</span><strong>{{scoreText(detail.finalScore)}}</strong></div><div v-if="detail.missingItems.length" class="evaluation-missing">待补齐：{{detail.missingItems.map((x:ComponentCode)=>componentLabels[x]).join('、')}}</div><div v-else>所有启用项已齐全，可以生成并发布汇总。</div></div>
 
-            <section v-if="canManage" class="adjustment-panel"><div><h3>加扣分登记</h3><p>仅登记有明确事实依据的额外表现，最终值受模板上限约束。</p></div><div class="evaluation-filters"><el-select v-model="adjustment.type" filterable><el-option label="加分" value="BONUS"/><el-option label="扣分" value="DEDUCTION"/></el-select><el-input-number v-model="adjustment.points" :min="0.01" :precision="2" controls-position="right"/><el-input v-model="adjustment.reason" maxlength="1000" placeholder="填写事实依据和原因"/><el-button type="primary" :disabled="detail.locked||!adjustment.reason.trim()" @click="addAdjustment">登记</el-button></div></section>
+            <section v-if="canManage" class="adjustment-panel"><div><h3>加扣分登记</h3><p>仅登记有明确事实依据的额外表现，最终值受模板上限约束。</p></div><div class="evaluation-filters"><el-select v-model="adjustment.type" filterable><el-option label="加分" value="BONUS"/><el-option label="扣分" value="DEDUCTION"/></el-select><el-input-number v-model="adjustment.points" :min="0.01" :precision="2" controls-position="right"/><el-input v-model="adjustment.reason" maxlength="1000" placeholder="填写事实依据和原因"/><el-button type="primary" :disabled="detail.locked||detail.pendingRevision||!adjustment.reason.trim()" @click="addAdjustment">登记</el-button></div></section>
           </template>
         </template>
       </main>

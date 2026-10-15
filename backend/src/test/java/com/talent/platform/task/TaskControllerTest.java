@@ -46,6 +46,9 @@ class TaskControllerTest {
     controller = new TaskController(
         db, storage, permissions, mock(AuditService.class), taskStatus,
         taskAttachments, mock(UploadTicketService.class), scoring, reviewerScopes);
+    var windows=mock(com.talent.platform.schedule.ScheduleService.class);
+    org.springframework.test.util.ReflectionTestUtils.setField(controller,"schedules",windows);
+    when(windows.assertTaskOpen(anyLong())).thenAnswer(call->db.queryForMap("select a.status,t.deadline from task_assignment a join challenge_task t on t.id=a.task_id where a.id=?",(Long)call.getArgument(0)));
     var user = new CurrentUser(7L, "admin", "Admin", "TRAINING_ADMIN", false, 1,
         Set.of(Permissions.TASK_MANAGE), "ALL");
     SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
@@ -82,7 +85,7 @@ class TaskControllerTest {
 
     controller.submit(5L, "成果说明", null);
 
-    verify(db).update("insert into task_submission(assignment_id,submission_version,content) values(?,?,?)", 5L, 1, "成果说明");
+    verify(db).update("insert into task_submission(assignment_id,submission_version,content,opportunity_id) values(?,?,?,?)", 5L, 1, "成果说明", null);
     verify(db).update("update task_assignment set status='PENDING_REVIEW',version=version+1 where id=?", 5L);
   }
 
@@ -99,7 +102,7 @@ class TaskControllerTest {
     controller.submit(5L, "修订后的成果", null);
 
     verify(db).update("update task_submission set status='SUPERSEDED' where assignment_id=? and status='PENDING_REVIEW'", 5L);
-    verify(db).update("insert into task_submission(assignment_id,submission_version,content) values(?,?,?)", 5L, 2, "修订后的成果");
+    verify(db).update("insert into task_submission(assignment_id,submission_version,content,opportunity_id) values(?,?,?,?)", 5L, 2, "修订后的成果", null);
   }
 
   @Test
@@ -302,9 +305,9 @@ class TaskControllerTest {
     var reviewer = new CurrentUser(7L, "reviewer", "Reviewer", "CUSTOM", false, 1,
         Set.of(Permissions.TASK_REVIEW), "MENTORED");
     SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(reviewer, null, List.of()));
-    controller.review(99L, new TaskController.ReviewRequest("APPROVE", null, 80));
+    controller.review(99L, new TaskController.ReviewRequest("APPROVE", null, new java.math.BigDecimal("80")));
 
-    verify(scoring).submitReview(99L, "APPROVE", null, 80);
+    verify(scoring).submitReview(99L, "APPROVE", null, new java.math.BigDecimal("80"));
   }
 
   @Test
@@ -325,12 +328,13 @@ class TaskControllerTest {
         .thenReturn(List.of(21L, 22L, 23L));
     when(db.queryForObject(startsWith("select count(*) from challenge_task"), eq(Integer.class), any(Object[].class)))
         .thenReturn(1);
+    LocalDate baseDate=com.talent.platform.schedule.TimeWindow.now().toLocalDate().plusDays(1);
     var request = new TaskController.PlanDispatchRequest(
         4L,
         List.of(11L, 12L),
         null,
         "OFFSET",
-        LocalDate.of(2026, 7, 28),
+        baseDate,
         7,
         null,
         List.of(2L),
@@ -339,7 +343,7 @@ class TaskControllerTest {
         List.of(3L),
         List.of(),
         List.of(),
-        null);
+        null, null, null, null);
 
     var result = controller.previewPlanDispatch(request).data();
 
@@ -347,7 +351,7 @@ class TaskControllerTest {
     assertThat(result.targetEmployees()).isEqualTo(3);
     assertThat(result.selectedTasks()).isEqualTo(2);
     assertThat(result.reusedTasks()).isEqualTo(1);
-    assertThat(result.deadline()).isEqualTo(LocalDateTime.of(2026, 8, 4, 23, 59, 59));
+    assertThat(result.deadline()).isEqualTo(baseDate.plusDays(7).atTime(23,59,59));
     verify(db).queryForList(
         argThat(sql -> sql.contains("e.batch_id in (?)")
             && sql.contains("e.class_id in (?,?)")

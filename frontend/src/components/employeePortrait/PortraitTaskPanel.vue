@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {scoreText} from '@/evaluation/model'
 import {onBeforeUnmount,onMounted,ref,watch} from 'vue'
 import {Download,View} from '@element-plus/icons-vue'
 import {ElMessage} from 'element-plus'
@@ -11,7 +12,7 @@ const dateRange=ref<string[]>([])
 const q=usePortraitPage<any>(()=>props.employeeId,'tasks',()=>({status:status.value||undefined,dateFrom:dateRange.value[0],dateTo:dateRange.value[1]}))
 const taskStateLabel=(row:any)=>row.overdue?'逾期未完成':row.completedLate?'已通过（延期）':taskStatusLabel(row.status)
 const taskStateType=(row:any):'success'|'warning'|'danger'|'info'=>row.overdue?'danger':row.completedLate?'warning':row.status==='APPROVED'?'success':row.status==='RETURNED'?'danger':row.status==='PENDING_REVIEW'?'warning':'info'
-const versionScore=(row:any)=>row.score!==null&&row.score!==undefined?String(row.score):['SUPERSEDED','RETURNED'].includes(row.status)?'-':'待评分'
+const versionScore=(row:any)=>row.score!==null&&row.score!==undefined?Number(row.score).toFixed(2):['SUPERSEDED','RETURNED'].includes(row.status)?'-':'待评分'
 const previewOpen=ref(false),previewLoading=ref(false),previewType=ref<'PDF'|'IMAGE'|'TEXT'|'HTML'|'UNSUPPORTED'>('UNSUPPORTED'),previewUrl=ref(''),previewContent=ref(''),previewFile=ref<any>()
 function clearPreview(){if(previewUrl.value)URL.revokeObjectURL(previewUrl.value);previewUrl.value='';previewContent.value='';previewFile.value=undefined;previewType.value='UNSUPPORTED'}
 function saveBlob(blob:Blob,name:string){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;link.click();URL.revokeObjectURL(url)}
@@ -72,7 +73,7 @@ onBeforeUnmount(clearPreview)
                 <template #default="x">
                   <div v-if="x.row.reviews?.length" class="reviews">
                     <span v-for="review in x.row.reviews" :key="review.reviewerId">
-                      {{review.reviewerName}}：{{statusLabel(review.status)}}<template v-if="review.score!==null">，{{review.score}}分</template><template v-if="review.comment">，{{review.comment}}</template>
+                      {{review.reviewerName}}：{{statusLabel(review.status)}}<template v-if="review.score!==null">，{{scoreText(review.score)}}分</template><template v-if="review.comment">，{{review.comment}}</template>
                     </span>
                   </div>
                   <span v-else>{{x.row.reviewComment||'暂无评分结果'}}</span>

@@ -20,6 +20,7 @@ import java.util.*;
 @Service
 public class TaskScoringService {
   private static final Set<String> GLOBAL_ROLES = Set.of("TRAINING_ADMIN", "ADMIN", "SUPER_ADMIN");
+  @org.springframework.beans.factory.annotation.Autowired private com.talent.platform.evaluation.EvaluationRevisionService revisions;
   private final JdbcTemplate db;
   private final PermissionService permissions;
   private final AuditService audit;
@@ -316,12 +317,13 @@ public class TaskScoringService {
   }
 
   @Transactional
-  public void submitReview(Long submissionId, String decision, String comment, Integer score) {
+  public void submitReview(Long submissionId, String decision, String comment, BigDecimal score) {
     permissions.require(Permissions.TASK_SCORE);
     if (!Set.of("APPROVE", "RETURN").contains(decision)) throw new BusinessException(400, "评分结论无效");
-    if ("APPROVE".equals(decision) && (score == null || score < 0 || score > 100)) {
-      throw new BusinessException(400, "通过时必须填写 0 到 100 的整数评分");
+    if ("APPROVE".equals(decision) && (score == null || score.signum() < 0 || score.compareTo(new BigDecimal("100")) > 0)) {
+      throw new BusinessException(400, "通过时必须填写 0.00 到 100.00 的评分");
     }
+    if ("APPROVE".equals(decision)) score = com.talent.platform.common.ScoreValues.require(score, new BigDecimal("100"));
     if ("RETURN".equals(decision) && (comment == null || comment.isBlank())) {
       throw new BusinessException(400, "退回时必须填写意见");
     }
@@ -346,24 +348,25 @@ public class TaskScoringService {
       db.update("update task_submission_review set status='VOIDED' where submission_id=? and status='PENDING'", submissionId);
       db.update("update task_submission set status='RETURNED',reviewed_by=?,reviewed_at=now(),review_comment=?,score=null where id=?",
           userId, comment, submissionId);
-      db.update("update task_assignment set status='RETURNED',final_score=null,version=version+1 where id=?", assignmentId);
+      db.update("update task_assignment set status='RETURNED',version=version+1 where id=?", assignmentId);
     } else {
       Integer remaining = db.queryForObject(
           "select count(*) from task_submission_review where submission_id=? and status='PENDING'",
           Integer.class, submissionId);
       if (remaining != null && remaining == 0) {
         BigDecimal average = db.queryForObject("""
-            select round(avg(score),1) from task_submission_review
+            select round(avg(score),2) from task_submission_review
             where submission_id=? and status='SUBMITTED' and decision='APPROVE'
             """, BigDecimal.class, submissionId);
         if (average == null) throw new BusinessException(409, "评分结果不完整");
-        average = average.setScale(1, RoundingMode.HALF_UP);
+        average = average.setScale(2, RoundingMode.HALF_UP);
         db.update("update task_submission set status='APPROVED',reviewed_by=?,reviewed_at=now(),score=? where id=?",
             userId, average, submissionId);
         db.update("update task_assignment set status='APPROVED',final_score=?,version=version+1 where id=?",
             average, assignmentId);
       }
     }
+    if(revisions!=null){var source=db.queryForMap("select a.employee_id,coalesce(a.score_month,date(t.deadline)) score_month from task_assignment a join challenge_task t on t.id=a.task_id where a.id=?",assignmentId);revisions.changed(Map.of(((Number)source.get("employee_id")).longValue(),Set.of(YearMonth.parse(source.get("score_month").toString().substring(0,7)))),"更新任务评分");}
     audit.log("SCORE_TASK_SUBMISSION", "TASK_SUBMISSION", submissionId, null,
         Map.of("decision", decision, "score", score == null ? "" : score, "comment", comment == null ? "" : comment));
   }

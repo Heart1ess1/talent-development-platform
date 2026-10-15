@@ -62,10 +62,11 @@ const evaluationChildren=computed<MenuItem[]>(()=>{
   const children:MenuItem[]=[
     {to:'/evaluation/workbench',label:'评价工作台'}
   ]
+  if(auth.can('evaluation:manage'))children.push({to:'/evaluation/templates',label:'评价模板'})
   if(auth.can('evaluation:manage'))children.push({to:'/evaluation/assignments',label:'评分任务'})
   if(auth.can('evaluation:submit'))children.push({to:'/evaluation/my-tasks',label:'我的评分任务'})
   children.push({to:'/evaluation/monthly',label:'月度评分'})
-  if(auth.can('evaluation:manage'))children.push({to:'/evaluation/templates',label:'评价模板'})
+  if(auth.can('evaluation:manage'))children.push({to:'/evaluation/defenses',label:'答辩评价'},{to:'/evaluation/revisions',label:'关联修订审核'})
   children.push({to:'/evaluation/results',label:'结果中心'})
   if(auth.can('history:import'))children.push({to:'/evaluation/results/history-imports',label:'历史评价导入'})
   return children

@@ -46,7 +46,7 @@ public final class EmployeePortraitDtos {
       String sourceType,boolean readOnly) {}
   public record Evaluation(Long id,String type,String period,int version,String status,
       BigDecimal examScore,BigDecimal taskScore,BigDecimal mentorScore,BigDecimal stationScore,
-      BigDecimal trainingScore,BigDecimal bonus,BigDecimal deduction,BigDecimal finalScore,
+      BigDecimal trainingScore,BigDecimal defenseScore,BigDecimal bonus,BigDecimal deduction,BigDecimal finalScore,
       String missingItems,String componentSnapshot,String quarterSnapshot,LocalDateTime generatedAt,
       LocalDateTime publishedAt,boolean provisional,String sourceType,boolean readOnly) {}
   public record StationHistory(Long id,String fromStation,String toStation,LocalDateTime effectiveAt,

@@ -24,6 +24,12 @@ public class EvaluationAssignmentService {
   public EvaluationAssignmentService(JdbcTemplate db,EvaluationService evaluation){this.db=db;this.evaluation=evaluation;}
 
   @Transactional
+  public int generateScheduled(YearMonth month,com.talent.platform.schedule.TimeWindow window){return generateScheduled(month,window,null,null);}
+
+  @Transactional
+  public int generateScheduled(YearMonth month,com.talent.platform.schedule.TimeWindow window,LocalDate baseDate,Integer offsetDays){int created=generateMonth(month,window.endsAt());db.update("update evaluation_rating_task set starts_at=?,due_at=?,schedule_mode=?,base_date=?,offset_days=? where period_month=? and starts_at is null",window.startsAt(),window.endsAt(),window.mode(),baseDate,offsetDays,month.atDay(1));return created;}
+
+  @Transactional
   public int generateMonth(YearMonth month,LocalDateTime dueAt){
     LocalDateTime effectiveDue=dueAt==null?month.atEndOfMonth().atTime(23,59,59):dueAt;
     long operator=SecurityUtils.current().id();int created=0;
@@ -50,7 +56,7 @@ public class EvaluationAssignmentService {
       List<Map<String,Object>> tasks=list(month,component,null,null,null);var item=new LinkedHashMap<String,Object>();
       item.put("component",component);item.put("taskCount",tasks.size());item.put("employeeCount",tasks.stream().map(x->x.get("employee_id")).distinct().count());
       item.put("unassignedCount",tasks.stream().filter(x->"UNASSIGNED".equals(x.get("status"))).count());
-      item.put("pendingCount",tasks.stream().filter(x->Set.of("PENDING","IN_PROGRESS","OVERDUE").contains(String.valueOf(x.get("status")))).count());
+      item.put("pendingCount",tasks.stream().filter(x->Set.of("UPCOMING","PENDING","IN_PROGRESS","OVERDUE").contains(String.valueOf(x.get("status")))).count());
       item.put("completedCount",tasks.stream().filter(x->Set.of("COMPLETED","CLOSED").contains(String.valueOf(x.get("status")))).count());
       item.put("coveredTaskCount",tasks.stream().filter(x->number(x.get("reviewerCount"))>0).count());
       item.put("ruleCount",db.queryForObject("select count(*) from evaluation_reviewer_scope_rule where period_month=? and component_type=? and status='ACTIVE'",Integer.class,month.atDay(1),component));
@@ -62,11 +68,11 @@ public class EvaluationAssignmentService {
 
   public List<Map<String,Object>> list(YearMonth month,String component,String status,Long reviewerId,String keyword){
     StringBuilder sql=new StringBuilder("""
-      select t.id,t.employee_id,t.period_month,t.component_type,t.scope_id,t.due_at,t.note,t.status task_status,
+      select t.id,t.employee_id,t.period_month,t.component_type,t.scope_id,t.starts_at,t.schedule_mode,t.schedule_version,t.due_at,t.note,t.status task_status,
         e.employee_no,e.name employee_name,e.class_id,cls.label class_name,
         e.class_position_id,cp.label class_position_name,
         b.name batch_name,bu.name business_unit_name,s.name station_name,scope.name scope_name,
-        exists(select 1 from score_summary ss where ss.employee_id=t.employee_id and ss.summary_type='MONTH' and ss.period_key=date_format(t.period_month,'%Y-%m') and ss.status='PUBLISHED') locked
+        exists(select 1 from score_summary ss where ss.employee_id=t.employee_id and ss.summary_type='MONTH' and ss.period_key=date_format(t.period_month,'%Y-%m') and ss.status='PUBLISHED') and not exists(select 1 from evaluation_revision_member rm join evaluation_revision_group rg on rg.id=rm.group_id where rm.employee_id=t.employee_id and rm.period_key=date_format(t.period_month,'%Y-%m') and rm.summary_type='MONTH' and rg.status='DRAFT') locked
       from evaluation_rating_task t join employee e on e.id=t.employee_id
       left join talent_batch b on b.id=e.batch_id left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS' left join dictionary_item cp on cp.id=e.class_position_id and cp.type_code='CLASS_POSITION' left join business_unit bu on bu.id=e.business_unit_id left join service_station s on s.id=e.station_id
       left join service_station scope on scope.id=nullif(t.scope_id,0)
@@ -167,7 +173,7 @@ public class EvaluationAssignmentService {
   private Map<String,Object> taskRow(Long taskId){
     var rows=db.queryForList("""
       select t.*,e.employee_no,e.name employee_name,b.name batch_name,bu.name business_unit_name,s.name station_name,scope.name scope_name,
-        exists(select 1 from score_summary ss where ss.employee_id=t.employee_id and ss.summary_type='MONTH' and ss.period_key=date_format(t.period_month,'%Y-%m') and ss.status='PUBLISHED') locked
+        exists(select 1 from score_summary ss where ss.employee_id=t.employee_id and ss.summary_type='MONTH' and ss.period_key=date_format(t.period_month,'%Y-%m') and ss.status='PUBLISHED') and not exists(select 1 from evaluation_revision_member rm join evaluation_revision_group rg on rg.id=rm.group_id where rm.employee_id=t.employee_id and rm.period_key=date_format(t.period_month,'%Y-%m') and rm.summary_type='MONTH' and rg.status='DRAFT') locked
       from evaluation_rating_task t join employee e on e.id=t.employee_id
       left join talent_batch b on b.id=e.batch_id left join business_unit bu on bu.id=e.business_unit_id left join service_station s on s.id=e.station_id
       left join service_station scope on scope.id=nullif(t.scope_id,0) where t.id=?
@@ -190,7 +196,14 @@ public class EvaluationAssignmentService {
     List<BigDecimal> scores=reviewers.stream().filter(x->x.get("score")!=null).map(x->new BigDecimal(String.valueOf(x.get("score")))).toList();
     BigDecimal average=EvaluationRules.average(scores);
     boolean complete=!reviewers.isEmpty()&&submitted==reviewers.size();
-    String state;if(locked(task)||"CLOSED".equals(task.get("task_status"))||"CLOSED".equals(task.get("status")))state="CLOSED";else if(reviewers.isEmpty())state="UNASSIGNED";else if(complete)state="COMPLETED";else if(isOverdue(task.get("due_at")))state="OVERDUE";else if(submitted>0)state="IN_PROGRESS";else state="PENDING";
+    var opportunities=db.queryForList("select participant_id,starts_at,ends_at from submission_opportunity where resource_type='EVALUATION' and resource_id=? and status='ACTIVE' and ends_at>now()",taskId);
+    Map<String,Object> mine=opportunities.stream().filter(o->((Number)o.get("participant_id")).longValue()==SecurityUtils.current().id()).findFirst().orElse(null);
+    task.put("personal_opportunity",mine!=null);task.put("pendingPersonalCount",opportunities.size());
+    Object effectiveEnd=mine==null?task.get("due_at"):mine.get("ends_at"),effectiveStart=mine==null?task.get("starts_at"):mine.get("starts_at");
+    if(mine!=null){task.put("due_at",effectiveEnd);task.put("starts_at",effectiveStart);}
+    if(mine==null&&!opportunities.isEmpty())effectiveEnd=opportunities.stream().map(o->com.talent.platform.schedule.TimeWindow.time(o.get("ends_at"))).max(java.util.Comparator.naturalOrder()).orElse(null);
+    boolean upcoming=effectiveStart!=null&&com.talent.platform.schedule.TimeWindow.now().isBefore(com.talent.platform.schedule.TimeWindow.time(effectiveStart));
+    String state;if(locked(task)||"CLOSED".equals(task.get("task_status"))||"CLOSED".equals(task.get("status")))state="CLOSED";else if(reviewers.isEmpty())state="UNASSIGNED";else if(complete&&opportunities.isEmpty())state="COMPLETED";else if(upcoming)state="UPCOMING";else if(isOverdue(effectiveEnd))state="OVERDUE";else if(submitted>0)state="IN_PROGRESS";else state="PENDING";
     task.put("reviewers",reviewers);task.put("reviewerCount",reviewers.size());task.put("submittedCount",submitted);task.put("averageScore",average);task.put("finalAverageScore",complete?average:null);task.put("status",state);task.put("locked",locked(task));return task;
   }
 

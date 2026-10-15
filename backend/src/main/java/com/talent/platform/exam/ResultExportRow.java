@@ -22,12 +22,15 @@ public class ResultExportRow {
     private Integer attemptNo;
 
     @ExcelProperty("客观题得分")
+    @com.alibaba.excel.annotation.format.NumberFormat("0.00")
     private BigDecimal objectiveScore;
 
     @ExcelProperty("主观题得分")
+    @com.alibaba.excel.annotation.format.NumberFormat("0.00")
     private BigDecimal subjectiveScore;
 
     @ExcelProperty("总分")
+    @com.alibaba.excel.annotation.format.NumberFormat("0.00")
     private BigDecimal totalScore;
 
     @ExcelProperty("状态")

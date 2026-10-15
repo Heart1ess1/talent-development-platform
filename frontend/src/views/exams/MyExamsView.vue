@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {scoreText} from '@/evaluation/model'
 import {computed,onBeforeUnmount,onMounted,reactive,ref} from 'vue'
 import {useRoute} from 'vue-router'
 import {ElMessage} from 'element-plus'
@@ -33,7 +34,7 @@ async function load(){
 function planPhase(row:any){return planPhaseLabels[row.plan_phase]??{label:row.status,type:'info'}}
 function participation(row:any){return participationLabels[row.participation_status]??{label:'--',type:'info'}}
 function resultStatus(row:any){return resultStatusLabels[row.result_status]??{label:'--',type:'success'}}
-function canStart(row:any){return ['READY','IN_PROGRESS'].includes(row.participation_status)}
+function canStart(row:any){return Number(row.personal_opportunity)>0||['READY','IN_PROGRESS'].includes(row.participation_status)}
 async function enterFullscreen(){
   if(examFullscreenElement(document)){isFullscreen.value=true;return true}
   const entered=await requestExamFullscreen(document)
@@ -192,7 +193,7 @@ onBeforeUnmount(()=>closeExam());onMounted(load)
           <el-alert title="成绩在整场考试结束后自动发布；考试进行期间不会提前显示分数。" type="info" :closable="false" show-icon class="result-notice"/>
           <el-table :data="results" empty-text="暂无已发布成绩" class="result-table">
             <el-table-column prop="exam_name" label="考试" min-width="160"/>
-            <el-table-column prop="total_score" label="成绩" width="100"><template #default="s"><strong class="result-score">{{s.row.total_score}}</strong></template></el-table-column>
+            <el-table-column prop="total_score" label="成绩" width="100"><template #default="s"><strong class="result-score">{{scoreText(s.row.total_score)}}</strong></template></el-table-column>
             <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="resultStatus(s.row).type" effect="plain">{{resultStatus(s.row).label}}</el-tag></template></el-table-column>
             <el-table-column label="计分月份" width="130"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column>
           </el-table>

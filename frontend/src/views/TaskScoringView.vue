@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {scoreText} from '@/evaluation/model'
 import {computed,onBeforeUnmount,onMounted,reactive,ref} from 'vue'
 import {useRoute,useRouter} from 'vue-router'
 import {ElMessage,ElMessageBox} from 'element-plus'
@@ -68,7 +69,7 @@ async function saveReviewers(){
 }
 async function openSubmission(row:any){if(!row.submission_id)return;submissionDialog.value=true;submissionLoading.value=true;Object.assign(scoreForm,{decision:'APPROVE',score:null,comment:''});try{submission.value=(await api.get<any,Envelope<any>>(`/task-scoring/submissions/${row.submission_id}`)).data}finally{submissionLoading.value=false}}
 async function submitScore(){
-  if(scoreForm.decision==='APPROVE'&&(!Number.isInteger(scoreForm.score)||scoreForm.score<0||scoreForm.score>100))return ElMessage.warning('请填写 0 到 100 的整数评分')
+  if(scoreForm.decision==='APPROVE'&&(!Number.isFinite(scoreForm.score)||Math.abs(scoreForm.score*100-Math.round(scoreForm.score*100))>1e-8||scoreForm.score<0||scoreForm.score>100))return ElMessage.warning('请填写 0 到 100 的评分（最多两位小数）')
   if(scoreForm.decision==='RETURN'&&!scoreForm.comment.trim())return ElMessage.warning('退回时必须填写意见')
   await ElMessageBox.confirm('评分提交后不能修改，确认提交本次评分？','确认评分',{type:'warning'})
   scoring.value=true
@@ -156,7 +157,7 @@ onBeforeUnmount(clearPreview)
           <el-table-column label="提交版本" width="110"><template #default="{row}">{{row.submission_id?`第 ${row.submission_version} 版`:'未提交'}}</template></el-table-column>
           <el-table-column label="提交时间" min-width="170"><template #default="{row}">{{formatDate(row.submitted_at)}}</template></el-table-column>
           <el-table-column label="评分状态" min-width="150"><template #default="{row}">{{assignmentStatus(row)}}</template></el-table-column>
-          <el-table-column prop="final_score" label="最终平均分" width="125" sortable="custom" :sort-orders="['descending','ascending',null]"><template #default="{row}">{{row.final_score??'--'}}</template></el-table-column>
+          <el-table-column prop="final_score" label="最终平均分" width="125" sortable="custom" :sort-orders="['descending','ascending',null]"><template #default="{row}">{{scoreText(row.final_score)}}</template></el-table-column>
           <el-table-column label="操作" width="120"><template #default="{row}"><el-button v-if="row.submission_id" link :type="row.canScore?'warning':'primary'" @click="openSubmission(row)">{{row.canScore?'开始评分':'查看成果'}}</el-button></template></el-table-column>
         </el-table>
         </div>
@@ -168,8 +169,8 @@ onBeforeUnmount(clearPreview)
         <div class="submission-title"><span><strong>{{submission.employee_name}}</strong><small>{{submission.employee_no}} · 第 {{submission.submission_version}} 版</small></span><el-tag>{{submission.status}}</el-tag></div>
         <h3>提交说明</h3><p class="submission-content">{{submission.content||'未填写文字说明'}}</p>
         <el-table :data="submission.files" empty-text="未提交附件"><el-table-column prop="original_name" label="附件" min-width="260"/><el-table-column label="大小" width="100"><template #default="{row}">{{row.size?`${Math.ceil(row.size/1024)} KB`:'--'}}</template></el-table-column><el-table-column label="操作" width="140"><template #default="{row}"><el-button link @click="previewFile(row)">预览</el-button><el-button link @click="downloadFile(row)">下载</el-button></template></el-table-column></el-table>
-        <h3>评分进度</h3><div class="review-list"><article v-for="item in submission.reviews" :key="item.reviewer_user_id"><span class="reviewer-avatar"><el-icon><UserFilled/></el-icon></span><span><strong>{{item.reviewer_name}}<small v-if="item.mine">（我）</small></strong><p v-if="item.decision">{{item.decision==='APPROVE'?`${item.score} 分`:'退回'}} · {{item.comment||'无意见'}}</p><p v-else>{{item.status==='SUBMITTED'?'已提交，完成后统一公开':'尚未评分'}}</p></span><el-tag :type="reviewStatusType(item)">{{reviewStatusLabel(item)}}</el-tag></article></div>
-        <section v-if="submission.canScore" class="score-form"><h3>提交我的评分</h3><el-radio-group v-model="scoreForm.decision"><el-radio value="APPROVE">通过并评分</el-radio><el-radio value="RETURN">退回员工</el-radio></el-radio-group><el-input-number v-if="scoreForm.decision==='APPROVE'" v-model="scoreForm.score" :min="0" :max="100" :precision="0" :controls="false" placeholder="0-100"/><el-input v-model="scoreForm.comment" type="textarea" :rows="3" :placeholder="scoreForm.decision==='RETURN'?'退回意见（必填）':'评分意见（可选）'"/></section>
+        <h3>评分进度</h3><div class="review-list"><article v-for="item in submission.reviews" :key="item.reviewer_user_id"><span class="reviewer-avatar"><el-icon><UserFilled/></el-icon></span><span><strong>{{item.reviewer_name}}<small v-if="item.mine">（我）</small></strong><p v-if="item.decision">{{item.decision==='APPROVE'?`${scoreText(item.score)} 分`:'退回'}} · {{item.comment||'无意见'}}</p><p v-else>{{item.status==='SUBMITTED'?'已提交，完成后统一公开':'尚未评分'}}</p></span><el-tag :type="reviewStatusType(item)">{{reviewStatusLabel(item)}}</el-tag></article></div>
+        <section v-if="submission.canScore" class="score-form"><h3>提交我的评分</h3><el-radio-group v-model="scoreForm.decision"><el-radio value="APPROVE">通过并评分</el-radio><el-radio value="RETURN">退回员工</el-radio></el-radio-group><el-input-number v-if="scoreForm.decision==='APPROVE'" v-model="scoreForm.score" :min="0" :max="100" :precision="2" :step="0.01" :controls="false" placeholder="0-100"/><el-input v-model="scoreForm.comment" type="textarea" :rows="3" :placeholder="scoreForm.decision==='RETURN'?'退回意见（必填）':'评分意见（可选）'"/></section>
       </div>
       <template #footer><el-button v-if="canManage&&submission?.reviews?.some((x:any)=>x.status==='SUBMITTED')" type="danger" plain @click="resetScore">重置本轮评分</el-button><el-button @click="submissionDialog=false">关闭</el-button><el-button v-if="submission?.canScore" type="primary" :loading="scoring" @click="submitScore">确认提交评分</el-button></template>
     </el-dialog>
