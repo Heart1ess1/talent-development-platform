@@ -79,11 +79,11 @@ python backend/src/test/resources/quarter_defense_acceptance.py talent_scoring_q
 
 发布前备份数据库与当前应用包，前后端配套升级；核查 Flyway、健康接口和实际角色流程。新功能产生业务数据后，旧应用不能完整解释个人机会和关联修订，应使用向前修复；如需整库恢复，必须核对升级后的新增业务数据。
 
-本次工作为代码实现及本地验收，生产发布记录独立维护。
+本节记录代码实现及本地验收，后续生产发布记录独立维护。
 
 ## 2026-10-16 本地验收记录
 
-- 分支：`codex/scoring-defense-schedules`；生产服务未变更。
+- 分支：`codex/scoring-defense-schedules`；本地验收阶段未改动生产服务。
 - 后端：184项单元测试，失败/错误/跳过均为0。
 - 前端：24个测试文件、69项测试通过；vue-tsc与Vite构建通过。构建仍有既有大包体积提示。
 - 独立MySQL 8.4数据库`talent_scoring_qa2`实际执行V42～V47均成功；V47前后已发布结果的内容/状态/分值快照SHA-256一致。
@@ -91,3 +91,6 @@ python backend/src/test/resources/quarter_defense_acceptance.py talent_scoring_q
 - 浏览器：管理员、导师、员工账号在隔离数据中验证入口；员工已通过任务补交并保留旧分；导师指定补评分表单可编辑；管理员第二季度答辩实际录入85.25、保存草稿并发布成功，第一季度97.55保持独立。
 - 桌面1440宽度下，筛选栏控件和查询按钮同一行；四场次完整展示；评价模板已位于评价工作台和评分任务之间。
 - 验收截图和候选应用包放在`output/scoring-defense-schedules-20261016-v2/`。该包用于发布准备，不能替代生产备份、正式数据验收和部署记录。
+## 生产发布记录
+
+2026-10-16 已部署生产环境，版本、备份、迁移及验收边界见[发布记录](releases/2026-10-16-scoring-defense-schedules.md)。
