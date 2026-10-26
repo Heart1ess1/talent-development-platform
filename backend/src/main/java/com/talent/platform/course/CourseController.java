@@ -72,6 +72,7 @@ public class CourseController {
   private final AuditService audit;
   private final FileStorageService storage;
   private final UploadTicketService uploadTickets;
+  private final SessionAssignmentService assignments;
   private final SecureRandom random = new SecureRandom();
 
   public CourseController(
@@ -79,13 +80,15 @@ public class CourseController {
       PermissionService permissions,
       AuditService audit,
       FileStorageService storage,
-      UploadTicketService uploadTickets
+      UploadTicketService uploadTickets,
+      SessionAssignmentService assignments
   ) {
     this.db = db;
     this.permissions = permissions;
     this.audit = audit;
     this.storage = storage;
     this.uploadTickets = uploadTickets;
+    this.assignments = assignments;
   }
 
   public record CourseRequest(
@@ -411,10 +414,11 @@ public class CourseController {
   }
 
   @PutMapping("/sessions/{id}")
+  @Transactional
   public ApiResponse<Void> updateSession(@PathVariable Long id, @Valid @RequestBody SessionRequest request) {
     permissions.require(Permissions.COURSE_MANAGE);
     var details = validateSession(request);
-    var before = one("select * from course_session where id=?", id);
+    var before = one("select * from course_session where id=? for update", id);
     db.update("""
         update course_session
         set course_id=?,session_title_id=?,title=?,location=?,delivery_mode=?,
@@ -432,7 +436,7 @@ public class CourseController {
   @Transactional
   public ApiResponse<Void> deleteSession(@PathVariable Long id) {
     permissions.require(Permissions.COURSE_MANAGE);
-    var before = one("select * from course_session where id=?", id);
+    var before = one("select * from course_session where id=? for update", id);
     if (count("select count(*) from attendance where session_id=?", id) > 0) {
       throw new BusinessException(400, "该场次已有签到记录，不能删除");
     }
@@ -459,35 +463,22 @@ public class CourseController {
 
   @PostMapping("/sessions/{id}/enroll")
   public ApiResponse<Integer> enroll(@PathVariable Long id, @Valid @RequestBody EnrollRequest request) {
-    permissions.require(Permissions.COURSE_MANAGE);
-    one("select id from course_session where id=?", id);
-    int added = 0;
-    for (Long employeeId : new LinkedHashSet<>(request.employeeIds())) {
-      added += db.update("""
-          insert ignore into course_enrollment(session_id,employee_id,assigned_by) values(?,?,?)
-          """, id, employeeId, SecurityUtils.current().id());
-    }
-    audit.log("ENROLL_SESSION", "SESSION", id, null, request);
-    return ApiResponse.ok(added);
+    return ApiResponse.ok(assignments.addLegacy(id, request.employeeIds()));
   }
 
   @DeleteMapping("/sessions/{id}/enrollments/{employeeId}")
   public ApiResponse<Void> removeEnrollment(@PathVariable Long id, @PathVariable Long employeeId) {
-    permissions.require(Permissions.COURSE_MANAGE);
-    if (count("select count(*) from attendance where session_id=? and employee_id=?", id, employeeId) > 0) {
-      throw new BusinessException(400, "该员工已有签到记录，不能移除课程安排");
-    }
-    db.update("delete from course_enrollment where session_id=? and employee_id=?", id, employeeId);
-    audit.log("REMOVE_SESSION_ENROLLMENT", "SESSION", id, null, Map.of("employeeId", employeeId));
+    assignments.removeLegacy(id, employeeId);
     return ApiResponse.ok(null);
   }
 
   @PostMapping("/attendance/checkin")
+  @Transactional
   @PreAuthorize("hasRole('EMPLOYEE')")
   public ApiResponse<Void> checkin(@Valid @RequestBody CheckinRequest request) {
     var user = SecurityUtils.current();
     var rows = db.queryForList("""
-        select id,checkin_starts_at,checkin_ends_at from course_session where checkin_code=?
+        select id,checkin_starts_at,checkin_ends_at from course_session where checkin_code=? for update
         """, request.code());
     if (rows.isEmpty()) throw new BusinessException(404, "签到码无效");
     var session = rows.get(0);
@@ -516,7 +507,7 @@ public class CourseController {
   @Transactional
   public ApiResponse<Void> manualAttendance(@Valid @RequestBody ManualAttendanceRequest request) {
     permissions.require(Permissions.ATTENDANCE_MANAGE);
-    one("select id from course_session where id=?", request.sessionId());
+    assignments.lockSession(request.sessionId());
     permissions.requireEmployee(request.employeeId());
     var user = SecurityUtils.current();
     db.update("""
