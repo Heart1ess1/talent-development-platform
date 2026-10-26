@@ -6,27 +6,20 @@ import {ElMessage,ElMessageBox} from 'element-plus'
 import {api,type Envelope} from '@/api'
 import {formatCourseDate,isCourseEnabled,sessionStatus,type Course,type CourseSession} from '@/utils/course'
 import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData'
+import SessionAssignmentDialog from '@/components/SessionAssignmentDialog.vue'
 
 const route=useRoute()
 const router=useRouter()
 const courses=ref<Course[]>([])
 const sessions=ref<CourseSession[]>([])
-const employees=ref<any[]>([])
-const classOptions=ref<DictionaryOption[]>([])
-const classPositionOptions=ref<DictionaryOption[]>([])
 const sessionTitleOptions=ref<DictionaryOption[]>([])
 const trainingLocationOptions=ref<DictionaryOption[]>([])
-const enrollmentClassId=ref<number|null>(null)
-const enrollmentClassPositionId=ref<number|null>(null)
-const enrollments=ref<any[]>([])
 const loading=ref(false)
 const saving=ref(false)
-const enrollLoading=ref(false)
 const editorOpen=ref(false)
 const enrollmentOpen=ref(false)
 const editing=ref<CourseSession|null>(null)
 const selectedSession=ref<CourseSession|null>(null)
-const selectedEmployees=ref<number[]>([])
 const filters=reactive({keyword:'',courseId:null as number|null,status:'ALL'})
 const form=reactive<any>({courseId:null,sessionTitleId:null,deliveryMode:'OFFLINE',trainingLocationId:null,meetingUrl:'',hours:1,startsAt:'',endsAt:'',checkinStartsAt:'',checkinEndsAt:''})
 
@@ -45,8 +38,6 @@ const tabs=computed(()=>[
   {label:'进行中',value:'ONGOING',count:sessions.value.filter(row=>sessionStatus(row).key==='ONGOING').length},
   {label:'已结束',value:'FINISHED',count:sessions.value.filter(row=>sessionStatus(row).key==='FINISHED').length}
 ])
-const enrolledIds=computed(()=>new Set(enrollments.value.map(item=>item.employee_id)))
-const availableEmployees=computed(()=>employees.value.filter(item=>(!enrollmentClassId.value||item.class_id===enrollmentClassId.value)&&(!enrollmentClassPositionId.value||item.class_position_id===enrollmentClassPositionId.value)&&!enrolledIds.value.has(item.id)))
 const totalEnrollments=computed(()=>sessions.value.reduce((total,row)=>total+row.enrollment_count,0))
 const totalAttendance=computed(()=>sessions.value.reduce((total,row)=>total+row.attendance_count,0))
 
@@ -163,48 +154,9 @@ async function remove(row:CourseSession){
   await load()
 }
 
-async function openEnrollment(row:CourseSession){
+function openEnrollment(row:CourseSession){
   selectedSession.value=row
-  selectedEmployees.value=[]
-  enrollmentClassId.value=null
-  enrollmentClassPositionId.value=null
   enrollmentOpen.value=true
-  enrollLoading.value=true
-  try{
-    const [enrollResponse,employeeResponse,classValues,classPositionValues]=await Promise.all([
-      api.get<any,Envelope<any[]>>(`/sessions/${row.id}/enrollments`),
-      employees.value.length
-        ?Promise.resolve({data:employees.value} as Envelope<any[]>)
-        :api.get<any,Envelope<any>>('/employees',{params:{size:100}}),
-      classOptions.value.length?Promise.resolve(classOptions.value):loadDictionaryValues('CLASS'),
-      classPositionOptions.value.length?Promise.resolve(classPositionOptions.value):loadDictionaryValues('CLASS_POSITION')
-    ])
-    enrollments.value=enrollResponse.data
-    if(!employees.value.length)employees.value=(employeeResponse.data.records||employeeResponse.data).filter((item:any)=>item.status==='ACTIVE')
-    classOptions.value=classValues
-    classPositionOptions.value=classPositionValues
-  }finally{
-    enrollLoading.value=false
-  }
-}
-
-async function addEnrollments(){
-  if(!selectedSession.value||!selectedEmployees.value.length)return ElMessage.warning('请选择需要安排的员工')
-  const response=await api.post<any,Envelope<number>>(`/sessions/${selectedSession.value.id}/enroll`,{employeeIds:selectedEmployees.value})
-  ElMessage.success(`已新增 ${response.data} 条课程安排`)
-  selectedEmployees.value=[]
-  await openEnrollment(selectedSession.value)
-  await load()
-}
-
-async function removeEnrollment(row:any){
-  if(row.attendance_status)return ElMessage.warning('该员工已有签到记录，不能移除')
-  await ElMessageBox.confirm(`确认移除 ${row.employee_name} 的本场培训安排？`,'移除人员',{
-    confirmButtonText:'确认移除',cancelButtonText:'取消',type:'warning'
-  })
-  await api.delete(`/sessions/${selectedSession.value?.id}/enrollments/${row.employee_id}`)
-  await openEnrollment(selectedSession.value!)
-  await load()
 }
 
 async function copyCode(code?:string){
@@ -287,21 +239,7 @@ onMounted(async()=>{
       <template #footer><el-button @click="editorOpen=false">取消</el-button><el-button type="primary" :loading="saving" @click="save">{{editing?'保存修改':'创建场次'}}</el-button></template>
     </el-dialog>
 
-    <el-drawer v-model="enrollmentOpen" title="场次人员安排" size="min(640px, 94vw)">
-      <template v-if="selectedSession">
-        <div class="enrollment-drawer-head"><div><strong>{{selectedSession.course_name}}</strong><span>场次：{{selectedSession.title}} · {{formatCourseDate(selectedSession.starts_at)}}</span></div><el-tag>{{enrollments.length}} 人</el-tag></div>
-        <div class="enroll-form">
-          <el-select v-model="enrollmentClassId" clearable filterable placeholder="按班级筛选员工"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
-          <el-select v-model="enrollmentClassPositionId" clearable filterable placeholder="按班级职务筛选员工"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
-          <el-select v-model="selectedEmployees" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择需要参加的员工"><el-option v-for="person in availableEmployees" :key="person.id" :label="`${person.name} · ${person.employeeNo||person.employee_no}`" :value="person.id"/></el-select>
-          <el-button type="primary" :disabled="!selectedEmployees.length" @click="addEnrollments">加入场次</el-button>
-        </div>
-        <div class="enrollment-list" v-loading="enrollLoading">
-          <article v-for="person in enrollments" :key="person.employee_id" class="enrollment-item"><el-avatar :size="36">{{person.employee_name.slice(-1)}}</el-avatar><div><strong>{{person.employee_name}}</strong><span>{{person.employee_no}} · {{person.attendance_status?'已签到':'待签到'}}</span></div><el-button link type="danger" :disabled="Boolean(person.attendance_status)" @click="removeEnrollment(person)">移除</el-button></article>
-          <div v-if="!enrollLoading&&!enrollments.length" class="course-empty"><el-icon><UserFilled/></el-icon><strong>尚未安排人员</strong><span>从上方选择员工加入本场培训</span></div>
-        </div>
-      </template>
-    </el-drawer>
+    <SessionAssignmentDialog v-if="enrollmentOpen&&selectedSession" :session="selectedSession" @close="enrollmentOpen=false" @saved="load"/>
   </div>
 </template>
 

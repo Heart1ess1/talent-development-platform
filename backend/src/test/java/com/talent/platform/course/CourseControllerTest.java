@@ -50,7 +50,8 @@ class CourseControllerTest {
         mock(PermissionService.class),
         mock(AuditService.class),
         storage,
-        mock(UploadTicketService.class)
+        mock(UploadTicketService.class),
+        mock(SessionAssignmentService.class)
     );
     var user = new CurrentUser(
         7L, "training", "培训管理员", "TRAINING_ADMIN", false, 1,
