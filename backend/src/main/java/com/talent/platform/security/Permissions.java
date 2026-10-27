@@ -22,4 +22,5 @@ public final class Permissions {
   public static final String USER_ADMIN_MANAGE="user:admin:manage";
   public static final String MASTER_MANAGE="master:manage";
   public static final String AUDIT_READ="audit:read";
+  public static final String LEAVE_VIEW="leave:view";
 }

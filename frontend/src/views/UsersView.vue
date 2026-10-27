@@ -52,6 +52,8 @@ const dialog=ref(false)
 const scopeDialog=ref(false)
 const passwordDialog=ref(false)
 const scopeUser=ref<UserRow|null>(null)
+const roleDialog=ref(false),roleUser=ref<UserRow|null>(null)
+const roleForm=reactive<{role:Role;stationIds:number[]}>({role:'AREA_MANAGER',stationIds:[]})
 const formRef=ref<FormInstance>()
 const page=ref(1)
 const pageSize=ref(10)
@@ -79,14 +81,16 @@ const passwordResult=reactive({title:'',password:'',description:''})
 const roleDescriptions:Partial<Record<Role,string>>={
   MENTOR:'负责学员培养与任务指导',
   STATION_MANAGER:'管理指定服务站的人员与业务',
+  AREA_MANAGER:'查看所辖服务站人员并审批一天请假',
+  TRAINING_DIRECTOR:'查看全部人员并审批一天以上请假',
   TRAINING_ADMIN:'管理培训计划、课程与考试',
   ADMIN:'拥有平台级管理权限'
 }
 const createRoles=computed<Role[]>(()=>superAdmin.value
-  ?['MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN']
-  :['MENTOR','STATION_MANAGER','TRAINING_ADMIN']
+  ?['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_DIRECTOR','TRAINING_ADMIN','ADMIN']
+  :['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_DIRECTOR','TRAINING_ADMIN']
 )
-const changeRoles:Role[]=['MENTOR','TRAINING_ADMIN','ADMIN','SUPER_ADMIN']
+const changeRoles:Role[]=['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_DIRECTOR','TRAINING_ADMIN','ADMIN','SUPER_ADMIN']
 const formRules:FormRules={
   username:[
     {required:true,message:'请输入用户名',trigger:'blur'},
@@ -100,7 +104,7 @@ const formRules:FormRules={
   role:[{required:true,message:'请选择角色',trigger:'change'}],
   stationIds:[{
     validator:(_rule,value:number[],callback)=>{
-      if(form.role==='STATION_MANAGER'&&!value.length)callback(new Error('请至少选择一个服务站'))
+      if(['STATION_MANAGER','AREA_MANAGER'].includes(form.role)&&!value.length)callback(new Error('请至少选择一个服务站'))
       else callback()
     },
     trigger:'change'
@@ -122,7 +126,7 @@ const hasFilters=computed(()=>Object.values(filters).some(Boolean))
 
 watch(filters,()=>{page.value=1})
 watch(()=>form.role,role=>{
-  if(role!=='STATION_MANAGER')form.stationIds=[]
+  if(!['STATION_MANAGER','AREA_MANAGER'].includes(role))form.stationIds=[]
   formRef.value?.clearValidate('stationIds')
 })
 
@@ -166,7 +170,7 @@ function openAccountBulk(action:'enabled'|'role'|'stationIds'){
 
 function accountBulkChanges(){
   if(accountBulkAction.value==='enabled')return {enabled:accountBulkEnabled.value}
-  if(accountBulkAction.value==='role')return {role:accountBulkRole.value}
+  if(accountBulkAction.value==='role')return {role:accountBulkRole.value,...(['STATION_MANAGER','AREA_MANAGER'].includes(accountBulkRole.value||'')?{stationIds:accountBulkStations.value}:{})}
   return {stationIds:accountBulkStations.value}
 }
 
@@ -291,6 +295,9 @@ async function toggle(row:UserRow){
 
 async function changeRole(row:UserRow,role:Role){
   if(role===row.role)return
+  if(['STATION_MANAGER','AREA_MANAGER'].includes(role)){
+    roleUser.value=row;roleForm.role=role;roleForm.stationIds=stationIds(row);roleDialog.value=true;return
+  }
   await ElMessageBox.confirm(
     `将 ${row.display_name} 的角色从“${roleLabels[row.role]}”调整为“${roleLabels[role]}”。调整后原登录状态将失效。`,
     '确认变更角色？',
@@ -299,6 +306,11 @@ async function changeRole(row:UserRow,role:Role){
   await api.put(`/users/${row.id}/role`,{role})
   ElMessage.success('角色已更新')
   await load()
+}
+async function saveRole(){
+  if(!roleUser.value||!roleForm.stationIds.length)return ElMessage.warning('请选择负责的服务站')
+  saving.value=true
+  try{await api.put(`/users/${roleUser.value.id}/role`,roleForm);roleDialog.value=false;ElMessage.success('角色和服务站范围已更新');await load()}finally{saving.value=false}
 }
 
 async function changeDisplayName(row:UserRow){
@@ -376,14 +388,14 @@ async function handleMore(command:string,row:UserRow){
 
 function canOperate(row:UserRow){
   return row.role==='EMPLOYEE'
-    || (['MENTOR','STATION_MANAGER','TRAINING_ADMIN'].includes(row.role)&&canOps.value)
+    || (['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_DIRECTOR','TRAINING_ADMIN'].includes(row.role)&&canOps.value)
     || superAdmin.value
 }
 function isEmployeeAccount(row:UserRow){
   return row.has_employee_profile||row.role==='EMPLOYEE'
 }
 function canChangeRole(row:UserRow){
-  return superAdmin.value&&row.id!==auth.user?.id&&!isEmployeeAccount(row)&&row.role!=='STATION_MANAGER'
+  return superAdmin.value&&row.id!==auth.user?.id&&!isEmployeeAccount(row)
 }
 function canChangeUsername(row:UserRow){
   return superAdmin.value&&row.role!=='SUPER_ADMIN'
@@ -393,7 +405,7 @@ function needsEmployeeRoleRepair(row:UserRow){
 }
 function hasMoreActions(row:UserRow){
   return superAdmin.value
-    || (row.role==='STATION_MANAGER'&&(canOps.value||superAdmin.value))
+    || (['STATION_MANAGER','AREA_MANAGER'].includes(row.role)&&(canOps.value||superAdmin.value))
     || (canOperate(row)&&row.id!==auth.user?.id)
 }
 function initials(name:string){
@@ -416,6 +428,7 @@ onMounted(load)
         <p>集中维护全体人员的登录账号、角色权限与服务站数据范围。</p>
       </div>
       <div class="hero-actions">
+        <el-button v-if="canOps" @click="$router.push('/station-responsibilities')">站长与区域经理管理</el-button>
         <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
         <el-button v-if="canOps||superAdmin" type="primary" :icon="Plus" @click="openCreate">创建账号</el-button>
       </div>
@@ -573,7 +586,7 @@ onMounted(load)
                     <el-dropdown-item v-if="superAdmin" command="displayName" :icon="EditPen">修改姓名</el-dropdown-item>
                     <el-dropdown-item v-if="canChangeUsername(row)" command="username" :icon="UserIcon">修改用户名</el-dropdown-item>
                     <el-dropdown-item
-                      v-if="row.role==='STATION_MANAGER'&&(canOps||superAdmin)"
+                      v-if="['STATION_MANAGER','AREA_MANAGER'].includes(row.role)&&(canOps||superAdmin)"
                       command="scope"
                       :icon="Location"
                     >服务站范围</el-dropdown-item>
@@ -614,6 +627,7 @@ onMounted(load)
       </div>
     </section>
 
+    <el-dialog v-model="roleDialog" title="调整角色与负责范围" width="520px"><el-form label-position="top"><el-form-item label="目标角色">{{roleLabels[roleForm.role]}}</el-form-item><el-form-item label="负责服务站" required><el-select v-model="roleForm.stationIds" multiple filterable class="full-width"><el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/></el-select></el-form-item></el-form><template #footer><el-button @click="roleDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveRole">保存</el-button></template></el-dialog>
     <el-dialog v-model="accountBulkOpen" class="account-dialog" :title="accountBulkAction==='enabled'?'批量启停账号':accountBulkAction==='role'?'批量调整角色':'批量设置服务站范围'" width="560px" destroy-on-close>
       <div class="bulk-account-tip">已选择 {{selectedRows.length}} 个账号；执行前会重新校验权限和账号安全约束。</div>
       <el-form label-position="top">
@@ -623,7 +637,7 @@ onMounted(load)
         <el-form-item v-if="accountBulkAction==='role'" label="目标角色">
           <el-select v-model="accountBulkRole" class="full-width" filterable placeholder="请选择角色"><el-option v-for="role in changeRoles" :key="role" :label="roleLabels[role]" :value="role"/></el-select>
         </el-form-item>
-        <el-form-item v-if="accountBulkAction==='stationIds'" label="服务站范围">
+        <el-form-item v-if="accountBulkAction==='stationIds'||(accountBulkAction==='role'&&['STATION_MANAGER','AREA_MANAGER'].includes(accountBulkRole||''))" label="服务站范围">
           <el-select v-model="accountBulkStations" class="full-width" multiple filterable collapse-tags collapse-tags-tooltip placeholder="请选择服务站"><el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/></el-select>
         </el-form-item>
         <el-checkbox v-if="accountBulkAction==='enabled'" v-model="accountBulkSyncEmployee">同步关联员工人员状态</el-checkbox>
@@ -661,7 +675,7 @@ onMounted(load)
           </el-select>
           <div class="field-help">{{roleDescriptions[form.role]}}</div>
         </el-form-item>
-        <el-form-item v-if="form.role==='STATION_MANAGER'" label="负责服务站" prop="stationIds">
+        <el-form-item v-if="['STATION_MANAGER','AREA_MANAGER'].includes(form.role)" label="负责服务站" prop="stationIds">
           <el-select
             v-model="form.stationIds"
             class="full-width"

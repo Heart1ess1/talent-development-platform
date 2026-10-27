@@ -180,6 +180,11 @@ public class EmployeePortraitService {
     query.rows("select id,status,published_at,period_key,summary_type from score_summary where employee_id=? and status='PUBLISHED' and published_at is not null",employeeId).forEach(x->events.add(event("EVALUATION",x,"published_at",s(x,"period_key")+("MONTH".equals(s(x,"summary_type"))?"月度":"季度")+"评价发布",s(x,"status"))));
     query.rows("select id,reviewed_at,'APPROVED' status from station_change_request where employee_id=? and status='APPROVED' and reviewed_at is not null",employeeId).forEach(x->events.add(event("STATION",x,"reviewed_at","服务站调整生效",s(x,"status"))));
     query.rows("select id,occurred_at,'RECORDED' status,to_location from employee_location_report where employee_id=?",employeeId).forEach(x->events.add(event("LOCATION",x,"occurred_at","位置报备："+s(x,"to_location"),s(x,"status"))));
+    query.rows("""
+        select r.id,v.start_at,r.status,v.destination from leave_request r
+        join leave_request_version v on v.request_id=r.id and v.version_no=r.current_version
+        where r.employee_id=? and r.status in ('APPROVED','RETURNED','CANCELLED')
+        """,employeeId).forEach(x->events.add(event("LEAVE_PLAN",x,"start_at","批准的计划行程："+s(x,"destination"),s(x,"status"))));
     if(type!=null&&!type.isBlank())events.removeIf(x->!x.type().equals(type));
     if(dateFrom!=null)events.removeIf(x->x.occurredAt()==null||x.occurredAt().toLocalDate().isBefore(dateFrom));
     if(dateTo!=null)events.removeIf(x->x.occurredAt()==null||x.occurredAt().toLocalDate().isAfter(dateTo));

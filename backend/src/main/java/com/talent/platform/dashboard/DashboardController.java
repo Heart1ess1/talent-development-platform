@@ -175,6 +175,16 @@ public class DashboardController {
           "UPCOMING".equals(status) ? "考试即将开放，请提前安排复习" : "考试已开放，请在截止前完成",
           row.get("ends_at"), status, "IN_PROGRESS".equals(status) ? "DANGER" : "PRIMARY", "/exams/my"));
     }
+    for (var leave : db.queryForList("""
+        select r.id,v.end_at,r.status from leave_request r
+        join leave_request_version v on v.request_id=r.id and v.version_no=r.current_version
+        where r.employee_id=? and r.status='APPROVED' order by v.end_at limit 4
+        """, employeeId)) {
+      boolean late = leave.get("end_at") instanceof java.sql.Timestamp t && t.toLocalDateTime().isBefore(LocalDateTime.now(ZONE));
+      actions.add(action("LEAVE",late?"请假逾期未销假":"请假待返回／销假",
+          late?"已超过预计返回时间，尚未销假":"回段后请及时办理销假",
+          leave.get("end_at"),late?"OVERDUE":"PENDING",late?"DANGER":"WARNING","/leave-requests"));
+    }
     actions.sort(Comparator.comparing(item -> sortableTime(item.get("due_at"))));
     result.put("action_items", actions.stream().limit(8).toList());
 
@@ -308,6 +318,10 @@ public class DashboardController {
     result.put("operations", Map.of("task", task, "course", course, "exam", exam, "evaluation", evaluation));
 
     var queue = new ArrayList<Map<String, Object>>();
+    long leavePending = leavePending(user.id());
+    long leaveOverdue = leaveOverdue(user.id());
+    queue.add(queueItem("LEAVE_REVIEW","请假审批","处理指定给你的申请",leavePending,"/leave-requests","WARNING"));
+    queue.add(queueItem("LEAVE_OVERDUE","逾期未销假","已超过预计返回时间，尚未销假",leaveOverdue,"/leave-requests","DANGER"));
     if (user.can(Permissions.TASK_SCORE)) queue.add(queueItem("TASK_REVIEW", "评分任务成果",
         "仅处理分配给你的成果评分", pendingTaskScores(user.id()),
         "/task-scoring?status=MY_PENDING", "WARNING"));
@@ -442,6 +456,7 @@ public class DashboardController {
                                   Map<String, Object> evaluation, String month,
                                   PermissionService.ScopeFilter scope) {
     long count = 0;
+    count += leavePending(user.id()) + leaveOverdue(user.id());
     if (user.can(Permissions.TASK_SCORE)) count += pendingTaskScores(user.id());
     if (user.can(Permissions.EXAM_MANAGE)) {
       count += number(exam.get("pending_review")).longValue();
@@ -456,6 +471,15 @@ public class DashboardController {
           - number(evaluation.get("published_total")).longValue());
     }
     return count;
+  }
+
+  private long leavePending(Long userId) {
+    Long count=db.queryForObject("select count(*) from leave_request_version where approver_user_id=? and status='PENDING'",Long.class,userId);
+    return count==null?0:count;
+  }
+  private long leaveOverdue(Long userId) {
+    Long count=db.queryForObject("select count(*) from leave_reminder where recipient_user_id=? and status='OPEN'",Long.class,userId);
+    return count==null?0:count;
   }
 
   private long pendingTaskScores(Long userId) {
