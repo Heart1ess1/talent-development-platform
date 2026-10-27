@@ -43,7 +43,7 @@ function percent(value:any){return `${Number(value||0).toFixed(Number(value||0)%
 function score(value:any){return value===null||value===undefined||value===''?'—':Number(value).toFixed(2)}
 function dateTime(value:any){if(!value)return '时间待定';return new Intl.DateTimeFormat('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value))}
 function shortDate(value:any){if(!value)return '—';return new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value))}
-function statusLabel(value:string){return ({OVERDUE:'已逾期',RETURNED:'需修改',NOT_SUBMITTED:'待提交',PENDING_REVIEW:'待审核',IN_PROGRESS:'进行中',UPCOMING:'即将开始',READY:'可参加'} as AnyRecord)[value]||value}
+function statusLabel(value:string){return ({PENDING:'待返回／销假',OVERDUE:'已逾期',RETURNED:'需修改',NOT_SUBMITTED:'待提交',PENDING_REVIEW:'待审核',IN_PROGRESS:'进行中',UPCOMING:'即将开始',READY:'可参加'} as AnyRecord)[value]||value}
 function statusType(value:string){return ['OVERDUE','RETURNED'].includes(value)?'danger':['PENDING_REVIEW','UPCOMING'].includes(value)?'warning':'primary'}
 function queueIcon(code:string){return code==='TASK_REVIEW'?List:code.startsWith('EXAM')?DocumentChecked:code==='ATTENDANCE'?School:EditPen}
 function scheduleIcon(type:string){return type==='COURSE'?School:DocumentChecked}
@@ -86,7 +86,7 @@ onMounted(load)
 
       <section class="dashboard-employee-grid">
         <article class="dashboard-panel dashboard-actions-panel">
-          <div class="dashboard-panel-head"><div><h2>我的待办</h2><p>按截止时间汇总需要你处理的任务与考试</p></div><el-button link type="primary" @click="open('/tasks')">查看全部</el-button></div>
+          <div class="dashboard-panel-head"><div><h2>我的待办</h2><p>按截止时间汇总任务、考试与请假事项</p></div><el-button link type="primary" @click="open('/leave-requests')">请假待办 {{data.action_items?.filter((x:AnyRecord)=>x.type==='LEAVE').length||0}}</el-button></div>
           <div v-if="data.action_items?.length" class="dashboard-action-list">
             <button v-for="item in data.action_items" :key="`${item.type}-${item.title}-${item.due_at}`" type="button" class="dashboard-action-row" @click="open(item.route)">
               <span class="action-marker" :class="item.tone.toLowerCase()"><el-icon><component :is="item.type==='TASK'?List:DocumentChecked"/></el-icon></span>
@@ -161,7 +161,7 @@ onMounted(load)
         <el-empty v-else :image-size="66" description="当前角色暂无操作待办"/>
       </section>
 
-      <section class="dashboard-operation-grid">
+      <section v-if="!['AREA_MANAGER','TRAINING_DIRECTOR'].includes(auth.user?.role||'')" class="dashboard-operation-grid">
         <button v-for="item in operationCards" :key="item.key" type="button" class="operation-card" :class="item.tone" @click="open(item.route)">
           <span class="operation-head"><span class="operation-icon"><el-icon><component :is="item.icon"/></el-icon></span><span><strong>{{item.title}}</strong><small>{{item.description}}</small></span><el-icon class="operation-arrow"><Right/></el-icon></span>
           <span class="operation-progress"><span><b>{{percent(item.rate)}}</b><small>{{item.key==='evaluation'?'发布覆盖率':item.key==='course'?'出勤完成率':'完成率'}}</small></span><el-progress :percentage="item.rate" :show-text="false"/></span>

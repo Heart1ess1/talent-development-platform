@@ -275,9 +275,9 @@ public class TaskReviewerScopeService {
     if (ids.isEmpty()) return ids;
     String marks = String.join(",", Collections.nCopies(ids.size(), "?"));
     Integer count = db.queryForObject(
-        "select count(*) from sys_user where enabled=true and role<>'EMPLOYEE' and id in (" + marks + ")",
+        "select count(*) from sys_user where enabled=true and role in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN') and id in (" + marks + ")",
         Integer.class, ids.toArray());
-    if (count == null || count != ids.size()) throw new BusinessException(400, "评分人中包含员工、已停用或不存在的账号");
+    if (count == null || count != ids.size()) throw new BusinessException(400, "评分人中包含无评分权限、已停用或不存在的账号");
     ids.sort(Long::compareTo);
     return ids;
   }

@@ -43,7 +43,7 @@ public class TaskScoringService {
     return db.queryForList("""
         select id,username,display_name,role
         from sys_user
-        where enabled=true and role<>'EMPLOYEE'
+        where enabled=true and role in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN')
         order by display_name,username,id
         """);
   }

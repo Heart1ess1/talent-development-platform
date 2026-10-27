@@ -14,6 +14,7 @@ import {
   UserFilled
 } from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
+import {useRouter} from 'vue-router'
 import {useAuthStore} from '@/stores/auth'
 import {avatarUrl,nameInitial} from '@/utils/avatar'
 import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData'
@@ -29,6 +30,8 @@ type MineData={
 type Summary={totalReports:number;trackedEmployees:number;todayReports:number;weekReports:number}
 
 const auth=useAuthStore()
+const router=useRouter()
+function duringPlan(plan:LocationRecord){const at=Date.now();return plan.request_status==='APPROVED'&&new Date(String(plan.start_at).replace(' ','T')).getTime()<=at&&new Date(String(plan.end_at).replace(' ','T')).getTime()>at}
 const isEmployee=computed(()=>auth.user?.role==='EMPLOYEE')
 const loading=ref(false)
 const submitting=ref(false)
@@ -67,6 +70,8 @@ const historyOpen=ref(false)
 const historyLoading=ref(false)
 const historyEmployee=ref<LocationRecord|null>(null)
 const history=ref<LocationRecord[]>([])
+const leavePlans=ref<LocationRecord[]>([])
+const historyPlans=ref<LocationRecord[]>([])
 
 const latestReport=computed(()=>mine.value.records[0])
 const currentUpdatedAt=computed(()=>latestReport.value?.occurred_at||'')
@@ -89,8 +94,12 @@ function openReport(){
   dialogOpen.value=true
 }
 async function loadMine(){
-  const response=await api.get<any,Envelope<MineData>>('/location-reports/mine')
+  const [response,plans]=await Promise.all([
+    api.get<any,Envelope<MineData>>('/location-reports/mine'),
+    api.get<any,Envelope<LocationRecord[]>>('/leave-requests/plans')
+  ])
   mine.value=response.data
+  leavePlans.value=plans.data
 }
 function requestParams(){
   return {
@@ -162,8 +171,12 @@ async function openHistory(row:LocationRecord){
   historyOpen.value=true
   historyLoading.value=true
   try{
-    const response=await api.get<any,Envelope<LocationRecord[]>>(`/location-reports/employee/${row.employee_id}`)
+    const [response,plans]=await Promise.all([
+      api.get<any,Envelope<LocationRecord[]>>(`/location-reports/employee/${row.employee_id}`),
+      api.get<any,Envelope<LocationRecord[]>>('/leave-requests/plans',{params:{employeeId:row.employee_id}})
+    ])
     history.value=response.data
+    historyPlans.value=plans.data
   }finally{
     historyLoading.value=false
   }
@@ -185,6 +198,11 @@ onMounted(async()=>{if(!isEmployee.value)[classOptions.value,classPositionOption
           <p>位置发生变化时及时报备，替代群消息，让带教老师和管理人员准确掌握行程。</p>
         </div>
         <el-button type="primary" :icon="Plus" @click="openReport">提交位置报备</el-button>
+      </section>
+
+      <section v-if="leavePlans.length" class="history-card leave-plan-section">
+        <div class="section-heading"><div><h2>已批准的计划行程</h2><span>计划地点不代表实际位置</span></div></div>
+        <div class="leave-plan-list"><article v-for="plan in leavePlans" :key="plan.request_id" class="leave-plan-row"><div><strong>{{plan.destination}}</strong><el-tag size="small" type="info">{{plan.request_status==='CANCELLED'?'已取消':plan.request_status==='RETURNED'?'已销假':'计划'}}</el-tag></div><span>{{formatDateTime(plan.start_at)}} 至 {{formatDateTime(plan.end_at)}} · 预计回 {{plan.return_location}}</span><small>审批人：{{plan.approver_name}}</small><small v-if="duringPlan(plan)">按批准计划处于请假时段</small><el-button link type="primary" @click="router.push({path:'/leave-requests',query:{requestId:plan.request_id}})">查看请假单</el-button></article></div>
       </section>
 
       <section v-loading="loading" class="current-location-card">
@@ -341,6 +359,9 @@ onMounted(async()=>{if(!isEmployee.value)[classOptions.value,classPositionOption
         </div>
       </template>
       <div v-loading="historyLoading" class="drawer-history">
+        <h3 v-if="historyPlans.length">批准的计划行程</h3>
+        <article v-for="plan in historyPlans" :key="`leave-${plan.request_id}`" class="leave-plan-row"><strong>{{plan.destination}} · {{plan.request_status==='CANCELLED'?'已取消':plan.request_status==='RETURNED'?'已销假':'计划'}}</strong><span>{{formatDateTime(plan.start_at)}} 至 {{formatDateTime(plan.end_at)}}</span><small>预计回 {{plan.return_location}} · {{plan.approver_name}} 审批</small><small v-if="duringPlan(plan)">按批准计划处于请假时段</small><el-button link type="primary" @click="router.push({path:'/leave-requests',query:{requestId:plan.request_id}})">查看请假单</el-button></article>
+        <h3 v-if="historyPlans.length">实际位置记录</h3>
         <article v-for="(record,index) in history" :key="record.id" class="timeline-row">
           <div class="timeline-rail"><span :class="['timeline-dot',{'is-current':index===0}]"></span></div>
           <div class="timeline-content">
@@ -358,6 +379,7 @@ onMounted(async()=>{if(!isEmployee.value)[classOptions.value,classPositionOption
 
 <style scoped>
 .movement-page{min-height:100%;padding:22px 22px 42px;background:#f5f7fb;color:#172033}
+.leave-plan-section{margin-bottom:18px}.leave-plan-list{padding:4px 20px}.leave-plan-row{display:flex;flex-direction:column;gap:5px;padding:12px 0;border-bottom:1px solid #edf0f4}.leave-plan-row>div{display:flex;align-items:center;gap:8px}.leave-plan-row span,.leave-plan-row small{color:#64748b}
 .movement-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;max-width:none;margin:0 auto 22px}
 .eyebrow{margin-bottom:7px;color:#356bd8;font-size:12px;font-weight:700;letter-spacing:.12em}
 .movement-hero h1{margin:0;font-size:28px;line-height:1.25;letter-spacing:-.02em}

@@ -10,6 +10,8 @@ const routes=[
     {path:'employees',redirect:'/employee-directory'},
     {path:'employee-directory',component:()=>import('@/views/EmployeeDirectoryView.vue'),meta:{permission:'employee:read',title:'人员台账'}},
     {path:'location-reports',component:()=>import('@/views/LocationReportsView.vue'),meta:{permission:'employee:read',title:'人员流动'}},
+    {path:'leave-requests',component:()=>import('@/views/LeaveRequestsView.vue'),meta:{title:'请假管理'}},
+    {path:'station-responsibilities',component:()=>import('@/views/StationResponsibilitiesView.vue'),meta:{permission:'user:ops-role:manage',title:'站长与区域经理管理'}},
     {path:'courses',redirect:()=>useAuthStore().user?.role==='EMPLOYEE'?'/courses/my':'/courses/manage'},
     {path:'courses/manage',component:()=>import('@/views/CourseCatalogView.vue'),meta:{permission:'course:manage',title:'课程库'}},
     {path:'courses/sessions',component:()=>import('@/views/CourseSessionsView.vue'),meta:{permission:'course:manage',title:'场次安排'}},
@@ -55,6 +57,7 @@ router.beforeEach(to=>{
   if(to.path!='/login'&&!a.user)return '/login';
   if(to.path==='/login'&&a.user)return '/dashboard';
   if(a.user?.mustChangePassword&&to.path!='/profile')return '/profile';
+  if(['AREA_MANAGER','TRAINING_DIRECTOR'].includes(a.user?.role||'')&&!['/dashboard','/employee-directory','/location-reports','/leave-requests','/profile'].includes(to.path))return '/dashboard';
   if(a.user?.role==='EMPLOYEE'&&to.path==='/employee-directory')return '/profile';
   if(a.user?.role==='EMPLOYEE'&&to.path.startsWith('/evaluation/')&&to.path!=='/evaluation/results')return '/evaluation/results';
   if(a.user?.role==='EMPLOYEE'&&['/courses/manage','/courses/sessions','/courses/materials'].includes(to.path))return '/courses/learning';

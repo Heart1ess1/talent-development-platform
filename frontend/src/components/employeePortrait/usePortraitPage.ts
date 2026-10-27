@@ -22,7 +22,7 @@ const labels:Record<string,string>={
   ATTENDED:'已签到',PRESENT:'已签到',LATE:'迟到',LEAVE:'请假',MAKEUP:'补签',
   RECORDED:'已记录',MANUAL:'人工报备',APPROVED_CHANGE:'审批调站',ONBOARD:'入职',
   ATTENDANCE:'课程签到',TASK:'任务提交',TASK_REVIEW:'任务审核',EXAM:'考试交卷',
-  EVALUATION:'评价发布',STATION:'服务站调整',LOCATION:'位置报备'
+  EVALUATION:'评价发布',STATION:'服务站调整',LOCATION:'位置报备',LEAVE_PLAN:'计划请假行程',CANCELLED:'已取消'
 }
 export const statusLabel=(value?:string)=>value?labels[value]||value:'-'
 export const taskStatusLabel=(value?:string)=>statusLabel(value)

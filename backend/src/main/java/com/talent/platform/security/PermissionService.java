@@ -19,20 +19,24 @@ public class PermissionService {
       r.get("avatar_token")==null?null:String.valueOf(r.get("avatar_token")));
   }
   public Set<String> permissions(String role){
-    var p=new LinkedHashSet<String>();p.add(Permissions.EMPLOYEE_READ);p.add(Permissions.EVALUATION_VIEW);
-    if(!"EMPLOYEE".equals(role))p.add(Permissions.EMPLOYEE_PORTRAIT_VIEW);
-    if(!"EMPLOYEE".equals(role))p.add(Permissions.TASK_SCORE);
+    if(!List.of("EMPLOYEE","MENTOR","STATION_MANAGER","AREA_MANAGER","TRAINING_DIRECTOR","TRAINING_ADMIN","ADMIN","SUPER_ADMIN").contains(role))return Set.of();
+    var p=new LinkedHashSet<String>();
+    if(List.of("EMPLOYEE","MENTOR","STATION_MANAGER","AREA_MANAGER","TRAINING_DIRECTOR","TRAINING_ADMIN","ADMIN","SUPER_ADMIN").contains(role))p.add(Permissions.EMPLOYEE_READ);
+    if(!List.of("AREA_MANAGER","TRAINING_DIRECTOR").contains(role))p.add(Permissions.EVALUATION_VIEW);
+    if(List.of("MENTOR","STATION_MANAGER","AREA_MANAGER","TRAINING_DIRECTOR","TRAINING_ADMIN","ADMIN","SUPER_ADMIN").contains(role))p.add(Permissions.EMPLOYEE_PORTRAIT_VIEW);
+    if(List.of("MENTOR","STATION_MANAGER","TRAINING_ADMIN","ADMIN","SUPER_ADMIN").contains(role))p.add(Permissions.TASK_SCORE);
+    if(List.of("STATION_MANAGER","AREA_MANAGER","TRAINING_DIRECTOR","TRAINING_ADMIN","ADMIN","SUPER_ADMIN").contains(role))p.add(Permissions.LEAVE_VIEW);
     if(List.of("MENTOR","STATION_MANAGER","TRAINING_ADMIN").contains(role))p.add(Permissions.EVALUATION_SUBMIT);
     if(List.of("TRAINING_ADMIN","ADMIN","SUPER_ADMIN").contains(role))p.addAll(List.of(Permissions.EMPLOYEE_UPDATE,Permissions.EMPLOYEE_EXPORT,Permissions.COURSE_MANAGE,Permissions.ATTENDANCE_MANAGE,Permissions.TASK_MANAGE,Permissions.TASK_REVIEW,Permissions.EVALUATION_MANAGE,Permissions.EXAM_MANAGE,Permissions.HISTORY_IMPORT));
     if(List.of("ADMIN","SUPER_ADMIN").contains(role))p.addAll(List.of(Permissions.EMPLOYEE_WRITE,Permissions.USER_EMPLOYEE_MANAGE,Permissions.USER_OPS_ROLE_MANAGE,Permissions.MASTER_MANAGE,Permissions.AUDIT_READ));
     if("SUPER_ADMIN".equals(role))p.add(Permissions.USER_ADMIN_MANAGE);
     return Collections.unmodifiableSet(p);
   }
-  private String scope(String role){return switch(role){case "EMPLOYEE"->"SELF";case "MENTOR"->"MENTORED";case "STATION_MANAGER"->"STATION";default->"ALL";};}
+  private String scope(String role){return switch(role){case "EMPLOYEE"->"SELF";case "MENTOR"->"MENTORED";case "STATION_MANAGER"->"STATION";case "AREA_MANAGER"->"AREA";case "TRAINING_DIRECTOR","TRAINING_ADMIN","ADMIN","SUPER_ADMIN"->"ALL";default->"NONE";};}
   public void require(String permission){if(!SecurityUtils.current().can(permission))throw new AccessDeniedException("无此操作权限");}
   public void requireEmployee(Long employeeId){
     var u=SecurityUtils.current();if("ALL".equals(u.dataScope()))return;
-    String sql=switch(u.dataScope()){case "SELF"->"select count(*) from employee where id=? and user_id=?";case "MENTORED"->"select count(*) from employee where id=? and (mentor_user_id=? or skill_mentor_user_id=?)";case "STATION"->"select count(*) from employee e join station_manager_scope s on s.station_id=e.station_id where e.id=? and s.user_id=?";default->null;};
+    String sql=switch(u.dataScope()){case "SELF"->"select count(*) from employee where id=? and user_id=?";case "MENTORED"->"select count(*) from employee where id=? and (mentor_user_id=? or skill_mentor_user_id=?)";case "STATION"->"select count(*) from employee e join station_manager_scope s on s.station_id=e.station_id where e.id=? and s.user_id=?";case "AREA"->"select count(*) from employee e join area_manager_scope s on s.station_id=e.station_id where e.id=? and s.user_id=?";default->null;};
     Object[] args="MENTORED".equals(u.dataScope())?new Object[]{employeeId,u.id(),u.id()}:new Object[]{employeeId,u.id()};
     if(sql==null||db.queryForObject(sql,Integer.class,args)==0)throw new AccessDeniedException("无权访问该员工");
   }
@@ -41,7 +45,9 @@ public class PermissionService {
       case "SELF"->new ScopeFilter(" and "+alias+".user_id=?",List.of(u.id()));
       case "MENTORED"->new ScopeFilter(" and ("+alias+".mentor_user_id=? or "+alias+".skill_mentor_user_id=?)",List.of(u.id(),u.id()));
       case "STATION"->new ScopeFilter(" and exists(select 1 from station_manager_scope sms where sms.station_id="+alias+".station_id and sms.user_id=?)",List.of(u.id()));
-      default->new ScopeFilter("",List.of());};
+      case "AREA"->new ScopeFilter(" and exists(select 1 from area_manager_scope ams where ams.station_id="+alias+".station_id and ams.user_id=?)",List.of(u.id()));
+      case "ALL"->new ScopeFilter("",List.of());
+      default->new ScopeFilter(" and 1=0",List.of());};
   }
   public record ScopeFilter(String sql,List<Object> args){}
 }

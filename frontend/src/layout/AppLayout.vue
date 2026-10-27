@@ -54,6 +54,7 @@ const personnelChildren=computed<MenuItem[]>(()=>{
     {to:'/location-reports',label:'人员流动'}
   ]
   if(auth.can('master:manage'))children.push({to:'/station-change-review',label:'调站审批'})
+  if(auth.can('user:ops-role:manage'))children.push({to:'/station-responsibilities',label:'站长与区域经理管理'})
   if(auth.can('master:manage'))children.push({to:'/dictionaries',label:'字典值管理'})
   return children
 })
@@ -71,12 +72,19 @@ const evaluationChildren=computed<MenuItem[]>(()=>{
   if(auth.can('history:import'))children.push({to:'/evaluation/results/history-imports',label:'历史评价导入'})
   return children
 })
-const menus=computed<MenuItem[]>(()=>[
+const menus=computed<MenuItem[]>(()=>{
+  if(['AREA_MANAGER','TRAINING_DIRECTOR'].includes(auth.user?.role||''))return [
+    {to:'/dashboard',label:'进度概览'},
+    {label:'人员管理',children:personnelChildren.value},
+    {to:'/leave-requests',label:'请假审批'}
+  ]
+  return [
   {to:'/dashboard',label:'进度概览'},
   ...(isEmployee.value
     ?[{to:'/location-reports',label:'位置报备',permission:'employee:read'}]
     :[{label:'人员管理',permission:'employee:read',children:personnelChildren.value}]
   ),
+  ...(isEmployee.value||auth.can('leave:view')?[{to:'/leave-requests',label:isEmployee.value?'我的请假':'请假审批'}]:[]),
   {label:isEmployee.value?'课程学习':'课程管理',children:courseChildren.value},
   ...(isEmployee.value
     ?[{to:'/tasks',label:'我的任务'}]
@@ -96,7 +104,7 @@ const menus=computed<MenuItem[]>(()=>[
     :[{label:'考试中心',children:examChildren.value}]
   ),
   {to:'/users',label:'账号管理',permission:'user:employee:manage'}
-].filter(x=>!x.permission||auth.can(x.permission)))
+].filter(x=>!x.permission||auth.can(x.permission))})
 const activeMenuGroups=computed(()=>menus.value
   .filter(item=>item.children?.some(child=>child.to===route.path))
   .map(item=>item.label)
