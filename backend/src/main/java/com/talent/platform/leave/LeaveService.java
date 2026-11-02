@@ -90,9 +90,11 @@ public class LeaveService {
       case "AREA_MANAGER" -> "join area_manager_scope scope on scope.user_id=u.id and scope.station_id=?";
       default -> "";
     };
+    // TRAINING_DIRECTOR is the persisted approval level, fulfilled by existing training admins.
+    String role="TRAINING_DIRECTOR".equals(level)?"TRAINING_ADMIN":level;
     return db.queryForList("select distinct u.id,u.display_name,u.role from sys_user u " + join +
         " where u.role=? and u.enabled=true order by u.display_name,u.id",
-        level.equals("TRAINING_DIRECTOR") ? new Object[]{level} : new Object[]{station,level});
+        level.equals("TRAINING_DIRECTOR") ? new Object[]{role} : new Object[]{station,role});
   }
 
   @Transactional(isolation=Isolation.READ_COMMITTED)

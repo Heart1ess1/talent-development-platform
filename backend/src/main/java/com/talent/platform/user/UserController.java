@@ -8,9 +8,9 @@ import java.nio.charset.StandardCharsets;import java.security.MessageDigest;impo
 public class UserController {
   private static final List<String> OPS_ROLES=List.of("MENTOR","STATION_MANAGER","AREA_MANAGER","TRAINING_DIRECTOR","TRAINING_ADMIN");
   private static final List<String> SYSTEM_ROLES=List.of("ADMIN","SUPER_ADMIN");
-  private static final List<String> CHANGE_ROLES=List.of("EMPLOYEE","MENTOR","STATION_MANAGER","AREA_MANAGER","TRAINING_DIRECTOR","TRAINING_ADMIN","ADMIN","SUPER_ADMIN");
+  private static final List<String> CHANGE_ROLES=List.of("EMPLOYEE","MENTOR","STATION_MANAGER","AREA_MANAGER","TRAINING_ADMIN","ADMIN","SUPER_ADMIN");
   private final JdbcTemplate db;private final PasswordEncoder encoder;private final PermissionService permissions;private final AuditService audit;private final SecureRandom random=new SecureRandom();public UserController(JdbcTemplate db,PasswordEncoder encoder,PermissionService permissions,AuditService audit){this.db=db;this.encoder=encoder;this.permissions=permissions;this.audit=audit;}
-  public record UserRequest(@NotBlank String username,@NotBlank String displayName,@Pattern(regexp="MENTOR|STATION_MANAGER|AREA_MANAGER|TRAINING_DIRECTOR|TRAINING_ADMIN|ADMIN") String role,List<Long> stationIds){}
+  public record UserRequest(@NotBlank String username,@NotBlank String displayName,@Pattern(regexp="MENTOR|STATION_MANAGER|AREA_MANAGER|TRAINING_ADMIN|ADMIN") String role,List<Long> stationIds){}
   public record EnableRequest(boolean enabled){}
   public record DisplayNameRequest(@NotBlank String displayName){}
   public record UsernameRequest(@NotBlank @Size(max=64) @Pattern(regexp="[A-Za-z0-9._-]+",message="用户名仅支持字母、数字、点、下划线和连字符") String username){}
