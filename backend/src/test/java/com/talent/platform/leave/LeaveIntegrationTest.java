@@ -49,7 +49,7 @@ class LeaveIntegrationTest {
     db.update("insert into service_station(name) values(?),(?)",tag,tag+"-other");
     station=db.queryForObject("select id from service_station where name=?",Long.class,tag);
     otherStation=db.queryForObject("select id from service_station where name=?",Long.class,tag+"-other");
-    employeeUser=user("-employee","EMPLOYEE");stationManager=user("-station","STATION_MANAGER");areaManager=user("-area","AREA_MANAGER");director=user("-director","TRAINING_DIRECTOR");admin=user("-admin","ADMIN");otherArea=user("-outsider","AREA_MANAGER");
+    employeeUser=user("-employee","EMPLOYEE");stationManager=user("-station","STATION_MANAGER");areaManager=user("-area","AREA_MANAGER");director=user("-director","TRAINING_ADMIN");admin=user("-admin","ADMIN");otherArea=user("-outsider","AREA_MANAGER");
     db.update("insert into employee(user_id,employee_no,name,station_id,status) values(?,?,?,?,'ACTIVE')",employeeUser,tag,tag,station);
     employee=db.queryForObject("select id from employee where user_id=?",Long.class,employeeUser);
     db.update("insert into station_manager_scope(user_id,station_id) values(?,?)",stationManager,station);
@@ -62,7 +62,7 @@ class LeaveIntegrationTest {
   void approve(long id,int version,long reviewer){login(reviewer);service.review(id,version,new LeaveService.ReviewForm("APPROVE","同意"));}
   int count(String sql,Object... args){return db.queryForObject(sql,Integer.class,args);}
 
-  @Test void unassignedEmployeeChoosesTrainingDirectorForEveryDuration(){
+  @Test void unassignedEmployeeChoosesExistingTrainingAdminForEveryDuration(){
     db.update("update employee set station_id=null where id=?",employee);
     for(int days:new int[]{0,1,3}) {
       var start=day().plusDays(10+days*5).atTime(8,0);
@@ -71,7 +71,7 @@ class LeaveIntegrationTest {
       assertThat(preview).containsEntry("level","TRAINING_DIRECTOR");
       @SuppressWarnings("unchecked") var people=(List<Map<String,Object>>)preview.get("approvers");
       assertThat(people).anyMatch(p->((Number)p.get("id")).longValue()==director)
-          .allMatch(p->"TRAINING_DIRECTOR".equals(p.get("role")));
+          .allMatch(p->"TRAINING_ADMIN".equals(p.get("role")));
       long id=service.submit(form(start,end,director,null),null);
       assertThat(db.queryForMap("select station_id,approver_level,approver_user_id from leave_request_version where request_id=?",id))
           .containsEntry("station_id",null).containsEntry("approver_level","TRAINING_DIRECTOR").containsEntry("approver_user_id",director);
@@ -90,7 +90,7 @@ class LeaveIntegrationTest {
 
   @Test void unassignedLeaveCanTransferChangeApproveAndReturn(){
     db.update("update employee set station_id=null where id=?",employee);
-    long secondDirector=user("-director2","TRAINING_DIRECTOR");
+    long secondDirector=user("-director2","TRAINING_ADMIN");
     long id=service.submit(form(day().minusDays(1).atTime(8,0),day().minusDays(1).atTime(12,0),director,null),null);
     login(admin);
     assertThat(service.transferCandidates(id,1)).anyMatch(p->((Number)p.get("id")).longValue()==secondDirector);
@@ -109,6 +109,39 @@ class LeaveIntegrationTest {
     assertThat(service.preview(start,start.withHour(12))).containsEntry("level","STATION_MANAGER");
     assertThat(service.preview(start,start.withHour(18))).containsEntry("level","AREA_MANAGER");
     assertThat(service.preview(start,start.plusDays(1).withHour(18))).containsEntry("level","TRAINING_DIRECTOR");
+    long id=service.submit(form(start,start.plusDays(1).withHour(18),director,null),null);
+    approve(id,1,director);
+    assertThat(db.queryForObject("select status from leave_request where id=?",String.class,id)).isEqualTo("APPROVED");
+  }
+
+  @Test void trainingApprovalExcludesDisabledAndUnrelatedRoles(){
+    db.update("update employee set station_id=null where id=?",employee);
+    long disabled=user("-disabled","TRAINING_ADMIN");
+    db.update("update sys_user set enabled=false where id=?",disabled);
+    long legacy=user("-legacy","TRAINING_DIRECTOR");
+    var start=day().plusDays(1).atTime(8,0);
+    assertThat(service.candidates("TRAINING_DIRECTOR",null))
+        .allMatch(p->"TRAINING_ADMIN".equals(p.get("role")))
+        .noneMatch(p->List.of(disabled,legacy,admin).contains(((Number)p.get("id")).longValue()));
+    for(long rejected:new long[]{disabled,legacy,admin})
+      assertThatThrownBy(()->service.submit(form(start,start.withHour(12),rejected,null),null))
+          .isInstanceOf(BusinessException.class).hasMessageContaining("审批人");
+  }
+
+  @Test void trainingAdminCannotApproveAnotherSelectedAdminsLeaveAndMustTransferBeforeDisabling(){
+    db.update("update employee set station_id=null where id=?",employee);
+    long other=user("-training2","TRAINING_ADMIN");
+    var start=day().plusDays(1).atTime(8,0);
+    long id=service.submit(form(start,start.withHour(12),director,null),null);
+    login(other);
+    assertThatThrownBy(()->service.review(id,1,new LeaveService.ReviewForm("APPROVE","")))
+        .isInstanceOf(BusinessException.class).hasMessageContaining("指定审批人");
+    login(admin);
+    assertThatThrownBy(()->accounts.enabled(director,new UserController.EnableRequest(false)))
+        .isInstanceOf(BusinessException.class).hasMessageContaining("请先转交");
+    service.transfer(id,1,new LeaveService.TransferForm(other,"培训管理员交接"));
+    accounts.enabled(director,new UserController.EnableRequest(false));
+    approve(id,1,other);
   }
 
   @Test void approvalPlansReturnAndLateFilingAreDistinct(){

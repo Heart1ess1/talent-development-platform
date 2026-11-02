@@ -84,15 +84,14 @@ const roleDescriptions:Partial<Record<Role,string>>={
   MENTOR:'负责学员培养与任务指导',
   STATION_MANAGER:'管理指定服务站的人员与业务',
   AREA_MANAGER:'查看所辖服务站人员并审批一天请假',
-  TRAINING_DIRECTOR:'查看全部人员，审批一天以上或未分配服务站员工的请假',
-  TRAINING_ADMIN:'管理培训计划、课程与考试',
+  TRAINING_ADMIN:'管理培训计划、课程与考试，审批一天以上或未分配服务站员工的请假',
   ADMIN:'拥有平台级管理权限'
 }
 const createRoles=computed<Role[]>(()=>superAdmin.value
-  ?['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_DIRECTOR','TRAINING_ADMIN','ADMIN']
-  :['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_DIRECTOR','TRAINING_ADMIN']
+  ?['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_ADMIN','ADMIN']
+  :['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_ADMIN']
 )
-const changeRoles:Role[]=['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_DIRECTOR','TRAINING_ADMIN','ADMIN','SUPER_ADMIN']
+const changeRoles:Role[]=['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN']
 const formRules:FormRules={
   username:[
     {required:true,message:'请输入用户名',trigger:'blur'},
