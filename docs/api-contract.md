@@ -96,6 +96,7 @@ Authorization: Bearer <token>
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/employees` | `employee:read`，非 `EMPLOYEE`，按数据范围过滤 | 分页查询员工 | `page`、`size`、`keyword`、`batchId`、`classId`、`classPositionId`、`stationId`、`mentorId` | 分页员工列表 |
 | `POST` | `/api/v1/employees` | `employee:write` | 创建员工和关联员工账号 | `employeeNo`、`name`、`gender=男|女`、`batchId`、`classId`、`classPositionId`、`businessUnitId`、`stationId`、`mentorUserId`、`skillMentorUserId`、`status` 及个人资料字段 | 员工 ID |
+| `DELETE` | `/api/v1/employees/{id}` | 仅 `SUPER_ADMIN` | 永久删除新员工、关联账号及个人培养记录 | 路径 `id` | 空 |
 | `PUT` | `/api/v1/employees/{id}` | `employee:write` | 更新人员完整档案；站点改变时自动写入已生效历史 | 同创建员工 | 空 |
 | `POST` | `/api/v1/employees/bind-mentor` | `employee:write` | 批量设置技术或技能导师 | `employeeIds`、`mentorUserId`、`mentorType=TECHNICAL|SKILL` | 更新数量 |
 | `POST` | `/api/v1/employees/bulk/preview` | `employee:update`；导师字段需 `employee:write`；同步账号需 `user:employee:manage` | 预览人员批量结构化修改 | `selection=IDS|FILTER`、`changes`、`syncLinkedAccount` | `selectionHash`、匹配/变更/未变化数量 |
@@ -103,6 +104,12 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/employees/{id}` | `employee:read`，非 `EMPLOYEE`，按数据范围校验 | 查询员工详情 | 路径 `id` | 员工详情 |
 
 员工创建会同步创建 `EMPLOYEE` 账号，账号启用状态跟随人员状态并要求改密。`/api/v1/employees` 继续供统一人员台账页面及其他业务模块复用，不再对应独立前端页面；员工本人使用 `/api/v1/profile/employee`。
+
+删除新员工会在同一事务中清理其任务成果、考试、课程学习、评价、历史成绩、请假和调站等个人记录，保留其他员工、共享课程/任务/考试及操作审计。前端要求输入完整工号确认。当前账号、最后一个启用的超级管理员不可删除；存在服务站/区域/导师/评分职责、待审批请假/调站或未销假责任时返回 `409`，要求先处理或转交。账号被其他业务历史外键引用时同样拒绝并回滚全部删除，不改写他人记录。上传文件的业务元数据随个人任务成果清理，存储介质中的对象不在数据库事务中执行物理回收。
+
+`DELETE /api/v1/users/{id}` 也仅允许 `SUPER_ADMIN`。关联员工的账号执行相同的员工与账号联动删除；未关联员工的账号只删除账号和本人学习会话/上传票据。前端要求输入完整账号确认。
+
+请假预览和提交均以当前员工的服务站为依据：`station_id` 为空时，不限请假时长，审批层级统一为 `TRAINING_DIRECTOR`，申请人从启用的培训负责人账号中自主选择；已分配服务站时继续按半天/一天/一天以上分别匹配站长/区域经理/培训负责人。申请版本保留提交时的服务站和审批层级，后续审批、转交均按该版本校验。
 
 ### 人员接口分工与兼容约定
 

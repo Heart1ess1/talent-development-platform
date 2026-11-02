@@ -39,9 +39,10 @@ public class LeaveService {
   public Map<String,Object> preview(LocalDateTime start,LocalDateTime end) {
     ownEmployee();
     var duration=LeaveDuration.calculate(start,end);
-    long station=employeeStation(SecurityUtils.current().id());
+    Long station=employeeStation(SecurityUtils.current().id());
+    String level=approvalLevel(duration.level(),station);
     return Map.of("halfDays",duration.halfDays(),"days",duration.halfDays()/2.0,
-        "level",duration.level(),"periods",duration.periods(),"approvers",candidates(duration.level(),station));
+        "level",level,"periods",duration.periods(),"approvers",candidates(level,station));
   }
 
   public Map<String,Object> context() {
@@ -58,7 +59,7 @@ public class LeaveService {
   public List<Map<String,Object>> transferCandidates(long id,int number){
     if(!SecurityUtils.admin(SecurityUtils.current()))throw new BusinessException(403,"仅管理员可转交");
     var row=version(id,number);
-    return candidates(String.valueOf(row.get("approver_level")),((Number)row.get("station_id")).longValue());
+    return candidates(String.valueOf(row.get("approver_level")),stationId(row));
   }
 
   public Map<String,Object> draft() {
@@ -82,7 +83,7 @@ public class LeaveService {
   @Transactional(isolation=Isolation.READ_COMMITTED)
   public void deleteDraft() {db.update("delete from leave_draft where employee_id=?",ownEmployee());}
 
-  public List<Map<String,Object>> candidates(String level,long station) {
+  public List<Map<String,Object>> candidates(String level,Long station) {
     if (!List.of("STATION_MANAGER","AREA_MANAGER","TRAINING_DIRECTOR").contains(level)) throw bad("审批级别无效");
     String join=switch(level) {
       case "STATION_MANAGER" -> "join station_manager_scope scope on scope.user_id=u.id and scope.station_id=?";
@@ -109,10 +110,11 @@ public class LeaveService {
       return ((Number)previously.get(0).get("request_id")).longValue();
     }
     db.update("insert into leave_submission_key(user_id,request_key,payload_hash) values(?,?,?)",user.id(),form.requestKey(),hash);
-    long station=employeeStation(user.id());
+    Long station=employeeStation(user.id());
     db.queryForList("select id from sys_user where id=? for update",form.approverUserId());
     var duration=LeaveDuration.calculate(form.startAt(),form.endAt());
-    if (candidates(duration.level(),station).stream().noneMatch(x -> ((Number)x.get("id")).longValue()==form.approverUserId()))
+    String level=approvalLevel(duration.level(),station);
+    if (candidates(level,station).stream().noneMatch(x -> ((Number)x.get("id")).longValue()==form.approverUserId()))
       throw bad("审批人不在当前层级或服务站范围内，请重新选择");
     boolean supplemental=form.startAt().isBefore(now());
     if (supplemental && blank(form.supplementalReason())) throw bad("补提申请必须填写说明");
@@ -138,7 +140,7 @@ public class LeaveService {
         values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'PENDING','V1',now(),?)
         """,requestId,version,form.scenario(),form.leaveType(),form.startAt(),form.endAt(),
         form.destination().trim(),form.returnLocation().trim(),form.reason().trim(),
-        supplemental?form.supplementalReason().trim():null,supplemental,duration.halfDays(),duration.level(),
+        supplemental?form.supplementalReason().trim():null,supplemental,duration.halfDays(),level,
         form.approverUserId(),station,user.id());
     action(requestId,version,user.id(),version==1?"SUBMIT":"CHANGE_SUBMIT",null,null,null);
     db.update("update leave_submission_key set request_id=? where user_id=? and request_key=?",requestId,user.id(),form.requestKey());
@@ -157,7 +159,7 @@ public class LeaveService {
     String state="APPROVE".equals(form.action())?"APPROVED":"REJECTED";
     if(state.equals(candidate.get("status")))return;
     if (!"PENDING".equals(candidate.get("status"))) throw bad("该申请已处理");
-    long station=((Number)candidate.get("station_id")).longValue();
+    Long station=stationId(candidate);
     if (candidates(String.valueOf(candidate.get("approver_level")),station).stream().noneMatch(x -> ((Number)x.get("id")).longValue()==user.id()))
       throw new BusinessException(403,"审批资格或管理范围已变更");
     if ("REJECT".equals(form.action()) && blank(form.comment())) throw bad("驳回原因必填");
@@ -244,7 +246,7 @@ public class LeaveService {
     if (blank(form.reason()) || form.approverUserId()==null) throw bad("转交人员和原因必填");
     if(form.reason().length()>500)throw bad("转交原因最多500字");
     db.queryForList("select id from sys_user where id=? for update",form.approverUserId());
-    if (candidates(String.valueOf(row.get("approver_level")),((Number)row.get("station_id")).longValue()).stream()
+    if (candidates(String.valueOf(row.get("approver_level")),stationId(row)).stream()
         .noneMatch(x -> ((Number)x.get("id")).longValue()==form.approverUserId())) throw bad("接收人资格或范围不符");
     db.update("update leave_request_version set approver_user_id=? where request_id=? and version_no=?",form.approverUserId(),id,version);
     db.update("update leave_reminder set status='CLOSED',completed_at=now() where request_id=? and version_no=? and status='OPEN'",id,version);
@@ -373,7 +375,9 @@ public class LeaveService {
   }
   private long ownEmployee(){if(!"EMPLOYEE".equals(SecurityUtils.current().role()))throw new BusinessException(403,"仅员工可操作请假草稿");return employeeId(SecurityUtils.current().id());}
   private long employeeId(long user) {var rows=db.queryForList("select id from employee where user_id=? and status='ACTIVE'",Long.class,user);if(rows.isEmpty())throw bad("在职员工信息不存在");return rows.get(0);}
-  private long employeeStation(long user) {var rows=db.queryForList("select station_id from employee where user_id=? and status='ACTIVE'",Long.class,user);if(rows.isEmpty()||rows.get(0)==null)throw bad("请先配置所属服务站");return rows.get(0);}
+  private Long employeeStation(long user) {var rows=db.queryForList("select station_id from employee where user_id=? and status='ACTIVE'",Long.class,user);if(rows.isEmpty())throw bad("在职员工信息不存在");return rows.get(0);}
+  private String approvalLevel(String durationLevel,Long station) {return station==null?"TRAINING_DIRECTOR":durationLevel;}
+  private Long stationId(Map<String,Object> row) {return row.get("station_id") instanceof Number value?value.longValue():null;}
   private void lockEmployee(long employee) {db.queryForMap("select id from employee where id=? for update",employee);}
   private Map<String,Object> locked(long id) {var employees=db.queryForList("select employee_id from leave_request where id=?",Long.class,id);if(employees.isEmpty())throw new BusinessException(404,"请假单不存在");lockEmployee(employees.get(0));return db.queryForMap("select * from leave_request where id=? for update",id);}
   private Map<String,Object> version(long id,int number) {var rows=db.queryForList("select * from leave_request_version where request_id=? and version_no=?",id,number);if(rows.isEmpty())throw new BusinessException(404,"请假版本不存在");return rows.get(0);}
