@@ -6,6 +6,7 @@ import {
   Clock,
   Connection,
   DataAnalysis,
+  Delete,
   Download,
   Edit,
   MapLocation,
@@ -50,6 +51,8 @@ type DirectorySummary={
 const auth=useAuthStore()
 const router=useRouter()
 const canWrite=computed(()=>auth.can('employee:write'))
+const canDelete=computed(()=>auth.user?.role==='SUPER_ADMIN')
+const deletingId=ref<number|null>(null)
 const canEdit=computed(()=>auth.can('employee:update'))
 const canExport=computed(()=>auth.can('employee:export'))
 const canMaster=computed(()=>auth.can('master:manage'))
@@ -412,6 +415,25 @@ function editCurrent(){
   if(!selectedEmployee.value)return
   fillEmployeeForm(selectedEmployee.value)
   profileMode.value='edit'
+}
+
+async function deleteEmployee(row:DirectoryRow){
+  if(deletingId.value!==null)return
+  try{
+    await ElMessageBox.prompt(
+      `将永久删除 ${row.name}（${row.employee_no}）的员工档案、关联账号和个人培养记录，无法撤销。请输入工号 ${row.employee_no} 确认。`,
+      '删除新员工',
+      {type:'warning',confirmButtonText:'永久删除',cancelButtonText:'取消',inputValidator:value=>value===row.employee_no||'请输入完整工号确认删除'}
+    )
+  }catch{return}
+  deletingId.value=row.id
+  try{
+    await api.delete(`/employees/${row.id}`)
+    selectedRows.value=selectedRows.value.filter(item=>item.id!==row.id)
+    if(selectedEmployee.value?.id===row.id)profileOpen.value=false
+    ElMessage.success('员工档案、关联账号和个人培养记录已删除')
+    await Promise.all([load(),loadPending()])
+  }finally{deletingId.value=null}
 }
 
 async function saveEmployee(){
@@ -953,9 +975,10 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="isNarrow" label="操作" width="78" fixed="right" align="center">
+        <el-table-column v-if="isNarrow" label="操作" :width="canDelete?150:118" fixed="right" align="center">
           <template #default="{row}">
             <div class="row-actions">
+              <el-tooltip v-if="canDelete" content="删除新员工" placement="top"><el-button :icon="Delete" link type="danger" aria-label="删除新员工" :disabled="deletingId!==null" @click="deleteEmployee(row)"/></el-tooltip>
               <el-tooltip content="查看完整档案" placement="top">
                 <el-button
                   :icon="View"
@@ -1006,6 +1029,9 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
               />
             </el-tooltip>
           </template>
+        </el-table-column>
+        <el-table-column v-if="!isNarrow&&canDelete" label="删除" width="78" fixed="right" align="center">
+          <template #default="{row}"><el-button :icon="Delete" link type="danger" aria-label="删除新员工" :disabled="deletingId!==null" @click="deleteEmployee(row)"/></template>
         </el-table-column>
         <template #empty>
           <div class="people-empty">

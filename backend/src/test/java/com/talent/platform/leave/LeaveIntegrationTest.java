@@ -62,6 +62,55 @@ class LeaveIntegrationTest {
   void approve(long id,int version,long reviewer){login(reviewer);service.review(id,version,new LeaveService.ReviewForm("APPROVE","同意"));}
   int count(String sql,Object... args){return db.queryForObject(sql,Integer.class,args);}
 
+  @Test void unassignedEmployeeChoosesTrainingDirectorForEveryDuration(){
+    db.update("update employee set station_id=null where id=?",employee);
+    for(int days:new int[]{0,1,3}) {
+      var start=day().plusDays(10+days*5).atTime(8,0);
+      var end=days==0?start.withHour(12):start.plusDays(days-1).withHour(18);
+      var preview=service.preview(start,end);
+      assertThat(preview).containsEntry("level","TRAINING_DIRECTOR");
+      @SuppressWarnings("unchecked") var people=(List<Map<String,Object>>)preview.get("approvers");
+      assertThat(people).anyMatch(p->((Number)p.get("id")).longValue()==director)
+          .allMatch(p->"TRAINING_DIRECTOR".equals(p.get("role")));
+      long id=service.submit(form(start,end,director,null),null);
+      assertThat(db.queryForMap("select station_id,approver_level,approver_user_id from leave_request_version where request_id=?",id))
+          .containsEntry("station_id",null).containsEntry("approver_level","TRAINING_DIRECTOR").containsEntry("approver_user_id",director);
+      approve(id,1,director);
+      login(employeeUser);
+    }
+  }
+
+  @Test void unassignedEmployeeCannotChooseStationOrAreaManager(){
+    db.update("update employee set station_id=null where id=?",employee);
+    var start=day().plusDays(1).atTime(8,0);
+    for(long approver:new long[]{stationManager,areaManager})
+      assertThatThrownBy(()->service.submit(form(start,start.withHour(12),approver,null),null))
+          .isInstanceOf(BusinessException.class).hasMessageContaining("审批人");
+  }
+
+  @Test void unassignedLeaveCanTransferChangeApproveAndReturn(){
+    db.update("update employee set station_id=null where id=?",employee);
+    long secondDirector=user("-director2","TRAINING_DIRECTOR");
+    long id=service.submit(form(day().minusDays(1).atTime(8,0),day().minusDays(1).atTime(12,0),director,null),null);
+    login(admin);
+    assertThat(service.transferCandidates(id,1)).anyMatch(p->((Number)p.get("id")).longValue()==secondDirector);
+    service.transfer(id,1,new LeaveService.TransferForm(secondDirector,"责任转交"));
+    approve(id,1,secondDirector);
+    login(employeeUser);
+    service.submit(form(day().minusDays(1).atTime(8,0),day().plusDays(1).atTime(12,0),director,1),id);
+    approve(id,2,director);
+    login(employeeUser);
+    service.returnFromLeave(id,new LeaveService.ReturnForm(day().minusDays(1).atTime(11,0),"测试回段地点","",2));
+    assertThat(db.queryForObject("select status from leave_request where id=?",String.class,id)).isEqualTo("RETURNED");
+  }
+
+  @Test void assignedEmployeeStillUsesDurationAndStationScope(){
+    var start=day().plusDays(1).atTime(8,0);
+    assertThat(service.preview(start,start.withHour(12))).containsEntry("level","STATION_MANAGER");
+    assertThat(service.preview(start,start.withHour(18))).containsEntry("level","AREA_MANAGER");
+    assertThat(service.preview(start,start.plusDays(1).withHour(18))).containsEntry("level","TRAINING_DIRECTOR");
+  }
+
   @Test void approvalPlansReturnAndLateFilingAreDistinct(){
     long id=submitPast();approve(id,1,stationManager);
     assertThat(count("select count(*) from employee_location_report where leave_request_id=?",id)).isZero();

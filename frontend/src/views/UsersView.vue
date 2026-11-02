@@ -7,6 +7,7 @@ import {
   CircleCheck,
   CircleClose,
   CopyDocument,
+  Delete,
   EditPen,
   Key,
   Location,
@@ -48,6 +49,7 @@ const rows=ref<UserRow[]>([])
 const stations=ref<Station[]>([])
 const loading=ref(false)
 const saving=ref(false)
+const deletingId=ref<number|null>(null)
 const dialog=ref(false)
 const scopeDialog=ref(false)
 const passwordDialog=ref(false)
@@ -82,7 +84,7 @@ const roleDescriptions:Partial<Record<Role,string>>={
   MENTOR:'负责学员培养与任务指导',
   STATION_MANAGER:'管理指定服务站的人员与业务',
   AREA_MANAGER:'查看所辖服务站人员并审批一天请假',
-  TRAINING_DIRECTOR:'查看全部人员并审批一天以上请假',
+  TRAINING_DIRECTOR:'查看全部人员，审批一天以上或未分配服务站员工的请假',
   TRAINING_ADMIN:'管理培训计划、课程与考试',
   ADMIN:'拥有平台级管理权限'
 }
@@ -384,6 +386,25 @@ async function handleMore(command:string,row:UserRow){
   if(command==='username')await changeUsername(row)
   if(command==='scope')openScope(row)
   if(command==='toggle')await toggle(row)
+  if(command==='delete')await deleteAccount(row)
+}
+
+async function deleteAccount(row:UserRow){
+  if(deletingId.value!==null)return
+  try{
+    await ElMessageBox.prompt(
+      `将永久删除 ${row.display_name}（${row.username}）${row.has_employee_profile?'的账号、员工档案及个人培养记录':'的账号'}，无法撤销。请输入账号 ${row.username} 确认。`,
+      '删除账号',
+      {type:'warning',confirmButtonText:'永久删除',cancelButtonText:'取消',inputValidator:value=>value===row.username||'请输入完整账号确认删除'}
+    )
+  }catch{return}
+  deletingId.value=row.id
+  try{
+    await api.delete(`/users/${row.id}`)
+    selectedRows.value=selectedRows.value.filter(item=>item.id!==row.id)
+    ElMessage.success(row.has_employee_profile?'账号、员工档案及个人培养记录已删除':'账号已删除')
+    await load()
+  }finally{deletingId.value=null}
 }
 
 function canOperate(row:UserRow){
@@ -597,6 +618,7 @@ onMounted(load)
                       :class="{'danger-item':row.enabled}"
                       divided
                     >{{row.enabled?'停用账号':'启用账号'}}</el-dropdown-item>
+                    <el-dropdown-item v-if="superAdmin&&row.id!==auth.user?.id" command="delete" :icon="Delete" :disabled="deletingId!==null" class="danger-item" divided>删除账号</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
