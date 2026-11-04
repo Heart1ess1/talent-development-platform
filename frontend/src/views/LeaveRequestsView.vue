@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed,onMounted,reactive,ref,watch} from 'vue'
 import {ElMessage,ElMessageBox} from 'element-plus'
-import {Plus,Refresh,Search} from '@element-plus/icons-vue'
+import {Download,Plus,Refresh,Search} from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import {useRoute} from 'vue-router'
@@ -14,7 +14,7 @@ const employee=computed(()=>auth.user?.role==='EMPLOYEE')
 const administrator=computed(()=>['ADMIN','SUPER_ADMIN'].includes(auth.user?.role||''))
 const tabs=employee.value?['全部','待审批','待销假','已销假']:['待我审批','我已审批','逾期未销假',...(auth.can('leave:view')?['管理范围记录']:[])]
 const tab=ref(tabs[0])
-const rows=ref<Row[]>([]),total=ref(0),page=ref(1),loading=ref(false)
+const rows=ref<Row[]>([]),total=ref(0),page=ref(1),loading=ref(false),exporting=ref(false)
 const keyword=ref(''),status=ref('')
 const filters=reactive({stationId:null as number|null,scenario:'',approvalStatus:'',returnStatus:'',dates:[] as string[]})
 const context=ref<{employee:Row;stations:{id:number;name:string}[]}>({employee:{},stations:[]})
@@ -37,10 +37,21 @@ function iso(value:string){return value.replace(' ','T')}
 function truth(value:any){return value===true||value===1}
 function canReview(row:Row){return row.status==='PENDING'&&Number(row.approver_user_id)===auth.user?.id}
 function canCancel(row:Row){return row.request_status==='APPROVED'&&new Date(String(row.start_at).replace(' ','T')).getTime()>Date.now()}
+function queryParams(){return {view:requestView.value,keyword:keyword.value||undefined,status:status.value||undefined,stationId:filters.stationId||undefined,scenario:filters.scenario||undefined,approvalStatus:filters.approvalStatus||undefined,returnStatus:filters.returnStatus||undefined,dateFrom:filters.dates?.[0]||undefined,dateTo:filters.dates?.[1]||undefined}}
+async function exportRecords(){
+  exporting.value=true
+  try{
+    const blob=await api.get<any,Blob>('/leave-requests/export',{params:queryParams(),responseType:'blob',timeout:120000})
+    const url=URL.createObjectURL(blob)
+    const link=document.createElement('a');link.href=url;link.download=`请假记录-${tab.value}.xlsx`
+    document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)
+    ElMessage.success('请假记录已导出')
+  }finally{exporting.value=false}
+}
 async function load(){
   loading.value=true
   try{
-    const response=await api.get<any,Envelope<{records:Row[];total:number}>>('/leave-requests',{params:{view:requestView.value,keyword:keyword.value||undefined,status:status.value||undefined,stationId:filters.stationId||undefined,scenario:filters.scenario||undefined,approvalStatus:filters.approvalStatus||undefined,returnStatus:filters.returnStatus||undefined,dateFrom:filters.dates[0]||undefined,dateTo:filters.dates[1]||undefined,page:page.value,size:20}})
+    const response=await api.get<any,Envelope<{records:Row[];total:number}>>('/leave-requests',{params:{...queryParams(),page:page.value,size:20}})
     rows.value=response.data.records;total.value=response.data.total
   }finally{loading.value=false}
 }
@@ -114,7 +125,7 @@ onMounted(async()=>{const response=await api.get<any,Envelope<typeof context.val
 
 <template>
   <div class="leave-page">
-    <header class="page-head"><div><h1>{{employee?'我的请假':'请假审批'}}</h1><p>{{employee?'查看请假进度和回段记录':'处理申请与逾期未销假事项'}}</p></div><div class="head-actions"><el-button v-if="employee&&draftAvailable" @click="resumeDraft">继续草稿</el-button><el-button :icon="Refresh" @click="load">刷新</el-button><el-button v-if="employee" type="primary" :icon="Plus" @click="openForm()">新建请假</el-button></div></header>
+    <header class="page-head"><div><h1>{{employee?'我的请假':'请假审批'}}</h1><p>{{employee?'查看请假进度和回段记录':'处理申请与逾期未销假事项'}}</p></div><div class="head-actions"><el-button v-if="employee&&draftAvailable" @click="resumeDraft">继续草稿</el-button><el-button :icon="Download" :loading="exporting" @click="exportRecords">导出记录</el-button><el-button :icon="Refresh" @click="load">刷新</el-button><el-button v-if="employee" type="primary" :icon="Plus" @click="openForm()">新建请假</el-button></div></header>
     <el-tabs v-model="tab"><el-tab-pane v-for="item in tabs" :key="item" :label="item" :name="item"/></el-tabs>
     <div class="filters"><el-input v-if="!employee" v-model="keyword" clearable :prefix-icon="Search" placeholder="姓名或工号" @keyup.enter="load"/><el-select filterable v-model="status" clearable placeholder="全部状态" @change="load"><el-option v-for="(label,key) in statusLabel" :key="key" :label="label" :value="key"/></el-select><el-button @click="load">查询</el-button></div>
     <div class="filters extended-filters">

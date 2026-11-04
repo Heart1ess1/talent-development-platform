@@ -111,6 +111,10 @@ Authorization: Bearer <token>
 
 请假预览和提交均以当前员工的服务站为依据：`station_id` 为空时，不限请假时长，审批层级统一为 `TRAINING_DIRECTOR`，申请人从启用的培训管理员（`TRAINING_ADMIN`）账号中自主选择；`TRAINING_DIRECTOR` 仅为审批层级编码，培训负责人即培训管理员；已分配服务站时继续按半天/一天/一天以上分别匹配站长/区域经理/培训管理员。申请版本保留提交时的服务站和审批层级，后续审批、转交均按该版本校验。
 
+### 请假记录导出
+
+`GET /api/v1/leave-requests/export` 返回 `.xlsx`，接受与请假列表相同的 `view`、`keyword`、`status`、`stationId`、`scenario`、`approvalStatus`、`returnStatus`、`dateFrom`、`dateTo`，导出全部匹配版本，不接受分页截断。列表与导出复用同一查询条件及权限范围，员工限定本人，管理范围记录要求 `leave:view`；`pending` / `overdue` 按指定接收人，`reviewed` 按实际审批操作筛选。未登录返回 401；无权查看管理范围返回 403；无效日期范围返回 400。导出记录 `EXPORT_LEAVE_REQUESTS` 审计，包含视图与条数。无需数据库迁移或新增环境变量。
+
 ### 人员接口分工与兼容约定
 
 - `/api/v1/employees` 是人员命令与共享查询接口，负责创建、修改、批量设置导师以及供课程、任务、评价等模块选择人员。
