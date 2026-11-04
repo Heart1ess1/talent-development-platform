@@ -258,8 +258,28 @@ public class LeaveService {
 
   public PageResult<Map<String,Object>> list(String view,String keyword,String status,Long stationId,String scenario,
       String approvalStatus,String returnStatus,LocalDate dateFrom,LocalDate dateTo,int page,int size) {
-    CurrentUser user=SecurityUtils.current();
     int limit=Math.min(100,Math.max(1,size)); int offset=Math.max(0,page-1)*limit;
+    var query=listQuery(view,keyword,status,stationId,scenario,approvalStatus,returnStatus,dateFrom,dateTo);
+    Long total=db.queryForObject("select count(*)"+query.sql(),Long.class,query.args().toArray());
+    var args=new ArrayList<>(query.args());args.add(limit);args.add(offset);
+    var rows=db.queryForList(listColumns()+query.sql()+" order by v.created_at desc,v.id desc limit ? offset ?",args.toArray());
+    return new PageResult<>(rows,total==null?0:total,page,limit);
+  }
+
+  @Transactional(isolation=Isolation.REPEATABLE_READ)
+  public List<LeaveExportRow> export(String view,String keyword,String status,Long stationId,String scenario,
+      String approvalStatus,String returnStatus,LocalDate dateFrom,LocalDate dateTo) {
+    var query=listQuery(view,keyword,status,stationId,scenario,approvalStatus,returnStatus,dateFrom,dateTo);
+    var rows=db.queryForList(listColumns()+query.sql()+" order by v.created_at desc,v.id desc",query.args().toArray());
+    var output=rows.stream().map(LeaveExportRow::from).toList();
+    audit.log("EXPORT_LEAVE_REQUESTS","LEAVE_REQUEST",null,null,Map.of("view",view,"count",output.size()));
+    return output;
+  }
+
+  private record ListQuery(String sql,List<Object> args) {}
+  private ListQuery listQuery(String view,String keyword,String status,Long stationId,String scenario,
+      String approvalStatus,String returnStatus,LocalDate dateFrom,LocalDate dateTo) {
+    CurrentUser user=SecurityUtils.current();
     String where=" where 1=1";
     var args=new ArrayList<Object>();
     if ("EMPLOYEE".equals(user.role())) {
@@ -287,15 +307,18 @@ public class LeaveService {
     if(dateFrom!=null&&dateTo!=null&&dateTo.isBefore(dateFrom))throw bad("日期范围无效");
     String versionJoin="reviewed".equals(view)?"":" and (v.version_no=r.current_version or v.status='PENDING')";
     String base=" from leave_request r join employee e on e.id=r.employee_id join leave_request_version v on v.request_id=r.id"+versionJoin;
-    Long total=db.queryForObject("select count(*)"+base+where,Long.class,args.toArray());
-    args.add(limit);args.add(offset);
-    var rows=db.queryForList("select r.id request_id,r.status request_status,r.current_version,e.name employee_name,e.employee_no,"+
+    return new ListQuery(base+where,args);
+  }
+
+  private String listColumns() {
+    return "select r.id request_id,r.status request_status,r.current_version,e.name employee_name,e.employee_no,"+
         "v.*,(select name from service_station where id=v.station_id) station_name,"+
         "(select display_name from sys_user where id=v.approver_user_id) approver_name,"+
+        "(select u.display_name from leave_action a join sys_user u on u.id=a.actor_user_id where a.request_id=r.id and a.version_no=v.version_no and a.action in ('APPROVED','REJECTED') order by a.id desc limit 1) reviewer_name,"+
+        "(select a.actual_return_at from leave_action a where a.request_id=r.id and a.version_no=v.version_no and a.action='RETURN' order by a.id desc limit 1) actual_return_at,"+
+        "(select a.actual_return_location from leave_action a where a.request_id=r.id and a.version_no=v.version_no and a.action='RETURN' order by a.id desc limit 1) actual_return_location,"+
         "exists(select 1 from leave_request_version p where p.request_id=r.id and p.status='PENDING') has_pending_change,"+
-        "(r.status='APPROVED' and v.version_no=r.current_version and v.end_at<now()) overdue"+
-        base+where+" order by v.created_at desc,v.id desc limit ? offset ?",args.toArray());
-    return new PageResult<>(rows,total==null?0:total,page,limit);
+        "(r.status='APPROVED' and v.version_no=r.current_version and v.end_at<now()) overdue";
   }
 
   public Map<String,Object> detail(long id) {

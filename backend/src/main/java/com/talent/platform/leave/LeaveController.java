@@ -8,6 +8,11 @@ import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import com.alibaba.excel.EasyExcel;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/v1/leave-requests")
@@ -29,6 +34,18 @@ public class LeaveController {
       @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate dateTo,
       @RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int size) {
     return ApiResponse.ok(service.list(view,keyword,status,stationId,scenario,approvalStatus,returnStatus,dateFrom,dateTo,page,size));
+  }
+  @GetMapping("/export") public void export(@RequestParam(defaultValue="mine") String view,
+      @RequestParam(required=false) String keyword,@RequestParam(required=false) String status,
+      @RequestParam(required=false) Long stationId,@RequestParam(required=false) String scenario,
+      @RequestParam(required=false) String approvalStatus,@RequestParam(required=false) String returnStatus,
+      @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+      @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate dateTo,
+      HttpServletResponse response) throws IOException {
+    var rows=service.export(view,keyword,status,stationId,scenario,approvalStatus,returnStatus,dateFrom,dateTo);
+    response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    response.setHeader("Content-Disposition","attachment; filename*=UTF-8''"+URLEncoder.encode("请假记录.xlsx",StandardCharsets.UTF_8));
+    EasyExcel.write(response.getOutputStream(),LeaveExportRow.class).sheet("请假记录").doWrite(rows);
   }
   @GetMapping("/{id}") public ApiResponse<Map<String,Object>> detail(@PathVariable long id) {return ApiResponse.ok(service.detail(id));}
   @GetMapping("/plans") public ApiResponse<List<Map<String,Object>>> plans(@RequestParam(required=false) Long employeeId) {return ApiResponse.ok(service.plans(employeeId));}

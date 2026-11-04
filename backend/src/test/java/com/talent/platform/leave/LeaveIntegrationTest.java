@@ -17,6 +17,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.core.Authentication;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import java.io.ByteArrayInputStream;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -26,6 +31,7 @@ import static org.mockito.Mockito.*;
 
 /** Requires a disposable MySQL database, never a production schema. */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.MOCK)
+@AutoConfigureMockMvc
 @EnabledIfEnvironmentVariable(named="LEAVE_TEST_DB_URL",matches=".+")
 class LeaveIntegrationTest {
   @DynamicPropertySource static void database(DynamicPropertyRegistry properties) {
@@ -33,6 +39,7 @@ class LeaveIntegrationTest {
     properties.add("app.bootstrap.demo-users-enabled",()->false);
   }
   @Autowired JdbcTemplate db;
+  @Autowired MockMvc mvc;
   @Autowired LeaveService service;
   @Autowired PermissionService permissions;
   @Autowired UserController accounts;
@@ -61,6 +68,100 @@ class LeaveIntegrationTest {
   long submitPast(){return service.submit(form(day().minusDays(1).atTime(8,0),day().minusDays(1).atTime(12,0),stationManager,null),null);}
   void approve(long id,int version,long reviewer){login(reviewer);service.review(id,version,new LeaveService.ReviewForm("APPROVE","同意"));}
   int count(String sql,Object... args){return db.queryForObject(sql,Integer.class,args);}
+
+  @Test void trainingAdminTransferCreatesPersonalTaskAndAllowsApproveAndReject() {
+    db.update("update employee set station_id=null where id=?",employee);
+    long receiver=user("-receiver","TRAINING_ADMIN");
+    var start=day().plusDays(2).atTime(8,0);
+    long approved=service.submit(form(start,start.withHour(12),director,null),null);
+    long rejected=service.submit(form(start.plusDays(1),start.plusDays(1).withHour(12),director,null),null);
+    login(receiver);
+    assertThat(service.list("pending",tag,null,null,null,null,null,null,null,1,20).total()).isZero();
+    assertThatThrownBy(()->service.review(approved,1,new LeaveService.ReviewForm("APPROVE","")))
+        .isInstanceOf(BusinessException.class).hasMessageContaining("指定审批人");
+    login(admin);
+    service.transfer(approved,1,new LeaveService.TransferForm(receiver,"培训管理员接收"));
+    service.transfer(rejected,1,new LeaveService.TransferForm(receiver,"培训管理员接收"));
+    login(director);
+    assertThat(service.list("pending",tag,null,null,null,null,null,null,null,1,20).total()).isZero();
+    login(receiver);
+    assertThat(service.list("pending",tag,null,null,null,null,null,null,null,1,20).records())
+        .extracting(r->((Number)r.get("request_id")).longValue()).containsExactlyInAnyOrder(approved,rejected);
+    service.review(approved,1,new LeaveService.ReviewForm("APPROVE","同意"));
+    service.review(rejected,1,new LeaveService.ReviewForm("REJECT","补充说明"));
+    assertThat(service.list("pending",tag,null,null,null,null,null,null,null,1,20).total()).isZero();
+    assertThat(service.list("reviewed",tag,null,null,null,null,null,null,null,1,20).total()).isEqualTo(2);
+    assertThat(service.export("reviewed",tag,null,null,null,null,null,null,null))
+        .allMatch(row->row.getReviewer().equals(tag+"-receiver"));
+  }
+
+  @Test void systemAdminIsNotATrainingApproverAndCannotTransferToSelf() {
+    db.update("update employee set station_id=null where id=?",employee);
+    var start=day().plusDays(2).atTime(8,0);
+    long id=service.submit(form(start,start.withHour(12),director,null),null);
+    login(admin);
+    assertThat(service.list("pending",tag,null,null,null,null,null,null,null,1,20).total()).isZero();
+    assertThat(service.list("all",tag,null,null,null,null,null,null,null,1,20).total()).isEqualTo(1);
+    assertThat(service.transferCandidates(id,1)).noneMatch(row->((Number)row.get("id")).longValue()==admin);
+    assertThatThrownBy(()->service.transfer(id,1,new LeaveService.TransferForm(admin,"转交给自己")))
+        .isInstanceOf(BusinessException.class).hasMessageContaining("资格");
+    assertThatThrownBy(()->service.review(id,1,new LeaveService.ReviewForm("APPROVE","")))
+        .isInstanceOf(BusinessException.class).hasMessageContaining("指定审批人");
+  }
+
+  @Test void exportIncludesAllPagesAndRespectsEveryFilterAndDataScope() {
+    var start=day().plusDays(2).atTime(8,0);
+    for(int i=0;i<105;i++) {
+      var date=start.plusDays(i);
+      service.submit(form(date,date.withHour(12),stationManager,null),null);
+    }
+    login(admin);
+    assertThat(service.list("all",tag,null,null,null,null,null,null,null,1,20).records()).hasSize(20);
+    assertThat(service.export("all",tag,null,null,null,null,null,null,null)).hasSize(105);
+    var filtered=service.export("all",tag,"PENDING",station,"RETURN_HOME","PENDING",null,start.toLocalDate(),start.plusDays(1).toLocalDate());
+    assertThat(filtered).hasSize(2).allMatch(row->row.getEmployeeNo().equals(tag))
+        .allMatch(row->row.getDays().compareTo(new java.math.BigDecimal("0.5"))==0)
+        .allMatch(row->row.getApprovalStatus().equals("待审批"));
+    assertThat(service.export("all",tag,null,otherStation,null,null,null,null,null)).isEmpty();
+    assertThat(service.export("all",tag,null,null,"OTHER",null,null,null,null)).isEmpty();
+    assertThat(service.export("all",tag,null,null,null,"REJECTED",null,null,null)).isEmpty();
+    assertThat(service.export("all",tag,null,null,null,null,"RETURNED",null,null)).isEmpty();
+    assertThatThrownBy(()->service.export("all",tag,null,null,null,null,null,start.toLocalDate(),start.minusDays(1).toLocalDate()))
+        .isInstanceOf(BusinessException.class).hasMessageContaining("日期范围");
+    login(otherArea);
+    assertThat(service.export("all",tag,null,null,null,null,null,null,null)).isEmpty();
+    long otherEmployee=user("-otherEmployee","EMPLOYEE");
+    login(otherEmployee);
+    assertThat(service.export("all",tag,null,null,null,null,null,null,null)).isEmpty();
+    login(employeeUser);
+    assertThat(service.export("mine",tag,null,null,null,null,null,null,null)).hasSize(105);
+    long mentor=user("-mentor","MENTOR");login(mentor);
+    assertThatThrownBy(()->service.export("all",tag,null,null,null,null,null,null,null))
+        .isInstanceOf(BusinessException.class).hasMessageContaining("无权查看");
+  }
+
+  @Test void exportHttpRequiresAuthenticationAndProducesReadableWorkbook() throws Exception {
+    long id=submitPast();approve(id,1,stationManager);login(employeeUser);
+    service.returnFromLeave(id,new LeaveService.ReturnForm(day().minusDays(1).atTime(11,0),"测试回段地点","",1));
+    Authentication authentication=SecurityContextHolder.getContext().getAuthentication();
+    SecurityContextHolder.clearContext();
+    mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/leave-requests/export"))
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isUnauthorized());
+    var response=mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/leave-requests/export")
+        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication(authentication))
+        .param("view","returned").param("keyword",tag))
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk()).andReturn().getResponse();
+    assertThat(response.getHeader("Content-Disposition")).contains("filename*=UTF-8''");
+    try(var workbook=new XSSFWorkbook(new ByteArrayInputStream(response.getContentAsByteArray()))) {
+      var sheet=workbook.getSheetAt(0);
+      assertThat(sheet.getLastRowNum()).isEqualTo(1);
+      assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo(tag);
+      assertThat(sheet.getRow(1).getCell(9).getNumericCellValue()).isEqualTo(0.5);
+      assertThat(sheet.getRow(1).getCell(18).getStringCellValue()).isEqualTo("已销假");
+      assertThat(sheet.getRow(1).getCell(22).getStringCellValue()).isNotBlank();
+      assertThat(sheet.getRow(1).getCell(23).getStringCellValue()).isEqualTo("测试回段地点");
+    }
+  }
 
   @Test void unassignedEmployeeChoosesExistingTrainingAdminForEveryDuration(){
     db.update("update employee set station_id=null where id=?",employee);
