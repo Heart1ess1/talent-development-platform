@@ -35,16 +35,7 @@ public class EvaluationRevisionService {
         monthly.put(employee+":"+key,item);
       }
     }
-    var result=new ArrayList<>(monthly.values());Set<String> quarters=new HashSet<>();
-    for(var item:monthly.values()){
-      long employee=((Number)item.get("employeeId")).longValue();YearMonth month=YearMonth.parse(item.get("periodKey").toString());int first=(month.getMonthValue()-1)/3*3+1;
-      String quarter=month.getYear()+"-Q"+((first-1)/3+1);if(!quarters.add(employee+":"+quarter))continue;
-      var official=db.queryForList("select final_score,scheme_id from score_summary where employee_id=? and summary_type='QUARTER' and period_key=? and status='PUBLISHED'",employee,quarter);if(official.isEmpty())continue;
-      var projected=new LinkedHashMap<String,Object>();projected.put("employeeId",employee);projected.put("name",item.get("name"));projected.put("periodKey",quarter);projected.put("summaryType","QUARTER");projected.put("oldScore",official.get(0).get("final_score"));
-      try{var value=evaluation.calculateQuarter(employee,quarter,evaluation.quarterSchemeFor(employee,quarter),null,monthly);projected.put("missingItems",value.missing());projected.put("newScore",value.finalScore());}
-      catch(BusinessException error){projected.put("error",error.getMessage());projected.put("newScore",null);}result.add(projected);
-    }
-    return result;
+    return new ArrayList<>(monthly.values());
   }
 
   @Transactional
@@ -52,8 +43,7 @@ public class EvaluationRevisionService {
 
   @Transactional
   public Long quarterChanged(Long employee,String key,String reason){
-    if(db.queryForObject("select count(*) from score_summary where employee_id=? and summary_type='QUARTER' and period_key=? and status='PUBLISHED'",Integer.class,employee,key)==0){evaluation.refreshQuarterIfPresent(employee,key);return null;}
-    return changed(Map.of(employee,Set.of(EvaluationService.quarterEnd(key))),reason,true);
+    throw new BusinessException(410,"季度评价已停止");
   }
 
   private Long changed(Map<Long,Set<YearMonth>> affected,String reason,boolean quarterOnly){
@@ -82,9 +72,6 @@ public class EvaluationRevisionService {
     }
     for(var entry:affected.entrySet())for(var month:entry.getValue()){
       if(!quarterOnly)db.update("insert ignore into evaluation_revision_member(group_id,employee_id,period_key,summary_type) values(?,?,?,'MONTH')",id,entry.getKey(),month.toString());
-      String quarter=month.getYear()+"-Q"+((month.getMonthValue()-1)/3+1);
-      if(db.queryForObject("select count(*) from score_summary where employee_id=? and period_key=? and summary_type='QUARTER' and status='PUBLISHED'",Integer.class,entry.getKey(),quarter)>0)
-        db.update("insert ignore into evaluation_revision_member(group_id,employee_id,period_key,summary_type) values(?,?,?,'QUARTER')",id,entry.getKey(),quarter);
     }
     db.update("update evaluation_revision_group set generation=generation+1,reason=? where id=?",reason,id);
     refresh(id);
@@ -94,7 +81,6 @@ public class EvaluationRevisionService {
   @Transactional
   public Map<String,Object> refresh(Long id){
     requireDraft(id);
-    for(var member:members(id))if("MONTH".equals(member.get("summary_type"))){YearMonth month=YearMonth.parse(member.get("period_key").toString());String quarter=month.getYear()+"-Q"+((month.getMonthValue()-1)/3+1);if(db.queryForObject("select count(*) from score_summary where employee_id=? and summary_type='QUARTER' and period_key=? and status='PUBLISHED'",Integer.class,member.get("employee_id"),quarter)>0)db.update("insert ignore into evaluation_revision_member(group_id,employee_id,period_key,summary_type) values(?,?,?,'QUARTER')",id,member.get("employee_id"),quarter);}
     for(var member:members(id)) if("MONTH".equals(member.get("summary_type"))){
       Long employee=((Number)member.get("employee_id")).longValue();YearMonth month=YearMonth.parse(member.get("period_key").toString());
       try {
@@ -105,7 +91,7 @@ public class EvaluationRevisionService {
         db.update("update evaluation_revision_member set summary_id=?,error_message=null where group_id=? and employee_id=? and period_key=? and summary_type='MONTH'",summary,id,employee,month.toString());
       }catch(BusinessException ex){db.update("update evaluation_revision_member set error_message=? where group_id=? and employee_id=? and period_key=? and summary_type='MONTH'",ex.getMessage(),id,employee,month.toString());}
     }
-    for(var member:members(id))if("QUARTER".equals(member.get("summary_type"))){try{refreshQuarter(id,member);}catch(BusinessException ex){db.update("update evaluation_revision_member set error_message=? where group_id=? and employee_id=? and period_key=? and summary_type='QUARTER'",ex.getMessage(),id,member.get("employee_id"),member.get("period_key"));}}
+    for(var member:members(id))if("QUARTER".equals(member.get("summary_type"))){db.update("update evaluation_revision_member set error_message=? where group_id=? and employee_id=? and period_key=? and summary_type='QUARTER'", "季度评价已停止",id,member.get("employee_id"),member.get("period_key"));}
     return detail(id);
   }
 
@@ -127,6 +113,7 @@ public class EvaluationRevisionService {
     requireDraft(id);var fresh=refresh(id);
     if(reviewToken==null||!reviewToken.equals(fresh.get("reviewToken")))throw new BusinessException(409,"评分来源已变化，请刷新并重新核对修订稿");
     for(var row:members(id)){
+      if(Arrays.asList(Objects.toString(row.get("missing_items"),"").split(",")).contains("DEFENSE"))throw new BusinessException(400,"请先发布答辩成绩");
       if(row.get("error_message")!=null||row.get("summary_id")==null||row.get("final_score")==null||(!Objects.toString(row.get("missing_items"),"").isBlank()&&(row.get("revision_override_score")==null||Objects.toString(row.get("waiver_reason"),"").isBlank())))throw new BusinessException(400,"关联修订仍有缺失方案或评分，请先完善");
       db.update("update score_summary set status='SUPERSEDED' where employee_id=? and summary_type=? and period_key=? and status='PUBLISHED'",row.get("employee_id"),row.get("summary_type"),row.get("period_key"));
       db.update("update score_summary set status='PUBLISHED',published_at=now() where id=? and status='DRAFT'",row.get("summary_id"));

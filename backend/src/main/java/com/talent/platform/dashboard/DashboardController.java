@@ -112,9 +112,9 @@ public class DashboardController {
         group by ea.employee_id
         """, employeeId);
     Map<String, Object> exam = examRows.isEmpty() ? new LinkedHashMap<>() : examRows.get(0);
-    Object latestQuarterScore = scalarOrNull("""
+    Object latestMonthScore = scalarOrNull("""
         select final_score from score_summary
-        where employee_id=? and summary_type='QUARTER' and status='PUBLISHED'
+        where employee_id=? and summary_type='MONTH' and status='PUBLISHED'
         order by period_key desc,version desc limit 1
         """, employeeId);
 
@@ -123,7 +123,7 @@ public class DashboardController {
     metrics.put("completed_tasks", number(task.get("completed_tasks")));
     metrics.put("upcoming_courses", number(course.get("upcoming_courses")));
     metrics.put("pending_exams", number(exam.get("pending_exams")));
-    metrics.put("latest_quarter_score", latestQuarterScore);
+    metrics.put("latest_month_score", latestMonthScore);
     metrics.put("task_completion_rate", percent(task.get("completed_tasks"), task.get("task_total")));
     metrics.put("course_attendance_rate", percent(course.get("attended_courses"), course.get("finished_courses")));
     metrics.put("exam_completion_rate", percent(exam.get("completed_exams"), exam.get("assigned_exams")));
@@ -218,12 +218,7 @@ public class DashboardController {
     schedule.sort(Comparator.comparing(item -> sortableTime(item.get("starts_at"))));
     result.put("learning_schedule", schedule.stream().limit(8).toList());
 
-    result.put("quarter_scores", db.queryForList("""
-        select period_key,final_score,published_at,component_snapshot,quarter_snapshot
-        from score_summary
-        where employee_id=? and summary_type='QUARTER' and status='PUBLISHED'
-        order by period_key desc,version desc limit 4
-        """, employeeId));
+    result.put("quarter_scores", List.of());
     result.put("mentor_feedback", db.queryForList("""
         select date_format(m.period_month,'%Y-%m') period_key,m.score,m.comment,m.submitted_at,
           u.display_name evaluator_name

@@ -1,59 +1,136 @@
 <script setup lang="ts">
 import {computed,onMounted,reactive,ref} from 'vue'
+import {useRoute} from 'vue-router'
 import {ElMessage,ElMessageBox} from 'element-plus'
 import {api,type Envelope} from '@/api'
 import {scoreText} from '@/evaluation/model'
 import {loadEnabledBusinessUnits,loadDictionaryValues} from '@/utils/masterData'
 import '@/styles/evaluation-center.css'
-const rows=ref<any[]>([]),batches=ref<any[]>([]),units=ref<any[]>([]),classes=ref<any[]>([]),sessions=ref<any[]>([]),stage=ref(1)
-const selectedSession=computed(()=>sessions.value.find(x=>x.stage_no===stage.value))
-const stageLabels=['第一季度答辩','第二季度答辩','第三季度答辩','第四季度答辩']
-const sessionOpen=ref(false),sessionForm=reactive<any>({stage:1,year:new Date().getFullYear(),quarter:1,version:0})
-const filters=reactive<any>({batchId:null,businessUnitId:null,classId:null,keyword:'',status:''}),loading=ref(false),editorOpen=ref(false),historyOpen=ref(false),history=ref<any[]>([])
-const rowEditorOpen=ref(false),rowEditor=reactive<any>({})
-const form=reactive<any>({employeeId:null,sessionId:null,score:null,comment:'',revisionOf:null}),importOpen=ref(false),importRevision=ref(false),imported=ref<any>(),fileInput=ref<HTMLInputElement>()
-const labels:Record<string,string>={NOT_ENTERED:'未录入',DRAFT:'草稿',VALID:'校验通过',ERROR:'校验错误',PUBLISHED:'已发布',SUPERSEDED:'已被修订'}
-const metrics=computed(()=>({total:rows.value.length,published:rows.value.filter(x=>x.status==='PUBLISHED').length,drafts:rows.value.filter(x=>['DRAFT','VALID'].includes(x.status)).length,pending:rows.value.filter(x=>x.status==='NOT_ENTERED').length}))
-function query(){return {sessionId:selectedSession.value?.id,businessUnitId:filters.businessUnitId,classId:filters.classId,keyword:filters.keyword,status:filters.status}}
-async function load(){if(!selectedSession.value?.id){rows.value=[];return}loading.value=true;try{rows.value=(await api.get<any,Envelope<any[]>>('/evaluation/defenses',{params:query()})).data}finally{loading.value=false}}
-async function loadSessions(){rows.value=[];sessions.value=filters.batchId?(await api.get<any,Envelope<any[]>>('/evaluation/defenses/sessions',{params:{batchId:filters.batchId}})).data:[];await load()}
-async function selectStage(value:number){stage.value=value;await load()}
-function configure(row:any){const anchor=sessions.value.find(x=>x.period_key);let suggested=row.period_key;if(!suggested&&anchor){const [year,q]=anchor.period_key.split('-Q').map(Number);const ordinal=year*4+q-1+row.stage_no-anchor.stage_no;suggested=`${Math.floor(ordinal/4)}-Q${ordinal%4+1}`}const period=suggested?.split('-Q');Object.assign(sessionForm,{stage:row.stage_no,year:period?Number(period[0]):new Date().getFullYear(),quarter:period?Number(period[1]):row.stage_no,version:row.version});sessionOpen.value=true}
-async function saveSession(){await api.put(`/evaluation/defenses/sessions/${filters.batchId}/${sessionForm.stage}`,{periodKey:`${sessionForm.year}-Q${sessionForm.quarter}`,version:sessionForm.version});ElMessage.success('季度答辩场次已设置');sessionOpen.value=false;await loadSessions()}
-async function edit(row:any){if(row.configuration_error)return ElMessage.warning(row.configuration_error);const revisions=(await api.get<any,Envelope<any[]>>('/evaluation/defenses/history',{params:{employeeId:row.employee_id,sessionId:selectedSession.value.id}})).data;const current=revisions.find(x=>x.status==='PUBLISHED');Object.assign(form,{employeeId:row.employee_id,sessionId:selectedSession.value.id,employeeName:row.employee_name,stageLabel:selectedSession.value.label,periodKey:selectedSession.value.period_key,fullScore:row.full_score||100,score:row.score??null,comment:row.comment||'',revisionOf:current?.id||null});editorOpen.value=true}
-async function save(){if(form.score==null)return ElMessage.warning('请填写答辩成绩');await api.post('/evaluation/defenses',form);ElMessage.success('草稿已保存');editorOpen.value=false;await load()}
-async function publish(row:any){if(row.import_batch_id){imported.value=(await api.get<any,Envelope<any>>(`/evaluation/defenses/imports/${row.import_batch_id}`)).data;importOpen.value=true;return}await ElMessageBox.confirm('校验并发布该答辩成绩？已发布综合评价将生成关联修订稿。','发布答辩成绩');await api.post(`/evaluation/defenses/${row.id}/publish`);ElMessage.success('答辩成绩已发布');await load()}
-async function showHistory(row:any){history.value=(await api.get<any,Envelope<any[]>>('/evaluation/defenses/history',{params:{employeeId:row.employee_id,sessionId:selectedSession.value.id}})).data;historyOpen.value=true}
-async function download(url:string,name:string){const response:any=await api.get(url,{params:query(),responseType:'blob'});const link=document.createElement('a');link.href=URL.createObjectURL(response);link.download=name;link.click();URL.revokeObjectURL(link.href)}
-async function upload(event:Event){const file=(event.target as HTMLInputElement).files?.[0];if(!file)return;if(!selectedSession.value?.id)return ElMessage.warning('请先设置并选择季度答辩场次');const body=new FormData();body.append('file',file);loading.value=true;try{imported.value=(await api.post<any,Envelope<any>>('/evaluation/defenses/imports',body,{params:{sessionId:selectedSession.value.id,revision:importRevision.value}})).data;importOpen.value=true}finally{loading.value=false;(event.target as HTMLInputElement).value=''}}
-function editImportRow(row:any){Object.assign(rowEditor,row);rowEditorOpen.value=true}
-async function saveImportRow(){imported.value=(await api.put<any,Envelope<any>>(`/evaluation/defenses/imports/${imported.value.id}/rows/${rowEditor.id}`,{employee_no:rowEditor.employee_no,employee_name:rowEditor.employee_name,raw_score:rowEditor.raw_score,comment:rowEditor.comment})).data;rowEditorOpen.value=false}
-async function validateImport(){imported.value=(await api.post<any,Envelope<any>>(`/evaluation/defenses/imports/${imported.value.id}/validate`)).data}
-async function publishImport(){await ElMessageBox.confirm('确认发布全部校验通过的答辩成绩？','发布导入');await api.post(`/evaluation/defenses/imports/${imported.value.id}/publish`);ElMessage.success('导入成绩已发布');importOpen.value=false;await load()}
-onMounted(async()=>{const [b,u,c]=await Promise.all([api.get<any,Envelope<any[]>>('/batches'),loadEnabledBusinessUnits(),loadDictionaryValues('CLASS')]);batches.value=b.data;units.value=u;classes.value=c;filters.batchId=batches.value.find(x=>String(x.name).endsWith('届'))?.id||batches.value[0]?.id||null;await loadSessions()})
+
+const route=useRoute()
+const tasks=ref<any[]>([]),batches=ref<any[]>([]),units=ref<any[]>([]),classes=ref<any[]>([]),stations=ref<any[]>([]),candidates=ref<any[]>([]),grades=ref<any[]>([]),selected=ref<any>()
+const loading=ref(false),saving=ref(false),editorOpen=ref(false),gradeOpen=ref(false),fileInput=ref<HTMLInputElement>(),importRevision=ref(false),importReason=ref('')
+const importDetail=ref<any>(),importBatches=ref<any[]>([]),editImportOpen=ref(false),importRow=reactive<any>({}),historyOpen=ref(false),historyRows=ref<any[]>([])
+const filters=reactive<any>({month:String(route.query.month||new Date().toISOString().slice(0,7)),batchId:null})
+const peopleFilters=reactive<any>({keyword:'',businessUnitId:null,classId:null,stationId:null})
+const peoplePage=ref(1)
+const pagedCandidates=computed(()=>candidates.value.slice((peoplePage.value-1)*20,peoplePage.value*20))
+const form=reactive<any>({id:null,name:'',batchId:null,month:filters.month,fullScore:100,defenseDate:null,note:'',employeeIds:[],version:0})
+const grade=reactive<any>({employeeId:null,score:null,comment:'',revisionOf:null,revisionReason:'',employeeName:'',draftId:null})
+const states:any={DRAFT:'草稿',ACTIVE:'已启用',ENDED:'已结束',CANCELLED:'已取消',PUBLISHED:'已发布',VALID:'待发布',ERROR:'校验错误',SUPERSEDED:'历史版本'}
+async function load(){
+  loading.value=true
+  try{
+    tasks.value=(await api.get<any,Envelope<any[]>>('/evaluation/defenses/tasks',{params:{month:filters.month||undefined,batchId:filters.batchId||undefined}})).data
+    if(selected.value)await openTask(tasks.value.find(x=>x.id===selected.value.id)||null)
+    else if(route.query.taskId)await openTask(tasks.value.find(x=>x.id===Number(route.query.taskId))||null)
+  }finally{loading.value=false}
+}
+async function candidatesLoad(){
+  peoplePage.value=1
+  if(!form.batchId||!form.month){candidates.value=[];return}
+  candidates.value=(await api.get<any,Envelope<any[]>>('/evaluation/defenses/tasks/employees',{params:{batchId:form.batchId,month:form.month,taskId:form.id||undefined,...Object.fromEntries(Object.entries(peopleFilters).filter(([,v])=>v!=null&&v!==''))}})).data
+}
+function create(){
+  Object.assign(form,{id:null,name:'',batchId:filters.batchId||batches.value[0]?.id,month:filters.month,fullScore:100,defenseDate:null,note:'',employeeIds:[],version:0})
+  Object.assign(peopleFilters,{keyword:'',businessUnitId:null,classId:null,stationId:null});editorOpen.value=true;void candidatesLoad()
+}
+async function editTask(row:any){
+  Object.assign(form,{id:row.id,name:row.name,batchId:row.talent_batch_id,month:String(row.period_month).slice(0,7),fullScore:Number(row.full_score),defenseDate:row.defense_date,note:row.note||'',version:row.version})
+  form.employeeIds=(await api.get<any,Envelope<any[]>>('/evaluation/defenses/tasks/'+row.id+'/participants')).data.filter(x=>x.active_flag).map(x=>x.id)
+  Object.assign(peopleFilters,{keyword:'',businessUnitId:null,classId:null,stationId:null});editorOpen.value=true;await candidatesLoad()
+}
+function togglePerson(row:any,value:boolean){form.employeeIds=value?[...new Set([...form.employeeIds,row.id])]:form.employeeIds.filter((id:number)=>id!==row.id)}
+function selectPage(){form.employeeIds=[...new Set([...form.employeeIds,...pagedCandidates.value.filter(x=>!x.conflict).map(x=>x.id)])]}
+async function saveTask(){
+  if(!form.name.trim()||!form.batchId||!form.month||!form.employeeIds.length)return ElMessage.warning('请填写任务名称、批次、月份并选择参与人员')
+  saving.value=true
+  try{if(form.id)await api.put('/evaluation/defenses/tasks/'+form.id,{...form,employeeIds:[...form.employeeIds]});else await api.post('/evaluation/defenses/tasks',{...form,employeeIds:[...form.employeeIds]});ElMessage.success('任务草稿已保存');editorOpen.value=false;await load()}finally{saving.value=false}
+}
+async function action(row:any,action:string){
+  const labels:any={activate:'启用',end:'结束',cancel:'取消',delete:'删除'}
+  await ElMessageBox.confirm('确认'+labels[action]+'“'+row.name+'”？','答辩任务')
+  if(action==='delete')await api.delete('/evaluation/defenses/tasks/'+row.id,{params:{version:row.version}})
+  else await api.post('/evaluation/defenses/tasks/'+row.id+'/'+action,{version:row.version})
+  ElMessage.success('操作完成');await load()
+}
+async function openTask(row:any){
+  selected.value=row;importDetail.value=undefined
+  if(!row){grades.value=[];importBatches.value=[];return}
+  const [g,b]=await Promise.all([api.get<any,Envelope<any[]>>('/evaluation/defenses/tasks/'+row.id+'/grades'),api.get<any,Envelope<any[]>>('/evaluation/defenses/tasks/'+row.id+'/imports')])
+  grades.value=g.data;importBatches.value=b.data
+}
+function editGrade(row:any){
+  Object.assign(grade,{employeeId:row.employee_id,employeeName:row.employee_name,score:row.score??null,comment:row.comment||'',revisionOf:row.status==='PUBLISHED'?row.id:row.revision_of||null,revisionReason:row.revision_reason||'',draftId:row.id,imported:row.import_batch_id!=null})
+  gradeOpen.value=true
+}
+async function saveGrade(publish:boolean){
+  if(grade.score==null)return ElMessage.warning('请填写答辩成绩')
+  if(grade.revisionOf&&!grade.revisionReason.trim())return ElMessage.warning('请填写修订原因')
+  saving.value=true
+  try{
+    const result=await api.post<any,Envelope<number>>('/evaluation/defenses/tasks/'+selected.value.id+'/grades',grade)
+    if(publish)await api.post('/evaluation/defenses/tasks/grades/'+result.data+'/publish')
+    ElMessage.success(publish?'答辩成绩已发布':'成绩草稿已保存');gradeOpen.value=false;await load()
+  }finally{saving.value=false}
+}
+async function publishDraft(row:any){await ElMessageBox.confirm('确认校验并发布本人成绩？','发布成绩');await api.post('/evaluation/defenses/tasks/grades/'+row.id+'/publish');ElMessage.success('已发布');await load()}
+async function upload(event:Event){
+  const input=event.target as HTMLInputElement,file=input.files?.[0];if(!file||!selected.value)return
+  if(importRevision.value&&!importReason.value.trim()){input.value='';return ElMessage.warning('请填写导入修订原因')}
+  const body=new FormData();body.append('file',file);saving.value=true
+  try{
+    importDetail.value=(await api.post<any,Envelope<any>>('/evaluation/defenses/tasks/'+selected.value.id+'/imports',body,{params:{revision:importRevision.value,revisionReason:importReason.value||undefined}})).data
+    importBatches.value=(await api.get<any,Envelope<any[]>>('/evaluation/defenses/tasks/'+selected.value.id+'/imports')).data
+    ElMessage.success('已解析，请核对下方导入预览')
+  }finally{input.value='';saving.value=false}
+}
+async function openImport(id:number){importDetail.value=(await api.get<any,Envelope<any>>('/evaluation/defenses/tasks/'+selected.value.id+'/imports/'+id)).data}
+function editRow(row:any){Object.assign(importRow,{...row});editImportOpen.value=true}
+async function saveRow(){importDetail.value=(await api.put<any,Envelope<any>>('/evaluation/defenses/tasks/'+selected.value.id+'/imports/'+importDetail.value.id+'/rows/'+importRow.id,importRow)).data;editImportOpen.value=false}
+async function validateImport(){importDetail.value=(await api.post<any,Envelope<any>>('/evaluation/defenses/tasks/'+selected.value.id+'/imports/'+importDetail.value.id+'/validate')).data}
+async function publishImport(){
+  await ElMessageBox.confirm('确认当前任务整批成绩无误并发布？','发布导入');saving.value=true
+  try{await api.post('/evaluation/defenses/tasks/'+selected.value.id+'/imports/'+importDetail.value.id+'/publish');ElMessage.success('整批成绩已发布');await load()}finally{saving.value=false}
+}
+async function history(row:any){historyRows.value=(await api.get<any,Envelope<any[]>>('/evaluation/defenses/tasks/'+selected.value.id+'/history',{params:{employeeId:row.employee_id}})).data;historyOpen.value=true}
+async function download(path:string,name:string){const blob=await api.get<any,Blob>(path,{responseType:'blob'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
+onMounted(async()=>{
+  const [b,u,c,s]=await Promise.all([api.get<any,Envelope<any[]>>('/batches'),loadEnabledBusinessUnits(),loadDictionaryValues('CLASS'),api.get<any,Envelope<any[]>>('/stations')])
+  batches.value=b.data;units.value=u;classes.value=c;stations.value=s.data;await load()
+})
 </script>
 <template>
-  <div class="evaluation-module-page" v-loading="loading"><header class="evaluation-page-head"><div><span class="eyebrow">综合评价 · 答辩评价</span><h1>答辩评价</h1><p>每届仅设第一至第四季度四次答辩；成绩按场次对应季度参与季评，月评不重复计入。</p></div><div class="evaluation-head-actions"><el-button @click="download('/evaluation/defenses/template','答辩成绩导入模板.xlsx')">下载模板</el-button><el-checkbox v-model="importRevision">修订已有成绩</el-checkbox><el-button type="primary" :disabled="!selectedSession?.id" @click="fileInput?.click()">导入答辩成绩</el-button><el-button :disabled="!selectedSession?.id" @click="download('/evaluation/defenses/export','答辩成绩.xlsx')">导出</el-button><input ref="fileInput" type="file" accept=".xlsx,.xls" hidden @change="upload"/></div></header>
-    <section class="evaluation-workspace">
-      <div class="defense-filters">
-        <el-select v-model="filters.batchId" filterable placeholder="选择培养批次" aria-label="培养批次" @change="loadSessions"><el-option v-for="b in batches" :key="b.id" :label="b.name" :value="b.id"/></el-select>
-        <el-select filterable v-model="stage" aria-label="答辩季度" @change="load"><el-option v-for="(label,index) in stageLabels" :key="index" :label="label" :value="index+1"/></el-select>
-        <el-select v-model="filters.businessUnitId" clearable filterable placeholder="全部板块" aria-label="板块"><el-option v-for="u in units" :key="u.id" :label="u.name" :value="u.id"/></el-select>
-        <el-select v-model="filters.classId" clearable filterable placeholder="全部班级" aria-label="班级"><el-option v-for="c in classes" :key="c.id" :label="c.label" :value="c.id"/></el-select>
-        <el-input v-model="filters.keyword" placeholder="姓名／工号" aria-label="姓名或工号" clearable @keyup.enter="load"/>
-        <el-select filterable v-model="filters.status" clearable placeholder="全部状态" aria-label="成绩状态"><el-option v-for="code in ['NOT_ENTERED','DRAFT','VALID','PUBLISHED']" :key="code" :label="labels[code]" :value="code"/></el-select>
-        <el-button type="primary" @click="load">查询</el-button>
-      </div>
-      <div class="defense-stages"><article v-for="item in sessions" :key="item.stage_no" class="defense-stage" :class="{active:stage===item.stage_no}" @click="selectStage(item.stage_no)"><div><strong>{{item.label}}</strong><el-tag v-if="stage===item.stage_no" size="small">当前</el-tag></div><p>{{item.period_key?`对应季评：${item.period_key}`:'尚未设置对应评价季度'}}</p><el-button link type="primary" @click.stop="configure(item)">{{item.id?'调整对应季度':'设置对应季度'}}</el-button></article></div>
-      <el-alert v-if="!selectedSession?.id" title="请先设置该届答辩场次对应的评价季度" description="每届固定四次答辩，可跨自然年安排；同一场次只计入一个季度。已有发布记录后，对应季度锁定，成绩仍可修订。" type="info" :closable="false"/>
-      <section class="evaluation-summary-grid defense-summary"><article v-for="(value,key) in metrics" :key="key" class="evaluation-summary-card blue"><div><small>{{({total:'本场人数',published:'已发布',drafts:'待发布草稿',pending:'未录入'} as any)[key]}}</small><strong>{{value}}</strong></div></article></section>
-      <el-table :data="rows" empty-text="暂无人员"><el-table-column prop="employee_no" label="工号" min-width="160"/><el-table-column prop="employee_name" label="姓名" min-width="100"/><el-table-column prop="batch_name" label="培养批次" min-width="150"/><el-table-column prop="business_unit_name" label="板块"/><el-table-column prop="class_name" label="班级"/><el-table-column prop="stage_label" label="答辩场次" min-width="130"/><el-table-column prop="period_key" label="对应季评" width="110"/><el-table-column label="成绩／满分" min-width="130"><template #default="s">{{scoreText(s.row.score)}} / {{scoreText(s.row.full_score)}}</template></el-table-column><el-table-column label="状态"><template #default="s"><el-tag :type="s.row.status==='PUBLISHED'?'success':'info'">{{labels[s.row.status]}}</el-tag></template></el-table-column><el-table-column label="来源" width="110"><template #default="s">{{s.row.id?(s.row.import_batch_id?'Excel导入':'人工录入'):'—'}}</template></el-table-column><el-table-column prop="updated_at" label="更新时间" min-width="160"/><el-table-column label="操作" min-width="190" fixed="right"><template #default="s"><el-button link @click="edit(s.row)">{{s.row.status==='PUBLISHED'?'修订':'录入／编辑'}}</el-button><el-button v-if="['DRAFT','VALID'].includes(s.row.status)" link type="primary" @click="publish(s.row)">校验发布</el-button><el-button link @click="showHistory(s.row)">历史</el-button></template></el-table-column></el-table>
-    </section>
-    <el-dialog v-model="sessionOpen" :title="`${stageLabels[sessionForm.stage-1]} · 对应评价季度`" width="480px"><el-alert title="按本届培养安排设置，可跨自然年" description="已有成绩发布后，对应季度将锁定；同届不同场次不能对应同一季评。" :closable="false"/><el-form label-position="top" style="margin-top:18px"><el-form-item label="评价年份"><el-input-number v-model="sessionForm.year" :min="2000" :max="2199" :precision="0"/></el-form-item><el-form-item label="评价季度"><el-select filterable v-model="sessionForm.quarter"><el-option v-for="q in 4" :key="q" :label="`第${q}季度（${(q-1)*3+1}—${q*3}月）`" :value="q"/></el-select></el-form-item></el-form><template #footer><el-button @click="sessionOpen=false">取消</el-button><el-button type="primary" @click="saveSession">保存对应关系</el-button></template></el-dialog>
-    <el-drawer v-model="editorOpen" title="录入答辩最终成绩" size="min(520px,95vw)"><el-form label-position="top"><el-form-item label="员工">{{form.employeeName}}</el-form-item><el-form-item label="答辩场次">{{form.stageLabel}} · 对应季评 {{form.periodKey}}</el-form-item><el-form-item :label="`答辩成绩（满分 ${scoreText(form.fullScore)}）`"><el-input-number v-model="form.score" :min="0" :max="form.fullScore" :precision="2" :step="0.01"/></el-form-item><el-form-item label="评价意见"><el-input v-model="form.comment" type="textarea" :rows="5" maxlength="1000"/></el-form-item><el-alert v-if="form.revisionOf" title="本次保存为修订草稿，原已发布成绩保留至新版本发布。" :closable="false"/><el-button type="primary" @click="save">保存草稿</el-button></el-form></el-drawer>
-    <el-dialog v-model="historyOpen" title="答辩成绩修订历史" width="min(800px,95vw)"><el-table :data="history"><el-table-column prop="version" label="版本"/><el-table-column label="成绩"><template #default="s">{{scoreText(s.row.score)}}</template></el-table-column><el-table-column label="状态"><template #default="s">{{labels[s.row.status]}}</template></el-table-column><el-table-column prop="comment" label="意见"/><el-table-column prop="published_at" label="发布时间"/></el-table></el-dialog>
-    <el-dialog v-model="importOpen" title="答辩成绩导入校验" width="min(1000px,96vw)"><el-alert :title="`${imported?.stage_label||''} · 对应季评 ${imported?.period_key||''}；工号精确匹配，空成绩不计作零分。`" :closable="false"/><el-table :data="imported?.rows" max-height="460"><el-table-column prop="row_no" label="行号" width="65"/><el-table-column prop="employee_no" label="工号"/><el-table-column prop="employee_name" label="姓名"/><el-table-column prop="raw_score" label="原始成绩"/><el-table-column prop="error_message" label="错误原因" min-width="250"/><el-table-column label="操作"><template #default="s"><el-button v-if="imported.status==='DRAFT'" link @click="editImportRow(s.row)">修正</el-button></template></el-table-column></el-table><template #footer><el-button v-if="imported?.status==='DRAFT'" @click="validateImport">重新校验</el-button><el-button v-if="imported?.status==='DRAFT'" type="primary" :disabled="imported.rows.some((r:any)=>r.status!=='VALID')" @click="publishImport">审核发布</el-button></template></el-dialog>
-    <el-dialog v-model="rowEditorOpen" title="修正导入行" width="min(520px,95vw)"><el-form label-position="top"><el-form-item label="工号"><el-input v-model="rowEditor.employee_no" maxlength="64"/></el-form-item><el-form-item label="姓名"><el-input v-model="rowEditor.employee_name" maxlength="128"/></el-form-item><el-form-item label="答辩成绩"><el-input v-model="rowEditor.raw_score" placeholder="最多两位小数，空值不代表零分"/></el-form-item><el-form-item label="评价意见"><el-input v-model="rowEditor.comment" type="textarea" maxlength="1000"/></el-form-item></el-form><template #footer><el-button type="primary" @click="saveImportRow">保存并重新校验</el-button></template></el-dialog>
-  </div>
+<div class="evaluation-module-page" v-loading="loading">
+  <header class="evaluation-page-head"><div><span class="eyebrow">综合评价 · 月度答辩</span><h1>答辩任务</h1><p>按月创建任务，由管理员录入或导入最终成绩；发布后进入对应月度评价。</p></div><div class="evaluation-head-actions"><el-date-picker v-model="filters.month" type="month" value-format="YYYY-MM" :clearable="false" @change="load"/><el-button type="primary" @click="create">新建答辩任务</el-button></div></header>
+  <section class="evaluation-workspace">
+    <div class="defense-filters"><el-select v-model="filters.batchId" clearable filterable placeholder="全部培养批次" @change="load"><el-option v-for="b in batches" :key="b.id" :label="b.name" :value="b.id"/></el-select><el-button @click="load">刷新</el-button></div>
+    <el-table :data="tasks" row-key="id" highlight-current-row @current-change="openTask" empty-text="当前月份暂无答辩任务">
+      <el-table-column prop="name" label="任务名称" min-width="160"/><el-table-column prop="batch_name" label="培养批次" min-width="130"/><el-table-column label="计分月份" width="110"><template #default="s">{{String(s.row.period_month).slice(0,7)}}</template></el-table-column><el-table-column prop="participant_count" label="参与人数" width="85"/><el-table-column prop="not_entered_count" label="未录入" width="80"/><el-table-column prop="draft_count" label="待发布" width="80"/><el-table-column prop="published_count" label="已发布" width="80"/><el-table-column label="状态" width="90"><template #default="s">{{states[s.row.status]}}</template></el-table-column>
+      <el-table-column label="操作" width="240"><template #default="s"><el-button v-if="s.row.status==='DRAFT'" link @click.stop="editTask(s.row)">编辑</el-button><el-button v-if="s.row.status==='DRAFT'" link type="primary" @click.stop="action(s.row,'activate')">启用</el-button><el-button v-if="s.row.status==='DRAFT'" link type="danger" @click.stop="action(s.row,'delete')">删除</el-button><el-button v-if="s.row.status==='ACTIVE'" link @click.stop="action(s.row,'end')">结束</el-button><el-button v-if="['DRAFT','ACTIVE'].includes(s.row.status)" link type="danger" @click.stop="action(s.row,'cancel')">取消</el-button></template></el-table-column>
+    </el-table>
+  </section>
+  <section v-if="selected" class="evaluation-workspace">
+    <div class="evaluation-workspace-head"><div><h2>{{selected.name}} · {{String(selected.period_month).slice(0,7)}}</h2><p>满分 {{scoreText(selected.full_score)}} · {{selected.note||'无任务说明'}}</p></div><div class="evaluation-head-actions"><el-button @click="download('/evaluation/defenses/tasks/template','答辩成绩导入模板.xlsx')">下载导入模板</el-button><el-button @click="download('/evaluation/defenses/tasks/'+selected.id+'/export','答辩任务成绩.xlsx')">导出成绩</el-button></div></div>
+    <div v-if="['ACTIVE','ENDED'].includes(selected.status)" class="defense-filters"><el-checkbox v-model="importRevision">修订已有成绩</el-checkbox><el-input v-if="importRevision" v-model="importReason" placeholder="导入修订原因" maxlength="1000"/><el-button :loading="saving" @click="fileInput?.click()">导入 Excel</el-button><input ref="fileInput" type="file" accept=".xlsx,.xls" hidden @change="upload"/></div>
+    <el-table :data="grades"><el-table-column prop="employee_no" label="工号"/><el-table-column prop="employee_name" label="姓名"/><el-table-column label="成绩 / 满分"><template #default="s">{{scoreText(s.row.score)}} / {{scoreText(selected.full_score)}}</template></el-table-column><el-table-column label="状态"><template #default="s">{{states[s.row.status]||'未录入'}}</template></el-table-column><el-table-column prop="comment" label="评价意见" min-width="160"/><el-table-column label="操作" width="230"><template #default="s"><el-button v-if="['ACTIVE','ENDED'].includes(selected.status)" link type="primary" @click="editGrade(s.row)">{{s.row.status==='PUBLISHED'?'修订':'录入成绩'}}</el-button><el-button v-if="['DRAFT','VALID'].includes(s.row.status)&&!s.row.import_batch_id&&['ACTIVE','ENDED'].includes(selected.status)" link @click="publishDraft(s.row)">发布</el-button><el-button v-if="s.row.id" link @click="history(s.row)">版本历史</el-button></template></el-table-column></el-table>
+    <div v-if="importBatches.length" class="defense-filters import-history"><span>导入批次</span><el-button v-for="b in importBatches" :key="b.id" @click="openImport(b.id)">#{{b.id}} {{b.original_filename}} · {{states[b.status]}}</el-button></div>
+    <template v-if="importDetail"><h3>导入预览 #{{importDetail.id}}</h3><el-table :data="importDetail.rows" max-height="400"><el-table-column prop="row_no" label="行" width="60"/><el-table-column prop="employee_no" label="工号"/><el-table-column prop="employee_name" label="姓名"/><el-table-column prop="raw_score" label="原始成绩"/><el-table-column label="状态"><template #default="s">{{states[s.row.status]}}</template></el-table-column><el-table-column prop="error_message" label="错误" min-width="220"/><el-table-column label="操作"><template #default="s"><el-button v-if="importDetail.status==='DRAFT'&&['ACTIVE','ENDED'].includes(selected.status)" link @click="editRow(s.row)">逐行修改</el-button></template></el-table-column></el-table><div class="defense-filters"><el-button v-if="importDetail.status==='DRAFT'" @click="validateImport">重新校验</el-button><el-button v-if="importDetail.status==='DRAFT'" type="primary" :loading="saving" :disabled="!['ACTIVE','ENDED'].includes(selected.status)||importDetail.rows.some((x:any)=>x.status!=='VALID')" @click="publishImport">整批发布</el-button></div></template>
+  </section>
+  <el-dialog v-model="editorOpen" :title="form.id?'编辑答辩任务':'新建答辩任务'" width="min(960px,95vw)" :close-on-click-modal="false">
+    <el-form label-position="top"><div class="defense-filters"><el-form-item label="任务名称" required><el-input v-model="form.name" maxlength="128"/></el-form-item><el-form-item label="培养批次" required><el-select v-model="form.batchId" filterable @change="form.employeeIds=[];candidatesLoad()"><el-option v-for="b in batches" :key="b.id" :label="b.name" :value="b.id"/></el-select></el-form-item><el-form-item label="计分月份" required><el-date-picker v-model="form.month" type="month" value-format="YYYY-MM" :clearable="false" @change="form.employeeIds=[];candidatesLoad()"/></el-form-item><el-form-item label="答辩满分" required><el-input-number v-model="form.fullScore" :min="0.01" :max="999.99" :precision="2"/></el-form-item><el-form-item label="答辩日期"><el-date-picker v-model="form.defenseDate" type="date" value-format="YYYY-MM-DD"/></el-form-item></div><el-form-item label="任务说明"><el-input v-model="form.note" type="textarea" maxlength="1000"/></el-form-item>
+      <div class="defense-filters"><el-select v-model="peopleFilters.businessUnitId" filterable clearable placeholder="全部板块" @change="candidatesLoad"><el-option v-for="u in units" :key="u.id" :label="u.name" :value="u.id"/></el-select><el-select v-model="peopleFilters.classId" filterable clearable placeholder="全部班级" @change="candidatesLoad"><el-option v-for="c in classes" :key="c.id" :label="c.label" :value="c.id"/></el-select><el-select v-model="peopleFilters.stationId" filterable clearable placeholder="全部站点" @change="candidatesLoad"><el-option v-for="s in stations" :key="s.id" :label="s.name" :value="s.id"/></el-select><el-input v-model="peopleFilters.keyword" clearable placeholder="姓名或工号" @keyup.enter="candidatesLoad" @clear="candidatesLoad"/><el-button @click="candidatesLoad">查询人员</el-button></div>
+      <div class="defense-filters"><span>已选 {{form.employeeIds.length}} 人（切换筛选及翻页保留）</span><el-button @click="selectPage">选择本页可选人员</el-button><el-button @click="form.employeeIds=[]">清空已选</el-button></div>
+      <el-table :data="pagedCandidates" row-key="id" max-height="300"><el-table-column label="选择" width="70"><template #default="s"><el-checkbox :model-value="form.employeeIds.includes(s.row.id)" :disabled="!!s.row.conflict" @change="(v:any)=>togglePerson(s.row,!!v)"/></template></el-table-column><el-table-column prop="employee_no" label="工号"/><el-table-column prop="employee_name" label="姓名"/><el-table-column prop="business_unit_name" label="板块"/><el-table-column prop="class_name" label="班级"/><el-table-column prop="station_name" label="站点"/><el-table-column prop="conflict_task_name" label="同月冲突任务"/></el-table>
+      <el-pagination v-model:current-page="peoplePage" :page-size="20" :total="candidates.length" layout="total,prev,pager,next"/>
+      <el-alert title="启用后计分月份、满分和人员锁定；后续新增员工不会自动加入。" type="info" :closable="false"/>
+    </el-form><template #footer><el-button @click="editorOpen=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveTask">保存任务草稿</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="gradeOpen" title="录入答辩最终成绩" width="min(520px,95vw)" :close-on-click-modal="false"><el-form label-position="top"><el-form-item label="员工">{{grade.employeeName}}</el-form-item><el-form-item :label="'答辩成绩（满分 '+scoreText(selected?.full_score)+'）'"><el-input-number v-model="grade.score" :min="0" :max="Number(selected?.full_score||0)" :precision="2" :step="0.01"/></el-form-item><el-form-item label="评价意见"><el-input v-model="grade.comment" type="textarea" maxlength="1000"/></el-form-item><el-form-item v-if="grade.revisionOf" label="成绩修订原因" required><el-input v-model="grade.revisionReason" type="textarea" maxlength="1000"/></el-form-item><el-alert v-if="grade.revisionOf" title="原正式月评在关联修订审核通过前保持有效。" :closable="false"/></el-form><template #footer><el-button @click="gradeOpen=false">取消</el-button><el-button :loading="saving" @click="saveGrade(false)">保存草稿</el-button><el-button type="primary" :loading="saving" @click="saveGrade(true)">校验并发布</el-button></template></el-dialog>
+  <el-dialog v-model="editImportOpen" title="修改导入行" width="min(520px,95vw)"><el-form label-position="top"><el-form-item label="工号"><el-input v-model="importRow.employee_no"/></el-form-item><el-form-item label="姓名"><el-input v-model="importRow.employee_name"/></el-form-item><el-form-item label="原始成绩（空值与0分不同）"><el-input v-model="importRow.raw_score"/></el-form-item><el-form-item label="评价意见"><el-input v-model="importRow.comment"/></el-form-item></el-form><template #footer><el-button @click="editImportOpen=false">取消</el-button><el-button type="primary" @click="saveRow">保存并重新校验</el-button></template></el-dialog>
+  <el-dialog v-model="historyOpen" title="答辩成绩版本历史" width="min(900px,95vw)"><el-table :data="historyRows"><el-table-column prop="version" label="版本"/><el-table-column prop="score" label="成绩"/><el-table-column label="状态"><template #default="s">{{states[s.row.status]}}</template></el-table-column><el-table-column prop="revision_reason" label="修订原因"/><el-table-column prop="creator_name" label="录入人"/><el-table-column prop="published_at" label="发布时间" min-width="170"/></el-table></el-dialog>
+</div>
 </template>
-<style scoped>.defense-filters{display:flex;align-items:center;flex-wrap:nowrap;gap:10px;overflow-x:auto;padding-bottom:6px;margin-bottom:18px}.defense-filters>*{flex:0 0 140px;min-width:140px;width:140px}.defense-filters>.el-date-editor{flex-basis:150px;width:150px}.defense-filters>.el-input{flex-basis:180px;width:180px}.defense-filters>.el-button{flex:0 0 auto;min-width:0;width:auto}.defense-stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:6px 0 18px}.defense-stage{padding:16px;border:1px solid #e4eaf2;border-radius:9px;background:#fafbfd;cursor:pointer}.defense-stage.active{border-color:#8ab5ee;background:#eff6ff;box-shadow:0 0 0 1px #dbeafe inset}.defense-stage>div{display:flex;justify-content:space-between;align-items:center;gap:8px}.defense-stage strong{font-size:14px;color:#223853}.defense-stage p{font-size:12px;color:#718198;margin:9px 0}.defense-summary{margin:18px 0}.defense-summary .evaluation-summary-card{min-height:70px;padding:13px 16px}@media(max-width:850px){.defense-stages{grid-template-columns:repeat(2,minmax(0,1fr))}}</style>
+<style scoped>
+.defense-filters{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}.defense-filters>.el-select,.defense-filters>.el-input{width:180px}.defense-filters .el-form-item{width:180px;margin-bottom:8px}.import-history{padding-top:16px;border-top:1px solid #eee}.evaluation-workspace{overflow:auto}.el-pagination{margin:14px 0}.el-alert{margin-top:14px}
+</style>

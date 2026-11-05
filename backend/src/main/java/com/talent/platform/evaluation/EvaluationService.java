@@ -189,7 +189,9 @@ public class EvaluationService {
     LocalDate start = month.atDay(1), end = month.atEndOfMonth();
     SourceAggregate exam = examAggregate(employeeId,start,scheme,move);
     SourceAggregate task = taskAggregate(employeeId,start,end,scheme,move);
-    var defenseRows=db.queryForList("select score,full_score from defense_result where employee_id=? and period_month=? and session_id is null and status='PUBLISHED'",employeeId,start);
+    boolean taskDefense="TASK_MONTH_V1".equals(scheme.get("monthly_rule_version"));
+    var defenseRows=db.queryForList("select d.score,d.full_score,t.name task_name,t.id task_id,t.period_month,d.version,d.id source_id from defense_result d join defense_task t on t.id=d.task_id join defense_task_participant p on p.task_id=t.id and p.employee_id=d.employee_id and p.active_flag=1 where d.employee_id=? and t.period_month=? and d.status='PUBLISHED' and t.status in ('ACTIVE','ENDED')",employeeId,start);
+    if(!taskDefense)defenseRows=db.queryForList("select score,full_score,id source_id,version from defense_result where employee_id=? and period_month=? and task_id is null and session_id is null and status='PUBLISHED'",employeeId,start);
     BigDecimal defense=defenseRows.isEmpty()?null:decimal(defenseRows.get(0),"score").multiply(maxScore(scheme,"DEFENSE")).divide(decimal(defenseRows.get(0),"full_score"),8,RoundingMode.HALF_UP);
     Map<String,List<Map<String,Object>>> manual = manualScores(employeeId, start);
     ManualAggregate mentor=mentorAggregate(employeeId,month,manual.getOrDefault("MENTOR",List.of()));
@@ -206,13 +208,13 @@ public class EvaluationService {
     List<EvaluationRules.WeightedScore> weightedScores = new ArrayList<>();
     Map<String,BigDecimal> effectiveScores = new LinkedHashMap<>();
     for (String code : COMPONENTS) {
-      if("DEFENSE".equals(code)&&"QUARTER".equals(scheme.get("defense_scope")))continue;
+      if("DEFENSE".equals(code)&&!taskDefense&&"QUARTER".equals(scheme.get("defense_scope")))continue;
       boolean enabled = bool(scheme.get(code.toLowerCase() + "_enabled"));
       BigDecimal weight = decimal(scheme, code.toLowerCase() + "_weight");
       BigDecimal fullScore = maxScore(scheme,code);
       BigDecimal source = sourceScores.get(code);
       Map<String,Object> override = overrides.get(code);
-      BigDecimal overrideScore = override == null ? null : decimal(override, "override_score");
+      BigDecimal overrideScore = override == null || ("DEFENSE".equals(code)&&taskDefense) ? null : decimal(override, "override_score");
       BigDecimal effective = overrideScore != null ? overrideScore : source;
       BigDecimal normalized = effective == null ? null : effective.multiply(new BigDecimal("100")).divide(fullScore,8,RoundingMode.HALF_UP);
       BigDecimal contribution = enabled && normalized != null ? normalized.multiply(weight).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP) : null;
@@ -225,6 +227,15 @@ public class EvaluationService {
       item.put("status", !enabled ? "DISABLED" : effective == null ? "PENDING" : overrideScore != null ? "OVERRIDDEN" : AUTO_COMPONENTS.contains(code) ? "AUTOMATIC" : "SUBMITTED");
       if("EXAM".equals(code))item.put("breakdown",exam.items());
       if("TASK".equals(code))item.put("breakdown",task.items());
+      if("DEFENSE".equals(code)){
+        item.put("breakdown",defenseRows.stream().map(row->{var value=new LinkedHashMap<String,Object>();value.put("taskName",row.get("task_name"));value.put("taskId",row.get("task_id"));value.put("month",month.toString());value.put("status","PUBLISHED");value.put("version",row.get("version"));value.put("sourceId",row.get("source_id"));value.put("score",row.get("score"));value.put("fullScore",row.get("full_score"));return value;}).toList());
+        if(defenseRows.isEmpty()){
+          var assignment=db.queryForList("select t.id,t.name,t.status,(select count(*) from defense_result d where d.task_id=t.id and d.employee_id=p.employee_id) entered from defense_task t left join defense_task_participant p on p.task_id=t.id and p.employee_id=? and p.active_flag=1 where t.period_month=? and t.talent_batch_id=(select batch_id from employee where id=?) and t.status<>'CANCELLED' order by (p.employee_id is not null) desc,t.id desc",employeeId,start,employeeId);
+          String reason=assignment.isEmpty()?"当月未创建答辩任务":db.queryForObject("select count(*) from defense_task_participant where employee_id=? and period_month=? and active_flag=1",Integer.class,employeeId,start)==0?"员工尚未分配答辩任务":number(assignment.get(0).get("entered")).intValue()==0?"答辩成绩未录入":"答辩成绩尚未发布";
+          item.put("missingReason",reason);
+        }
+        item.put("recordedButDisabled",!enabled&&!defenseRows.isEmpty());
+      }
       if("MENTOR".equals(code)){item.put("breakdown",mentor.entries());item.put("submittedCount",mentor.submitted());item.put("requiredCount",mentor.required());item.put("partialScore",mentor.partialScore());}
       if("STATION".equals(code)){item.put("breakdown",station.entries());item.put("aggregationMode",station.mode());item.put("submittedCount",station.submitted());item.put("requiredCount",station.required());}
       if("TRAINING".equals(code)){item.put("breakdown",training.entries());item.put("submittedCount",training.submitted());item.put("requiredCount",training.required());item.put("partialScore",training.partialScore());item.put("canEvaluate",training.entries().stream().anyMatch(x->Boolean.TRUE.equals(x.get("canEvaluate"))));}

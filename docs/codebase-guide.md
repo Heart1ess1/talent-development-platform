@@ -23,7 +23,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 1. 管理员维护批次、服务站、导师和员工；员工创建/导入时会同时创建 `EMPLOYEE` 账号。
 2. 培训管理员安排课程、签到、培养计划和闯关任务，并为任务配置评分人；员工提交成果后，由被分配的非员工账号在独立任务评分工作台评分。
 3. 考试管理员维护题库、客观题试卷和考试计划；员工交卷后立即自动计分，管理员即时可见，员工在整场考试结束后收到自动下发结果。
-4. 评价方案定义评分项和权重；考试、任务等数据参与月评，系统可生成月度/季度汇总并在发布后锁定。
+4. 评价方案定义评分项和权重；考试、任务等数据参与月评，系统仅生成月度汇总并在发布后锁定；答辩通过手动任务归属月份，历史季度记录保留但不再展示。
 5. 所有登录态、访问范围和关键操作由安全与审计模块统一处理。
 
 ### 建议阅读顺序
@@ -128,13 +128,13 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 
 | 文件 | 职责 |
 | --- | --- |
-| `dashboard/DashboardController.java` | 按角色生成两套概览模型：员工个人待办、学习日程、完成记录、季度评分和导师反馈；管理侧职责待办、四条业务进度、近期安排和风险员工，全部沿用人员数据范围。 |
-| `evaluation/EvaluationController.java` | 评价模板库、模板应用、工作台待办、月度方案、评分项提交/覆盖、加扣分、月度/季度汇总生成、发布与重开的 API。 |
+| `dashboard/DashboardController.java` | 按角色生成两套概览模型：员工个人待办、学习日程、完成记录、月度评价和导师反馈；管理侧职责待办、四条业务进度、近期安排和风险员工，全部沿用人员数据范围。 |
+| `evaluation/EvaluationController.java` | 评价模板库、模板应用、工作台待办、月度方案、评分项提交/覆盖、加扣分、月度汇总生成、发布与重开的 API。 |
 | `evaluation/EvaluationAssignmentController.java` | 评分任务生成、任务概览、全员/批次/板块范围规则、候选评分人、本人任务和兼容批量分配 API。 |
 | `evaluation/EvaluationAssignmentService.java` | 生成员工级人工评分任务，并把板块、批次、全员范围规则按优先级展开为有效评分人，汇总个人提交进度与正式平均分。 |
-| `evaluation/EvaluationService.java` | 评价核心计算：匹配月份方案，把考试/任务来源折算到配置满分，聚合人工评分、覆盖与加扣分，并写入可追溯的月度和季度快照。 |
-| `evaluation/EvaluationRules.java` | 纯规则函数：校验月度评分项权重、季度权重，计算多人过程/完成平均分及限定在 0–100 的最终分数。 |
-| `evaluation/EvaluationScheduler.java` | 每月 1 日 02:00 自动生成上月月评；每季度首月 03:00 自动生成上季度汇总。 |
+| `evaluation/EvaluationService.java` | 评价核心计算：匹配月份方案，把考试/任务来源折算到配置满分，聚合人工评分、覆盖与加扣分，并写入可追溯的月度快照（历史季度规则仅保留解释能力）。 |
+| `evaluation/EvaluationRules.java` | 纯规则函数：校验评分项权重，保留历史季度规则辅助函数，计算多人过程/完成平均分及限定在 0–100 的最终分数。 |
+| `evaluation/EvaluationScheduler.java` | 每月 1 日 02:00 自动生成上月月评；季度调度已停用。 |
 | `exam/ExamController.java` | 多题库与题目维护、客观题手动/随机/一人一卷组卷、考试计划与分配、考生作答、防作弊事件、管理端即时成绩和员工端延迟可见结果。 |
 | `exam/ExamScoringService.java` | 自动阅卷服务；统一读取静态或动态答卷题目，处理超时交卷，并在整场考试结束后批量标记成绩可见。 |
 | `exam/ExamScheduler.java` | 每分钟先提交到期答卷，再自动发布已结束考试的客观题成绩。 |
@@ -237,7 +237,7 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 | `views/evaluation/MyEvaluationTasksView.vue` | 导师、站点负责人和培训管理员查看只分配给本人的评分任务及团队提交进度。 |
 | `views/evaluation/EvaluationMonthlyView.vue` | 按员工和月份核对自动来源、提交职责内人工评分、管理员核定及加扣分，并预览综合分。 |
 | `views/evaluation/EvaluationTemplatesView.vue` | 管理独立评价模板，将模板应用到批次月份形成方案草稿，并维护发布和历史版本。 |
-| `views/evaluation/EvaluationResultsView.vue` | 查询月度/季度结果与分项快照，生成、发布或重开汇总；员工侧只显示本人已发布结果。 |
+| `views/evaluation/EvaluationResultsView.vue` | 查询月度结果与分项快照，生成、发布或重开汇总；员工侧只显示本人已发布结果。 |
 | `evaluation/model.ts` | 综合评价的评分项定义、初始模板、状态和显示格式共享模型。 |
 | `styles/evaluation-center.css` | 综合评价工作台、任务编排、月度评分、模板和结果页面共享的卡片、表格、快照及响应式视觉规范。 |
 | `styles/dashboard.css` | 员工主页与管理操作台共用的指标卡、待办、业务进度、日程、风险人员及响应式视觉规范。 |
@@ -354,3 +354,5 @@ Windows 启动器 → Docker Compose(MySQL) + Java JAR + 浏览器
 - 用户可见功能、启动方式、测试结果、发布要求或协作基线变化：同步根目录 `README.md`。
 - 权限点或角色范围变化：同步 `docs/permissions-matrix.md`。
 - 需求边界或任务状态变化：同步 `docs/requirements.md` 和 `docs/task-board.md`。
+
+月度答辩任务由 `evaluation/DefenseTaskController.java` 管理，迁移为 V49/V50；前端沿用 `/evaluation/defenses`。任务、成绩与导入均按 taskId 隔离，月评读取当前正式成绩并只触发月度关联修订。详细接口见 [api-contract.md](api-contract.md#月度答辩任务v49v50)。

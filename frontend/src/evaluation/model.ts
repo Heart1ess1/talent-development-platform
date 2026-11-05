@@ -19,6 +19,8 @@ export interface ScoreComponent{
   submittedCount?:number
   requiredCount?:number
   partialScore?:number|null
+  missingReason?:string
+  recordedButDisabled?:boolean
   canEvaluate?:boolean
   aggregationMode?:'AUTO_BY_DAYS'|'PRIMARY_STATION'|'MANUAL'
 }
@@ -28,10 +30,10 @@ export const componentDefinitions=[
   {code:'TASK' as const,label:'任务成果',shortLabel:'任务',description:'自动汇总当月任务审核得分',enabled:'taskEnabled',weight:'taskWeight',maxScore:'taskMaxScore'},
   {code:'MENTOR' as const,label:'导师评价',shortLabel:'导师',description:'技术导师与技能导师分别评分后自动取平均',enabled:'mentorEnabled',weight:'mentorWeight',maxScore:'mentorMaxScore'},
   {code:'STATION' as const,label:'站点评价',shortLabel:'站点',description:'支持按当月各站实际在站天数加权',enabled:'stationEnabled',weight:'stationWeight',maxScore:'stationMaxScore'},
-  {code:'DEFENSE' as const,label:'季度答辩成绩',shortLabel:'答辩',description:'每届四次，取对应季度已发布答辩成绩参与季评',enabled:'defenseEnabled',weight:'defenseWeight',maxScore:'defenseMaxScore'},
+  {code:'DEFENSE' as const,label:'答辩成绩',shortLabel:'答辩',description:'取当月已发布答辩任务成绩',enabled:'defenseEnabled',weight:'defenseWeight',maxScore:'defenseMaxScore'},
   {code:'TRAINING' as const,label:'培训评价',shortLabel:'培训方',description:'培训管理员评价学习与综合表现',enabled:'trainingEnabled',weight:'trainingWeight',maxScore:'trainingMaxScore'}
 ]
-export const monthlyComponentDefinitions=componentDefinitions.filter(x=>x.code!=='DEFENSE')
+export const monthlyComponentDefinitions=componentDefinitions
 
 export const componentLabels=Object.fromEntries(componentDefinitions.map(x=>[x.code,x.label])) as Record<ComponentCode,string>
 export const componentStatusLabels:Record<string,string>={DISABLED:'未启用',PENDING:'待评分',AUTOMATIC:'已自动取分',OVERRIDDEN:'已人工核定',SUBMITTED:'已提交'}

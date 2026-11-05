@@ -19,7 +19,7 @@ public class EmployeePortraitService {
     var employee=employee(query.employee(employeeId));var task=query.taskMetrics(employeeId);
     var material=query.materialMetrics(employeeId);var exam=query.examMetrics(employeeId);
     var exams=query.publishedExamTrend(employeeId);var month=query.evaluationTrend(employeeId,"MONTH");
-    var quarter=query.evaluationTrend(employeeId,"QUARTER");
+    var quarter=List.<Map<String,Object>>of();
     long taskTotal=n(task,"total"),taskApproved=n(task,"approved"),materialTotal=n(material,"total"),materialViewed=n(material,"viewed");
     long examTotal=n(exam,"total"),examCompleted=n(exam,"completed");
     var validScores=exams.stream().filter(x->decimal(x,"total_score")!=null&&positive(decimal(x,"max_score"))).toList();
@@ -29,7 +29,7 @@ public class EmployeePortraitService {
       ratio("materialCoverage","课件阅读覆盖率",materialViewed,materialTotal,"有阅读记录的课件"),
       ratio("examCompletion","考试完成情况",examCompleted,examTotal,"已交卷考试计划"),
       value("examAverage","已发布考试平均分",avg,(long)validScores.size(),"分",validScores.isEmpty()?"EMPTY":"VALUE",validScores.isEmpty()?"暂无已发布成绩":"按每个考试计划最近一次正式成绩折算为百分制"),
-      latest("latestMonth","最新月度评价",month,"MONTH"),latest("latestQuarter","最新季度评价",quarter,"QUARTER"));
+      latest("latestMonth","最新月度评价",month,"MONTH"));
     return new Overview(employee,location(query.latestLocation(employeeId)),metrics,
       taskChart(task),chart(query.courseParticipation(employeeId),"state","count"),examChart(exams),
       chart(month,"period_key","final_score"),chart(quarter,"period_key","final_score"),LocalDateTime.now());
@@ -137,7 +137,7 @@ public class EmployeePortraitService {
 
   public PageResult<Evaluation> evaluations(long employeeId,String type,int page,int size){return evaluations(employeeId,type,page,size,null,null);}
   public PageResult<Evaluation> evaluations(long employeeId,String type,int page,int size,LocalDate dateFrom,LocalDate dateTo){
-    requireDateRange(dateFrom,dateTo);int limit=limit(size),offset=offset(page,limit);String selected=normalize(type,"MONTH",Set.of("MONTH","QUARTER"));boolean manage=SecurityUtils.current().can(Permissions.EVALUATION_MANAGE);
+    requireDateRange(dateFrom,dateTo);int limit=limit(size),offset=offset(page,limit);String selected="MONTH";boolean manage=SecurityUtils.current().can(Permissions.EVALUATION_MANAGE);
     String visibility=manage?" and status<>'REVOKED'":" and status='PUBLISHED'";var args=new ArrayList<Object>();args.add(employeeId);args.add(selected);visibility+=dateFilter("generated_at",dateFrom,dateTo,args);long total=query.count("select count(*) from score_summary where employee_id=? and summary_type=?"+visibility,args.toArray());args.add(limit);args.add(offset);
     var rows=query.rows("""
       select id,summary_type,period_key,version,status,source_type,read_only,exam_score,task_score,mentor_score,station_score,training_score,defense_score,
@@ -177,7 +177,7 @@ public class EmployeePortraitService {
     query.rows("select s.id,s.status,s.submitted_at,t.title from task_submission s join task_assignment a on a.id=s.assignment_id join challenge_task t on t.id=a.task_id where a.employee_id=?",employeeId).forEach(x->events.add(event("TASK",x,"submitted_at",s(x,"title")+" · 提交任务",s(x,"status"))));
     query.rows("select s.id,s.status,s.reviewed_at,t.title from task_submission s join task_assignment a on a.id=s.assignment_id join challenge_task t on t.id=a.task_id where a.employee_id=? and s.reviewed_at is not null",employeeId).forEach(x->events.add(event("TASK_REVIEW",x,"reviewed_at",s(x,"title")+("APPROVED".equals(s(x,"status"))?" · 审核通过":" · 审核退回"),s(x,"status"))));
     query.rows("select a.id,a.status,a.submitted_at,p.name from exam_attempt a join exam_plan p on p.id=a.plan_id where a.employee_id=? and a.submitted_at is not null",employeeId).forEach(x->events.add(event("EXAM",x,"submitted_at",s(x,"name")+" · 考试交卷",s(x,"status"))));
-    query.rows("select id,status,published_at,period_key,summary_type from score_summary where employee_id=? and status='PUBLISHED' and published_at is not null",employeeId).forEach(x->events.add(event("EVALUATION",x,"published_at",s(x,"period_key")+("MONTH".equals(s(x,"summary_type"))?"月度":"季度")+"评价发布",s(x,"status"))));
+    query.rows("select id,status,published_at,period_key,summary_type from score_summary where employee_id=? and summary_type='MONTH' and status='PUBLISHED' and published_at is not null",employeeId).forEach(x->events.add(event("EVALUATION",x,"published_at",s(x,"period_key")+("MONTH".equals(s(x,"summary_type"))?"月度":"季度")+"评价发布",s(x,"status"))));
     query.rows("select id,reviewed_at,'APPROVED' status from station_change_request where employee_id=? and status='APPROVED' and reviewed_at is not null",employeeId).forEach(x->events.add(event("STATION",x,"reviewed_at","服务站调整生效",s(x,"status"))));
     query.rows("select id,occurred_at,'RECORDED' status,to_location from employee_location_report where employee_id=?",employeeId).forEach(x->events.add(event("LOCATION",x,"occurred_at","位置报备："+s(x,"to_location"),s(x,"status"))));
     query.rows("""

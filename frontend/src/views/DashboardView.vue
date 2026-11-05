@@ -99,7 +99,7 @@ onMounted(load)
         </article>
 
         <aside class="dashboard-panel dashboard-growth-panel">
-          <div class="dashboard-panel-head"><div><h2>学习成长概览</h2><p>任务、课程与考试完成情况</p></div><span class="growth-score"><small>最新季度分</small><strong>{{score(metrics.latest_quarter_score)}}</strong></span></div>
+          <div class="dashboard-panel-head"><div><h2>学习成长概览</h2><p>任务、课程与考试完成情况</p></div><span class="growth-score"><small>最新月度评价</small><strong>{{score(metrics.latest_month_score)}}</strong></span></div>
           <div class="growth-progress"><div><span>任务完成率 <b>{{percent(metrics.task_completion_rate)}}</b></span><el-progress :percentage="Number(metrics.task_completion_rate||0)" :show-text="false"/></div><div><span>课程出勤率 <b>{{percent(metrics.course_attendance_rate)}}</b></span><el-progress :percentage="Number(metrics.course_attendance_rate||0)" :show-text="false" color="#41a273"/></div><div><span>考试完成率 <b>{{percent(metrics.exam_completion_rate)}}</b></span><el-progress :percentage="Number(metrics.exam_completion_rate||0)" :show-text="false" color="#7b63c7"/></div></div>
           <button class="dashboard-soft-link" type="button" @click="open('/evaluation/results')"><span><el-icon><TrendCharts/></el-icon>查看完整综合评价</span><el-icon><Right/></el-icon></button>
         </aside>
@@ -119,13 +119,6 @@ onMounted(load)
       </section>
 
       <section class="dashboard-two-column">
-        <article class="dashboard-panel">
-          <div class="dashboard-panel-head"><div><h2>季度综合评分</h2><p>仅展示已经正式发布的结果</p></div><el-button link type="primary" @click="open('/evaluation/results')">查看详情</el-button></div>
-          <div v-if="data.quarter_scores?.length" class="quarter-score-grid">
-            <button v-for="item in data.quarter_scores" :key="item.period_key" type="button" @click="open('/evaluation/results')"><span><small>{{item.period_key}}</small><strong>{{score(item.final_score)}}</strong></span><el-progress type="circle" :percentage="Number(item.final_score||0)" :width="58" :stroke-width="6" :show-text="false"/></button>
-          </div>
-          <el-empty v-else :image-size="66" description="暂无已发布季度评分"/>
-        </article>
         <article class="dashboard-panel">
           <div class="dashboard-panel-head"><div><h2>导师评价</h2><p>评价结果发布后在这里呈现导师反馈</p></div><el-icon class="panel-head-icon"><ChatDotRound/></el-icon></div>
           <div v-if="data.mentor_feedback?.length" class="feedback-list"><div v-for="item in data.mentor_feedback" :key="item.period_key"><span class="feedback-score">{{score(item.score)}}</span><span><strong>{{item.period_key}} · {{item.evaluator_name}}</strong><p>{{item.comment}}</p></span></div></div>
