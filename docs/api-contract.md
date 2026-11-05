@@ -88,7 +88,7 @@ Authorization: Bearer <token>
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/dashboard` | 登录，按数据范围过滤 | 角色化进度概览 | 无 | 公共：`audience`、`role`、`scope_label`、`period_key`、`generated_at`；员工：`profile`、`metrics`、`action_items`、`learning_schedule`、`quarter_scores`、`mentor_feedback`、`completed_tasks`；管理：`metrics`、`operations`、`work_queue`、`schedule`、`attention_employees` |
 
-`audience=EMPLOYEE` 时只查询当前账号关联的员工档案；季度评分和导师评价只返回已经发布的评价结果。`audience=MANAGER` 时所有员工、任务、课程、考试、评价和异常人员统计均沿用当前角色的数据范围；`work_queue` 还会根据权限移除当前角色不能处理的业务入口。
+`audience=EMPLOYEE` 时只查询当前账号关联的员工档案；月度评价和导师评价只返回已经发布的评价结果。`audience=MANAGER` 时所有员工、任务、课程、考试、评价和异常人员统计均沿用当前角色的数据范围；`work_queue` 还会根据权限移除当前角色不能处理的业务入口。
 
 ## 人员信息维护接口
 
@@ -133,7 +133,7 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/employees/{id}/portrait/courses` | 同上 | 参训场次或课件阅读 | `type=SESSIONS\|MATERIALS`、分页、可选 `dateFrom`、`dateTo` | 场次或按课件 ID 去重的阅读记录 |
 | `GET` | `/api/v1/employees/{id}/portrait/tasks` | 同上 | 培养任务及提交、评分历史 | 可选 `status`、`dateFrom`、`dateTo`、分页 | 任务状态、归属快照、提交版本和评分结果 |
 | `GET` | `/api/v1/employees/{id}/portrait/exams` | 同上 | 考试计划及历次作答 | 可选 `dateFrom`、`dateTo`、分页 | 包含未参加计划；未发布分数字段按 `exam:manage` 控制 |
-| `GET` | `/api/v1/employees/{id}/portrait/evaluations` | 同上 | 月度或季度评价版本 | `type=MONTH\|QUARTER`、可选 `dateFrom`、`dateTo`、分页 | 正式结果；有 `evaluation:manage` 时包含草稿和缺项 |
+| `GET` | `/api/v1/employees/{id}/portrait/evaluations` | 同上 | 月度评价版本 | `type=MONTH`、可选 `dateFrom`、`dateTo`、分页 | 正式结果；有 `evaluation:manage` 时包含草稿和缺项 |
 | `GET` | `/api/v1/employees/{id}/portrait/stations` | 同上 | 当前服务站和已生效调站经历 | 路径 `id` | 当前归属、已审批调站记录 |
 | `GET` | `/api/v1/employees/{id}/portrait/locations` | 同上 | 最新位置报备和历史 | 可选 `dateFrom`、`dateTo`、分页 | 最新报备及按实际变动时间排列的历史 |
 | `GET` | `/api/v1/employees/{id}/portrait/timeline` | 同上 | 成长事件时间线 | 可选 `type`、`dateFrom`、`dateTo`、分页 | 入职、签到、任务、考试、评价、调站及位置事件 |
@@ -304,14 +304,14 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/evaluation/assignments/generate` | `evaluation:manage` | 根据已发布方案生成月份人工评分任务 | `month`、可选 `dueAt` | 新增任务数；重复调用幂等 |
 | `PUT` | `/api/v1/evaluation/assignments/reviewers` | `evaluation:manage` | 批量替换或追加评分人并更新任务设置 | `taskIds`、`reviewerIds`、`mode=REPLACE|ADD`、可选 `dueAt`、`note`；可选字段留空时保留原设置 | 空 |
 | `GET` | `/api/v1/evaluation/templates` | `evaluation:manage` | 查询可复用评价模板 | 无 | 模板规则、维护人和应用次数 |
-| `POST` | `/api/v1/evaluation/templates` | `evaluation:manage` | 新建评价模板 | 名称、说明、五类评分项启停/本项满分/综合权重、任务/考试来源权重、站点汇总方式、季度权重、加扣分上限 | 模板 ID |
+| `POST` | `/api/v1/evaluation/templates` | `evaluation:manage` | 新建评价模板 | 名称、说明、六类月度评分项启停/本项满分/综合权重、任务/考试来源权重、站点汇总方式、加扣分上限 | 模板 ID |
 | `PUT` | `/api/v1/evaluation/templates/{id}` | `evaluation:manage` | 编辑评价模板，不回写已应用方案 | 同创建模板 | 空 |
 | `POST` | `/api/v1/evaluation/templates/{id}/copy` | `evaluation:manage` | 复制为独立模板 | 路径 `id` | 新模板 ID |
 | `DELETE` | `/api/v1/evaluation/templates/{id}` | `evaluation:manage` | 停止模板后续使用，保留已应用历史 | 路径 `id` | 空 |
 | `POST` | `/api/v1/evaluation/templates/apply` | `evaluation:manage` | 将模板应用到批次月份并生成方案草稿 | `templateId`、`batchId`、`effectiveMonth` | 方案 ID |
 | `GET` | `/api/v1/evaluation/source-options` | `evaluation:manage` | 查询可配置内部权重的任务和考试 | 无 | `tasks`、`exams` |
 | `GET` | `/api/v1/evaluation/schemes` | `evaluation:manage` | 查询评分方案 | 可选 `batchId` | 方案列表 |
-| `POST` | `/api/v1/evaluation/schemes` | `evaluation:manage` | 兼容创建评分方案草稿 | `batchId`、`effectiveMonth`、五类评分项启停/本项满分/权重、季度权重、加扣分上限 | 方案 ID |
+| `POST` | `/api/v1/evaluation/schemes` | `evaluation:manage` | 兼容创建评分方案草稿 | `batchId`、`effectiveMonth`、六类月度评分项启停/本项满分/权重、加扣分上限 | 方案 ID |
 | `PUT` | `/api/v1/evaluation/schemes/{id}` | `evaluation:manage` | 更新草稿方案 | 同创建方案 | 空 |
 | `POST` | `/api/v1/evaluation/schemes/{id}/draft` | `evaluation:manage` | 从已发布或已退役方案复制新草稿 | 路径 `id` | 新方案 ID |
 | `DELETE` | `/api/v1/evaluation/schemes/{id}` | `evaluation:manage` | 删除方案 | 路径 `id` | 空 |
@@ -327,14 +327,38 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/evaluation/monthly` | `evaluation:view`，按数据范围过滤 | 查询月度评价记录 | `employeeId` | 月评列表 |
 | `POST` | `/api/v1/evaluation/adjustments` | `evaluation:manage` | 新增加扣分 | `employeeId`、`month`、`type=BONUS|DEDUCTION`、`points`、`reason`、`evidenceFileId` | 调整 ID |
 | `POST` | `/api/v1/evaluation/summaries/generate-month` | `evaluation:manage` | 生成月度汇总 | `month` | 生成数量 |
-| `POST` | `/api/v1/evaluation/summaries/generate-quarter` | `evaluation:manage` | 生成季度汇总 | `year`、`quarter` | 生成数量 |
-| `GET` | `/api/v1/evaluation/summaries` | `evaluation:view`，按数据范围过滤 | 查询汇总 | `employeeId` | 汇总列表 |
+| `POST` | `/api/v1/evaluation/summaries/generate-quarter` | `evaluation:manage` | 已停用季度计分 | 历史兼容地址 | 拒绝写入（410） |
+| `GET` | `/api/v1/evaluation/summaries` | `evaluation:view`，按数据范围过滤 | 查询月度汇总 | `employeeId` | 月度汇总列表 |
 | `POST` | `/api/v1/evaluation/summaries/{id}/publish` | `evaluation:manage` | 发布汇总 | `waiverReason`、`overrideScore` | 空 |
 | `POST` | `/api/v1/evaluation/summaries/{id}/reopen` | `ADMIN` 或 `SUPER_ADMIN` | 重开已发布月度汇总 | `reason` | 新汇总 ID |
 
-评分项包括 `EXAM`、`TASK`、`MENTOR`、`STATION`、`TRAINING`。每项原始得分允许使用自己的满分口径（最高 `999.99`），计算时换算为百分比后再乘综合权重，因此启用项权重之和必须为 `100%`。人工评分任务未全部提交时返回 `averageScore` 供过程查看，但 `finalAverageScore` 为空；全部当前评分人提交后才返回正式平均分。已发布月度汇总会锁定对应月份，除管理员重开外不可继续修改。
+月度评分项包括 `EXAM`、`TASK`、`MENTOR`、`STATION`、`TRAINING`、`DEFENSE`；关闭项权重必须为零。答辩只从对应任务当前已发布成绩取分，不能通过月度录分或覆盖接口修改；启用但缺少正式成绩时禁止发布月评，零分有效。每项原始得分允许使用自己的满分口径（最高 `999.99`），计算时换算为百分比后再乘综合权重，因此启用项权重之和必须为 `100%`。人工评分任务未全部提交时返回 `averageScore` 供过程查看，但 `finalAverageScore` 为空；全部当前评分人提交后才返回正式平均分。已发布月度汇总会锁定对应月份，除管理员重开外不可继续修改。
 
 人员范围规则的匹配优先级为 `BUSINESS_UNIT > BATCH > ALL`，每项员工任务只采用命中的最高优先级规则；同一规则可包含多名对应角色的评分人。保存、删除规则或重新生成月份任务时都会重新展开未锁定任务，已发布月份不被改写。`PUT /assignments/reviewers` 保留为兼容接口，管理端主流程不再从单员工任务编辑评分人。
+
+## 月度答辩任务（V49–V50）
+
+全部接口位于 `/api/v1/evaluation/defenses/tasks`，要求 `evaluation:manage` 并校验人员数据范围。旧 `/defenses` 场次、成绩、导入及导出接口均已停用，返回 410；数据库历史保留。
+
+| 方法 | 相对路径 | 说明 |
+| --- | --- | --- |
+| GET / POST | `/` | 任务查询（month、batchId）/创建 |
+| GET / PUT / DELETE | `/{id}` | 详情/草稿修改/草稿删除；修改传 version，删除用 version 查询参数 |
+| POST | `/{id}/activate`、`/{id}/end`、`/{id}/cancel` | 传 `{version}`；启用锁定月份、满分和名单 |
+| GET | `/employees` | batchId、month 必填；支持 taskId 排除本任务，以及 keyword/businessUnitId/classId/stationId；返回同月冲突任务 |
+| GET | `/{id}/participants`、`/{id}/grades` | 名单与当前成绩 |
+| POST | `/{id}/grades` | employeeId、score、comment；修订传 revisionOf 和 revisionReason |
+| POST | `/grades/{gradeId}/publish` | 校验并发布单人成绩草稿 |
+| GET | `/{id}/history?employeeId=…` | 成绩版本历史 |
+| GET | `/template`、`/{id}/export` | 导入模板、成绩导出 |
+| GET / POST | `/{id}/imports` | 查询导入批次/上传 file；修订参数 revision=true、revisionReason |
+| GET | `/{id}/imports/{batch}` | 导入预览和逐行错误 |
+| PUT | `/{id}/imports/{batch}/rows/{row}` | 修正 employeeNo、employeeName、score、comment |
+| POST | `/{id}/imports/{batch}/validate`、`/{id}/imports/{batch}/publish` | 重新校验/整批原子发布 |
+
+任务创建/修改参数：name、batchId、month（YYYY-MM）、fullScore、employeeIds、version，选填 defenseDate、note。月份与满分以任务为准；同一员工同月仅占用一个未取消任务（含草稿）。导入按任务和文件 SHA256 幂等，正式成绩必须明确修订且来源版本仍有效。
+
+新方案使用 TASK_MONTH_V1，答辩贡献 = 成绩 / 任务满分 × 月度权重。已发布旧方案和结果快照不重算。新方案从管理员选择的月份起沿用；无答辩月份须显式应用关闭答辩并重新配置权重的方案。季度生成、发布、历史导入与普通查询均关闭；待审季度成员归档，混合修订组保留月度成员并失效原审核令牌。
 
 ## 考试中心
 

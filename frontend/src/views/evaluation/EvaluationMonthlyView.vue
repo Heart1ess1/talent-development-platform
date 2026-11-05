@@ -44,7 +44,7 @@ function editable(component:ScoreComponent){
   if(component.code!=='TRAINING')return true
   return component.canEvaluate===true||(component.requiredCount===1&&!component.breakdown?.length)
 }
-function jump(component:ScoreComponent){router.push(component.code==='DEFENSE'?'/evaluation/defenses':component.code==='EXAM'?'/exams/results':'/task-scoring?status=MY_PENDING')}
+function jump(component:ScoreComponent){router.push(component.code==='DEFENSE'?{path:'/evaluation/defenses',query:{month:month.value,taskId:component.breakdown?.[0]?.taskId}}:component.code==='EXAM'?'/exams/results':'/task-scoring?status=MY_PENDING')}
 function candidateProgress(row:Candidate){return row.enabledCount?Math.round(row.completedCount*100/row.enabledCount):0}
 function chooseCandidate(id:number){selected.value=id}
 
@@ -118,7 +118,15 @@ onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promis
                 <div class="evaluation-score-line"><span>有效得分</span><b>{{scoreText(component.effectiveScore)}}<small> / {{scoreText(component.fullScore)}}</small></b></div>
                 <div class="evaluation-score-meta"><span>综合权重 {{component.weight}}%</span><span>综合贡献 {{scoreText(component.weightedScore)}}</span></div>
 
-                <template v-if="component.enabled&&component.sourceType==='AUTO'">
+                <template v-if="component.code==='DEFENSE'">
+                  <div v-for="row in component.breakdown||[]" :key="row.sourceId" class="source-breakdown">
+                    <p>{{row.taskName}} · {{row.month}} · 已发布 V{{row.version}}</p><p>成绩 {{scoreText(row.score)}} / {{scoreText(row.fullScore)}}</p>
+                  </div>
+                  <p v-if="component.recordedButDisabled" class="evaluation-warning">已记录，本月方案未启用，不计入综合分</p>
+                  <p v-else-if="component.enabled&&!component.breakdown?.length" class="evaluation-warning">{{component.missingReason}}</p>
+                  <el-button v-if="canManage" link type="primary" @click="jump(component)">前往答辩任务</el-button>
+                </template>
+                <template v-else-if="component.enabled&&component.sourceType==='AUTO'">
                   <div v-if="component.breakdown?.length" class="source-breakdown">
                     <div v-for="row in component.breakdown" :key="row.sourceId" class="source-breakdown-row"><span><strong>{{row.name}}</strong><small>{{row.status==='PENDING'?'等待成绩':'内部权重 '+row.weight+'%'}}</small></span><b>{{scoreText(row.scorePercent)}}</b><em>{{row.contribution===null?'—':`贡献 ${scoreText(row.contribution)}`}}</em></div>
                   </div>
@@ -158,7 +166,7 @@ onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promis
                 </template>
 
                 <p v-if="component.overrideScore!==null" class="evaluation-warning">已人工核定：{{component.overrideReason}}（{{component.overrideBy}}）</p>
-                <div v-if="isAdmin&&component.enabled&&!detail.locked&&!detail.pendingRevision" class="evaluation-head-actions override-actions"><el-button size="small" @click="override(component)">{{component.overrideScore===null?'人工核定':'修改核定'}}</el-button><el-button v-if="component.overrideScore!==null" size="small" @click="removeOverride(component)">撤销</el-button></div>
+                <div v-if="isAdmin&&component.code!=='DEFENSE'&&component.enabled&&!detail.locked&&!detail.pendingRevision" class="evaluation-head-actions override-actions"><el-button size="small" @click="override(component)">{{component.overrideScore===null?'人工核定':'修改核定'}}</el-button><el-button v-if="component.overrideScore!==null" size="small" @click="removeOverride(component)">撤销</el-button></div>
               </article>
             </div>
 
