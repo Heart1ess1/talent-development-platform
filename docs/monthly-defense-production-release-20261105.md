@@ -70,3 +70,14 @@
 - 线上复查：UP、ready=true；Flyway仍为V50，失败迁移0；186名员工、102条历史答辩成绩和1个旧导入批次均保留，旧成绩核心字段摘要不变，未创建生产测试任务。
 - 主JS `index-Cr9WFIgO.js`、主CSS、答辩页JS `DefenseEvaluationView-OVYXZPT-.js`及CSS均200、内容类型正确，解码后SHA256与构建产物一致；相关页面路由200，未登录API401，OSS匿名直连403，新应用容器ERROR日志0。
 - 本次仅修改前端，无新增数据库迁移。正式账号登录业务验收边界同上，不以本地浏览器或生产公共资源检查替代。
+
+## 全部展示与全选补丁（10:36）
+
+- PR：https://github.com/Heart1ess1/talent-development-platform/pull/83 ，已合并。构建源 `7da833208d32bb3b860ee717beba1268caae7e52` 与合并提交 `4de213cbe3c98502edb0fcf0f66a9d3331e3924c` 的运行源无差异。
+- 答辩任务人员列表取消20人分页，完整展示筛选结果并在表格内滚动；按钮改为“全选”，添加当前全部无冲突候选，保留同批次已有选择，并显示总人数/可选人数/已选人数。
+- 本地浏览器：46人均渲染，跳过5名冲突人员后全选41人，保存并重新编辑仍为41人；筛选全选、保留选择、重复全选和清空均通过，控制台0错误/警告。前端75项及类型检查/生产构建通过；后端260项（217执行、43跳过）0失败/错误。
+- 发布JAR SHA256：`1c9bea2abda287932118153d7b50f360b8013852e4f6dac0ac17c93ee5263636`；候选目录 `/data/talent-platform/releases/staging/cdn-defense-select-all-7da8332-20261105`。
+- 数据库备份 `/data/talent-platform/backups/mysql/talent-platform-20261105-103601.sql.gz` 已通过gzip及SHA256校验，摘要 `5c50469869399297dc80c263fac4e4ea2135714eabe8c93536a6bc0eb596a97d`；旧应用/环境备份 `/data/talent-platform/releases/history/cdn-activation-20261105103649-1154822`。
+- 线上检查：UP、ready=true；V50，失败迁移0；186名员工、102条历史答辩成绩和1个旧导入批次均保留，旧成绩摘要不变，无生产测试任务。新应用ERROR日志0，页面路由200、未登录API401、OSS匿名直连403。
+- CDN主JS `index-rR-VWRhU.js`、主CSS、答辩页JS `DefenseEvaluationView-Ciy58DIj.js`及CSS均200且内容类型正确，解码后SHA256均与构建产物一致。
+- 仅前端补丁，无新增迁移。功能流程为本地浏览器验证；正式账号线上业务验收仍按上文边界记录。
