@@ -33,6 +33,7 @@ const scenarioLabel:Record<string,string>={FIELD_ABSENCE:'现场临时不上班'
 const actionLabel:Record<string,string>={SUBMIT:'提交申请',CHANGE_SUBMIT:'提交变更',APPROVED:'审批通过',REJECTED:'审批驳回',WITHDRAW:'撤回申请',CANCEL:'取消请假',RETURN:'完成销假',TRANSFER:'转交责任',CHANGE_CLOSED:'结束变更'}
 const requestView=computed(()=>employee.value?(tab.value==='待审批'?'pending':tab.value==='待销假'?'active':tab.value==='已销假'?'returned':'mine'):tab.value==='待我审批'?'pending':tab.value==='我已审批'?'reviewed':tab.value==='逾期未销假'?'overdue':'all')
 function dateTime(value:any){return value?String(value).replace('T',' ').slice(0,16):'-'}
+function reasonText(value:any){return value?String(value):'-'}
 function iso(value:string){return value.replace(' ','T')}
 function truth(value:any){return value===true||value===1}
 function canReview(row:Row){return row.status==='PENDING'&&Number(row.approver_user_id)===auth.user?.id}
@@ -140,6 +141,7 @@ onMounted(async()=>{const response=await api.get<any,Envelope<typeof context.val
       <el-table-column v-if="!employee" label="请假人" min-width="110" prop="employee_name"/>
       <el-table-column v-if="!employee" label="服务站" min-width="120" prop="station_name"/>
       <el-table-column label="场景" min-width="130"><template #default="{row}">{{scenarioLabel[row.scenario]||row.scenario}}</template></el-table-column>
+      <el-table-column label="请假原因" min-width="180" show-overflow-tooltip><template #default="{row}">{{reasonText(row.reason)}}</template></el-table-column>
       <el-table-column label="请假时间" min-width="255"><template #default="{row}">{{dateTime(row.start_at)}} 至 {{dateTime(row.end_at)}}</template></el-table-column>
       <el-table-column label="时长" width="75"><template #default="{row}">{{row.day_units/2}}天</template></el-table-column>
       <el-table-column label="审批层级" width="115"><template #default="{row}">{{levelLabel[row.approver_level]}}</template></el-table-column>
