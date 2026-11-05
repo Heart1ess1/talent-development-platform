@@ -13,8 +13,7 @@ const loading=ref(false),saving=ref(false),editorOpen=ref(false),gradeOpen=ref(f
 const importDetail=ref<any>(),importBatches=ref<any[]>([]),editImportOpen=ref(false),importRow=reactive<any>({}),historyOpen=ref(false),historyRows=ref<any[]>([])
 const filters=reactive<any>({month:String(route.query.month||new Date().toISOString().slice(0,7)),batchId:null})
 const peopleFilters=reactive<any>({keyword:'',businessUnitId:null,classId:null,stationId:null})
-const peoplePage=ref(1)
-const pagedCandidates=computed(()=>candidates.value.slice((peoplePage.value-1)*20,peoplePage.value*20))
+const selectableCandidates=computed(()=>candidates.value.filter(x=>!x.conflict))
 const form=reactive<any>({id:null,name:'',batchId:null,month:filters.month,fullScore:100,defenseDate:null,note:'',employeeIds:[],version:0})
 const grade=reactive<any>({employeeId:null,score:null,comment:'',revisionOf:null,revisionReason:'',employeeName:'',draftId:null})
 const states:any={DRAFT:'草稿',ACTIVE:'已启用',ENDED:'已结束',CANCELLED:'已取消',PUBLISHED:'已发布',VALID:'待发布',ERROR:'校验错误',SUPERSEDED:'历史版本'}
@@ -27,7 +26,6 @@ async function load(){
   }finally{loading.value=false}
 }
 async function candidatesLoad(){
-  peoplePage.value=1
   if(!form.batchId||!form.month){candidates.value=[];return}
   candidates.value=(await api.get<any,Envelope<any[]>>('/evaluation/defenses/tasks/employees',{params:{batchId:form.batchId,month:form.month,taskId:form.id||undefined,...Object.fromEntries(Object.entries(peopleFilters).filter(([,v])=>v!=null&&v!==''))}})).data
 }
@@ -41,7 +39,7 @@ async function editTask(row:any){
   Object.assign(peopleFilters,{keyword:'',businessUnitId:null,classId:null,stationId:null});editorOpen.value=true;await candidatesLoad()
 }
 function togglePerson(row:any,value:boolean){form.employeeIds=value?[...new Set([...form.employeeIds,row.id])]:form.employeeIds.filter((id:number)=>id!==row.id)}
-function selectPage(){form.employeeIds=[...new Set([...form.employeeIds,...pagedCandidates.value.filter(x=>!x.conflict).map(x=>x.id)])]}
+function selectAll(){form.employeeIds=[...new Set([...form.employeeIds,...selectableCandidates.value.map(x=>x.id)])]}
 async function saveTask(){
   if(!form.name.trim()||!form.batchId||!form.month||!form.employeeIds.length)return ElMessage.warning('请填写任务名称、批次、月份并选择参与人员')
   saving.value=true
@@ -121,9 +119,8 @@ onMounted(async()=>{
   <el-dialog v-model="editorOpen" :title="form.id?'编辑答辩任务':'新建答辩任务'" width="min(960px,95vw)" :close-on-click-modal="false">
     <el-form label-position="top"><div class="defense-filters"><el-form-item label="任务名称" required><el-input v-model="form.name" maxlength="128"/></el-form-item><el-form-item label="培养批次" required><el-select v-model="form.batchId" filterable @change="form.employeeIds=[];candidatesLoad()"><el-option v-for="b in batches" :key="b.id" :label="b.name" :value="b.id"/></el-select></el-form-item><el-form-item label="计分月份" required><el-date-picker v-model="form.month" type="month" value-format="YYYY-MM" :clearable="false" @change="form.employeeIds=[];candidatesLoad()"/></el-form-item><el-form-item label="答辩满分" required><el-input-number v-model="form.fullScore" :min="0.01" :max="999.99" :precision="2"/></el-form-item><el-form-item label="答辩日期"><el-date-picker v-model="form.defenseDate" type="date" value-format="YYYY-MM-DD"/></el-form-item></div><el-form-item label="任务说明"><el-input v-model="form.note" type="textarea" maxlength="1000"/></el-form-item>
       <div class="defense-filters people-filters"><el-select v-model="form.batchId" aria-label="人员培养批次" filterable placeholder="培养批次" @change="form.employeeIds=[];candidatesLoad()"><el-option v-for="b in batches" :key="b.id" :label="b.name" :value="b.id"/></el-select><el-select v-model="peopleFilters.businessUnitId" filterable clearable placeholder="全部板块" @change="candidatesLoad"><el-option v-for="u in units" :key="u.id" :label="u.name" :value="u.id"/></el-select><el-select v-model="peopleFilters.classId" filterable clearable placeholder="全部班级" @change="candidatesLoad"><el-option v-for="c in classes" :key="c.id" :label="c.label" :value="c.id"/></el-select><el-select v-model="peopleFilters.stationId" filterable clearable placeholder="全部站点" @change="candidatesLoad"><el-option v-for="s in stations" :key="s.id" :label="s.name" :value="s.id"/></el-select><el-input v-model="peopleFilters.keyword" clearable placeholder="姓名或工号" @keyup.enter="candidatesLoad" @clear="candidatesLoad"/><el-button @click="candidatesLoad">查询人员</el-button></div>
-      <div class="defense-filters"><span>已选 {{form.employeeIds.length}} 人（同批次内切换筛选及翻页保留）</span><el-button @click="selectPage">选择本页可选人员</el-button><el-button @click="form.employeeIds=[]">清空已选</el-button></div>
-      <el-table :data="pagedCandidates" row-key="id" max-height="300"><el-table-column label="选择" width="70"><template #default="s"><el-checkbox :model-value="form.employeeIds.includes(s.row.id)" :disabled="!!s.row.conflict" @change="(v:any)=>togglePerson(s.row,!!v)"/></template></el-table-column><el-table-column prop="employee_no" label="工号"/><el-table-column prop="employee_name" label="姓名"/><el-table-column prop="business_unit_name" label="板块"/><el-table-column prop="class_name" label="班级"/><el-table-column prop="station_name" label="站点"/><el-table-column prop="conflict_task_name" label="同月冲突任务"/></el-table>
-      <el-pagination v-model:current-page="peoplePage" :page-size="20" :total="candidates.length" layout="total,prev,pager,next"/>
+      <div class="defense-filters"><span>共 {{candidates.length}} 人，可选 {{selectableCandidates.length}} 人；已选 {{form.employeeIds.length}} 人（同批次内切换筛选保留）</span><el-button :disabled="!selectableCandidates.length" @click="selectAll">全选</el-button><el-button @click="form.employeeIds=[]">清空已选</el-button></div>
+      <el-table :data="candidates" row-key="id" max-height="300"><el-table-column label="选择" width="70"><template #default="s"><el-checkbox :model-value="form.employeeIds.includes(s.row.id)" :disabled="!!s.row.conflict" @change="(v:any)=>togglePerson(s.row,!!v)"/></template></el-table-column><el-table-column prop="employee_no" label="工号"/><el-table-column prop="employee_name" label="姓名"/><el-table-column prop="business_unit_name" label="板块"/><el-table-column prop="class_name" label="班级"/><el-table-column prop="station_name" label="站点"/><el-table-column prop="conflict_task_name" label="同月冲突任务"/></el-table>
       <el-alert title="切换培养批次或计分月份会清空已选人员；启用后计分月份、满分和人员锁定，后续新增员工不会自动加入。" type="info" :closable="false"/>
     </el-form><template #footer><el-button @click="editorOpen=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveTask">保存任务草稿</el-button></template>
   </el-dialog>
@@ -133,5 +130,5 @@ onMounted(async()=>{
 </div>
 </template>
 <style scoped>
-.defense-filters{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}.defense-filters>.el-select,.defense-filters>.el-input{width:180px}.defense-filters.people-filters>.el-select,.defense-filters.people-filters>.el-input{flex:1 1 140px;min-width:140px;width:auto}.defense-filters .el-form-item{width:180px;margin-bottom:8px}.import-history{padding-top:16px;border-top:1px solid #eee}.evaluation-workspace{overflow:auto}.el-pagination{margin:14px 0}.el-alert{margin-top:14px}
+.defense-filters{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}.defense-filters>.el-select,.defense-filters>.el-input{width:180px}.defense-filters.people-filters>.el-select,.defense-filters.people-filters>.el-input{flex:1 1 140px;min-width:140px;width:auto}.defense-filters .el-form-item{width:180px;margin-bottom:8px}.import-history{padding-top:16px;border-top:1px solid #eee}.evaluation-workspace{overflow:auto}.el-alert{margin-top:14px}
 </style>
