@@ -58,3 +58,15 @@
 ## 回滚
 
 恢复旧JAR和环境配置可使用上述应用备份；V49/V50不是通过替换JAR自动撤销。若需数据库恢复，先评估部署后业务写入并使用已验证备份，避免丢失新数据。不得删除旧记录或修改已执行Flyway迁移。
+
+## 批次筛选及成绩入口补丁（10:26）
+
+- PR：https://github.com/Heart1ess1/talent-development-platform/pull/81 ，已合并；运行源提交 `119cd2ea74bc6886170b2f7ca8d1606245868c5b` 与合并提交 `618bea276c6fcbfc580d50556e1941d1c058a79a` 的 backend/frontend/deploy 无差异。
+- 人员筛选栏最前增加培养批次并与任务批次联动；切换批次清空原人员选择，同批次筛选和翻页保留选择。任务列表提供“成绩管理”按钮，可进入模板下载、Excel导入、纠错发布和成绩导出。
+- 本地完整浏览器导入导出验证、批次联动及跨页选择通过；前端75项、类型检查和生产构建通过；后端260项（217执行、43跳过），0失败/错误。
+- 发布 JAR SHA256：`32f4445dc23936283d636ca7a9fa635b28a60436b08cbdbd49dc562f3fdd3ca5`。
+- 数据库备份：`/data/talent-platform/backups/mysql/talent-platform-20261105-102605.sql.gz`，gzip及SHA256校验通过；摘要 `263a6e73f1b278cd6c92b9d9579029c360930e1c0d2c24ab6bfe4fe76dd00150`。
+- 原应用/环境备份：`/data/talent-platform/releases/history/cdn-activation-20261105102652-1152893`；候选包：`/data/talent-platform/releases/staging/cdn-defense-batch-filter-618bea2-20261105`。
+- 线上复查：UP、ready=true；Flyway仍为V50，失败迁移0；186名员工、102条历史答辩成绩和1个旧导入批次均保留，旧成绩核心字段摘要不变，未创建生产测试任务。
+- 主JS `index-Cr9WFIgO.js`、主CSS、答辩页JS `DefenseEvaluationView-OVYXZPT-.js`及CSS均200、内容类型正确，解码后SHA256与构建产物一致；相关页面路由200，未登录API401，OSS匿名直连403，新应用容器ERROR日志0。
+- 本次仅修改前端，无新增数据库迁移。正式账号登录业务验收边界同上，不以本地浏览器或生产公共资源检查替代。
