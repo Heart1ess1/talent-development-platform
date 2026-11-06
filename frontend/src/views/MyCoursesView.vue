@@ -71,7 +71,7 @@ onMounted(load)
 <template>
   <div class="course-module-page">
     <header class="course-page-head">
-      <div><span class="eyebrow">课程学习 · 我的课程</span><h1>我的课程</h1><p>查看培训安排、课程课件并在有效时间内完成签到。</p></div>
+      <div><h1>我的课程</h1></div>
       <div class="course-head-actions"><el-button :icon="Collection" @click="router.push('/courses/attendance')">签到记录</el-button></div>
     </header>
 
@@ -82,14 +82,14 @@ onMounted(load)
     </section>
 
     <section class="course-summary-grid" style="margin-top:14px">
-      <article class="course-summary-card blue"><span class="course-summary-icon"><el-icon><Calendar/></el-icon></span><div><small>课程安排</small><strong>{{sessions.length}}</strong><span>全部培训场次</span></div></article>
-      <article class="course-summary-card green"><span class="course-summary-icon"><el-icon><Right/></el-icon></span><div><small>待参加</small><strong>{{upcomingCount}}</strong><span>即将开始的培训</span></div></article>
-      <article class="course-summary-card violet"><span class="course-summary-icon"><el-icon><Document/></el-icon></span><div><small>可用课件</small><strong>{{materialCount}}</strong><span>已安排课程资料</span></div></article>
-      <article class="course-summary-card amber"><span class="course-summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>已签到</small><strong>{{attendance.length}}</strong><span>个人签到记录</span></div></article>
+      <article class="course-summary-card blue"><span class="course-summary-icon"><el-icon><Calendar/></el-icon></span><div><small>课程安排</small><strong>{{sessions.length}}</strong></div></article>
+      <article class="course-summary-card green"><span class="course-summary-icon"><el-icon><Right/></el-icon></span><div><small>待参加</small><strong>{{upcomingCount}}</strong></div></article>
+      <article class="course-summary-card violet"><span class="course-summary-icon"><el-icon><Document/></el-icon></span><div><small>可用课件</small><strong>{{materialCount}}</strong></div></article>
+      <article class="course-summary-card amber"><span class="course-summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>已签到</small><strong>{{attendance.length}}</strong></div></article>
     </section>
 
     <section class="course-workspace">
-      <div class="course-workspace-head"><div><h2>培训日程</h2><p>按时间查看本人已被安排的课程场次。</p></div><span class="course-result-count">共 {{filteredSessions.length}} 个场次</span></div>
+      <div class="course-workspace-head"><div><h2>培训日程</h2></div><span class="course-result-count">共 {{filteredSessions.length}} 个场次</span></div>
       <div class="course-tabs"><button v-for="tab in tabs" :key="tab.value" type="button" :class="{active:statusFilter===tab.value}" @click="statusFilter=tab.value">{{tab.label}}<span>{{tab.count}}</span></button></div>
       <div class="my-course-grid" v-loading="loading" style="padding:14px">
         <article v-for="session in filteredSessions" :key="session.id" class="my-session-card">
@@ -100,7 +100,7 @@ onMounted(load)
           </div>
           <div class="my-session-actions"><span class="course-result-count"><el-icon><Location/></el-icon> 签到 {{formatCourseDate(session.checkin_starts_at).slice(11)}}—{{formatCourseDate(session.checkin_ends_at).slice(11)}}</span><el-button link :icon="Document" @click="openMaterials(session)">查看课件</el-button></div>
         </article>
-        <div v-if="!loading&&!filteredSessions.length" class="course-empty" style="grid-column:1/-1"><el-icon><Calendar/></el-icon><strong>暂无匹配的课程安排</strong><span>新的培训场次安排后会显示在这里</span></div>
+        <div v-if="!loading&&!filteredSessions.length" class="course-empty" style="grid-column:1/-1"><el-icon><Calendar/></el-icon><strong>暂无匹配的课程安排</strong></div>
       </div>
     </section>
 

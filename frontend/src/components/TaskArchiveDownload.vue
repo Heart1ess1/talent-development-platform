@@ -86,5 +86,5 @@ onBeforeUnmount(stop)
 </template>
 
 <style scoped>
-.archive-progress{padding:4px 0}.archive-label{margin:0 0 16px;color:#334155;font-size:15px;line-height:1.6}.archive-label.failed{color:var(--el-color-danger)}.archive-file{margin:14px 0;color:#64748b;overflow-wrap:anywhere;font-size:12px}.archive-note{margin:18px 0 0;color:#8894a5;font-size:12px;line-height:1.7}.archive-warning{color:var(--el-color-warning);font-size:12px;line-height:1.6}
+.archive-progress{padding:4px 0}.archive-label{margin:0 0 16px;color:#3f3f3f;font-size:16px;line-height:1.6}.archive-label.failed{color:var(--el-color-danger)}.archive-file{margin:14px 0;color:#727272;overflow-wrap:anywhere;font-size:14px}.archive-note{margin:18px 0 0;color:#939393;font-size:14px;line-height:1.7}.archive-warning{color:var(--el-color-warning);font-size:14px;line-height:1.6}
 </style>

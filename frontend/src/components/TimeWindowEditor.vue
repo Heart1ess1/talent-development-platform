@@ -14,4 +14,4 @@ function set(key:string,value:any){emit('update:modelValue',{...props.modelValue
     <p class="window-note">{{mode==='MANUAL'?'仅在设定的起止时间内允许办理':mode==='OFFSET'?'下发后开始，基准日期加偏移天数当日23:59:59截止':'下发或发布生效时开始，指定的时间为截止时间'}}</p>
   </div>
 </template>
-<style scoped>.time-window-editor{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 16px}.time-window-editor :deep(.el-select),.time-window-editor :deep(.el-date-editor){width:100%}.window-note{grid-column:1/-1;margin:0 0 14px;color:#64748b;font-size:12px;line-height:1.6}</style>
+<style scoped>.time-window-editor{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 16px}.time-window-editor :deep(.el-select),.time-window-editor :deep(.el-date-editor){width:100%}.window-note{grid-column:1/-1;margin:0 0 14px;color:#727272;font-size:14px;line-height:1.6}</style>

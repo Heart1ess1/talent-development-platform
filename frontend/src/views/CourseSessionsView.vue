@@ -175,19 +175,19 @@ onMounted(async()=>{
 <template>
   <div class="course-module-page">
     <header class="course-page-head">
-      <div><span class="eyebrow">课程管理 · 场次安排</span><h1>场次安排</h1><p>将课程落地为具体培训，统一维护时间、地点、签到窗口和参加人员。</p></div>
+      <div><h1>场次安排</h1></div>
       <div class="course-head-actions"><el-button :icon="Collection" @click="router.push('/courses/manage')">返回课程库</el-button><el-button type="primary" :icon="Plus" :disabled="!courses.length" @click="openCreate">新建场次</el-button></div>
     </header>
 
     <section class="course-summary-grid">
-      <article class="course-summary-card blue"><span class="course-summary-icon"><el-icon><Calendar/></el-icon></span><div><small>全部场次</small><strong>{{sessions.length}}</strong><span>历史与未来培训</span></div></article>
-      <article class="course-summary-card green"><span class="course-summary-icon"><el-icon><Clock/></el-icon></span><div><small>待开展</small><strong>{{tabs[1]?.count||0}}</strong><span>需要继续安排人员</span></div></article>
-      <article class="course-summary-card violet"><span class="course-summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>累计安排</small><strong>{{totalEnrollments}}</strong><span>员工参训人次</span></div></article>
-      <article class="course-summary-card amber"><span class="course-summary-icon"><el-icon><Collection/></el-icon></span><div><small>完成签到</small><strong>{{totalAttendance}}</strong><span>已形成签到记录</span></div></article>
+      <article class="course-summary-card blue"><span class="course-summary-icon"><el-icon><Calendar/></el-icon></span><div><small>全部场次</small><strong>{{sessions.length}}</strong></div></article>
+      <article class="course-summary-card green"><span class="course-summary-icon"><el-icon><Clock/></el-icon></span><div><small>待开展</small><strong>{{tabs[1]?.count||0}}</strong></div></article>
+      <article class="course-summary-card violet"><span class="course-summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>累计安排</small><strong>{{totalEnrollments}}</strong></div></article>
+      <article class="course-summary-card amber"><span class="course-summary-icon"><el-icon><Collection/></el-icon></span><div><small>完成签到</small><strong>{{totalAttendance}}</strong></div></article>
     </section>
 
     <section class="course-workspace">
-      <div class="course-workspace-head"><div><h2>培训场次</h2><p>先设置场次，再安排员工；签到码仅在签到窗口内有效。</p></div><span class="course-result-count">共 {{filteredSessions.length}} 个场次</span></div>
+      <div class="course-workspace-head"><div><h2>培训场次</h2></div><span class="course-result-count">共 {{filteredSessions.length}} 个场次</span></div>
       <div class="course-tabs"><button v-for="tab in tabs" :key="tab.value" type="button" :class="{active:filters.status===tab.value}" @click="filters.status=tab.value">{{tab.label}}<span>{{tab.count}}</span></button></div>
       <div class="course-filter-bar">
         <el-input v-model="filters.keyword" :prefix-icon="Search" clearable placeholder="搜索课程、场次或地点"/>
@@ -205,7 +205,7 @@ onMounted(async()=>{
           <el-table-column label="签到码" width="125"><template #default="{row}"><button class="checkin-code" type="button" title="点击复制" @click="copyCode(row.checkin_code)">{{row.checkin_code}}</button></template></el-table-column>
           <el-table-column label="状态" width="95"><template #default="{row}"><el-tag :type="sessionStatus(row).type">{{sessionStatus(row).label}}</el-tag></template></el-table-column>
           <el-table-column label="操作" width="275" fixed="right"><template #default="{row}"><div class="course-table-actions"><el-button type="primary" plain size="small" :icon="UserFilled" @click="openEnrollment(row)">安排人员</el-button><el-button link :icon="EditPen" @click="openEdit(row)">编辑</el-button><el-button link type="danger" :icon="Delete" :disabled="row.attendance_count>0" @click="remove(row)">删除</el-button></div></template></el-table-column>
-          <template #empty><div class="course-empty"><el-icon><Calendar/></el-icon><strong>暂无培训场次</strong><span>选择已启用课程并安排第一次培训</span><el-button type="primary" @click="openCreate">新建场次</el-button></div></template>
+          <template #empty><div class="course-empty"><el-icon><Calendar/></el-icon><strong>暂无培训场次</strong><el-button type="primary" @click="openCreate">新建场次</el-button></div></template>
         </el-table>
       </div>
 
@@ -219,7 +219,7 @@ onMounted(async()=>{
     </section>
 
     <el-dialog v-model="editorOpen" :title="editing?'编辑培训场次':'新建培训场次'" width="min(760px, 94vw)" append-to-body destroy-on-close>
-      <div class="course-dialog-intro"><span><el-icon><Calendar/></el-icon></span><div><strong>设置一次具体培训</strong><p>签到窗口建议覆盖开课前 15 分钟至开课后 15 分钟。</p></div></div>
+      <div class="course-dialog-intro"><span><el-icon><Calendar/></el-icon></span><div><strong>设置一次具体培训</strong></div></div>
       <el-form label-position="top">
         <div class="form-grid">
           <el-form-item label="课程" required><el-select v-model="form.courseId" filterable placeholder="选择已启用课程"><el-option v-for="course in courses.filter(isCourseEnabled)" :key="course.id" :label="course.name" :value="course.id"/></el-select></el-form-item>

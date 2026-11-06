@@ -19,4 +19,4 @@ onMounted(()=>q.load())
   </section>
 </template>
 
-<style scoped>.timeline-panel{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:10px}.timeline-panel header,.filters{display:flex;align-items:center;justify-content:space-between;gap:8px}.timeline-panel header span{font-size:12px;color:#7b8798}.timeline-scroll{overflow:auto;padding:10px 18px}.timeline-scroll p{margin:5px 0;color:#7b8798}.timeline-panel footer{display:flex;justify-content:flex-end}@media(max-width:760px){.timeline-panel header,.filters{align-items:flex-start;flex-direction:column}}</style>
+<style scoped>.timeline-panel{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:10px}.timeline-panel header,.filters{display:flex;align-items:center;justify-content:space-between;gap:8px}.timeline-panel header span{font-size:14px;color:#868686}.timeline-scroll{overflow:auto;padding:10px 18px}.timeline-scroll p{margin:5px 0;color:#868686}.timeline-panel footer{display:flex;justify-content:flex-end}@media(max-width:760px){.timeline-panel header,.filters{align-items:flex-start;flex-direction:column}}</style>

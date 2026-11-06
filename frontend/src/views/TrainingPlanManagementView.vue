@@ -183,9 +183,9 @@ onMounted(load)
   <div class="plan-module-page">
     <section class="plan-hero">
       <div>
-        <span class="eyebrow">闯关任务 · 任务管理</span>
+
         <h1>任务管理</h1>
-        <p>统一维护培养方案的基本信息和启停状态；任务内容请进入“任务编排”集中设计。</p>
+
       </div>
       <div class="hero-actions">
         <el-button :icon="Connection" @click="openOrchestration()">进入任务编排</el-button>
@@ -196,19 +196,19 @@ onMounted(load)
     <section class="plan-summary-grid" v-loading="loading">
       <article class="plan-summary-card blue">
         <span class="summary-icon"><el-icon><Collection/></el-icon></span>
-        <div><small>全部计划</small><strong>{{summary.totalPlans}}</strong><span>培养方案总数</span></div>
+        <div><small>全部计划</small><strong>{{summary.totalPlans}}</strong></div>
       </article>
       <article class="plan-summary-card green">
         <span class="summary-icon"><el-icon><CircleCheck/></el-icon></span>
-        <div><small>已启用</small><strong>{{summary.enabledPlans}}</strong><span>可用于任务下发</span></div>
+        <div><small>已启用</small><strong>{{summary.enabledPlans}}</strong></div>
       </article>
       <article class="plan-summary-card violet">
         <span class="summary-icon"><el-icon><Document/></el-icon></span>
-        <div><small>编排任务</small><strong>{{summary.totalTasks}}</strong><span>{{summary.readyPlans}} 个计划已有内容</span></div>
+        <div><small>编排任务</small><strong>{{summary.totalTasks}}</strong></div>
       </article>
       <article class="plan-summary-card amber">
         <span class="summary-icon"><el-icon><Connection/></el-icon></span>
-        <div><small>已下发任务</small><strong>{{summary.dispatchedTasks}}</strong><span>保留完整执行记录</span></div>
+        <div><small>已下发任务</small><strong>{{summary.dispatchedTasks}}</strong></div>
       </article>
     </section>
 
@@ -217,7 +217,7 @@ onMounted(load)
       <div class="workspace-head">
         <div>
           <h2>培养计划库</h2>
-          <p>先完成计划信息、任务编排与附件配置，再启用并前往任务下发。</p>
+
         </div>
         <span class="result-count">共 {{filteredPlans.length}} 个计划</span>
       </div>
@@ -336,7 +336,7 @@ onMounted(load)
     <el-dialog v-model="editorOpen" :title="editing?'编辑培养计划':'新建培养计划'" width="min(560px, 92vw)" destroy-on-close>
       <div class="dialog-intro">
         <span class="dialog-icon"><el-icon><Collection/></el-icon></span>
-        <div><strong>{{editing?'完善计划定位和说明':'先建立计划框架'}}</strong><p>任务内容将在独立的任务编排页面维护，新建计划默认为草稿。</p></div>
+        <div><strong>{{editing?'完善计划定位和说明':'先建立计划框架'}}</strong></div>
       </div>
       <el-form label-position="top">
         <el-form-item label="计划名称" required>
@@ -355,7 +355,7 @@ onMounted(load)
     <el-dialog v-model="copyOpen" title="复制培养计划" width="min(500px, 92vw)" destroy-on-close>
       <div class="dialog-intro">
         <span class="dialog-icon"><el-icon><CopyDocument/></el-icon></span>
-        <div><strong>复用计划结构、全部任务与附件</strong><p>复制结果默认为草稿，不会复制历史下发和员工执行记录。</p></div>
+        <div><strong>复用计划结构、全部任务与附件</strong></div>
       </div>
       <el-form label-position="top">
         <el-form-item label="新计划名称" required>

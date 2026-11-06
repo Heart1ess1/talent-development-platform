@@ -61,7 +61,7 @@ onMounted(load)
       <button type="button" :class="{active:modelValue==='NONE'}" @click="emit('update:modelValue','NONE')">未分类 <small>{{count('NONE')}}</small></button>
       <button v-for="folder in folders" :key="folder.id" type="button" :title="folder.name" :class="{active:modelValue===folder.id}" @click="emit('update:modelValue',folder.id)"><el-icon><Folder/></el-icon><span>{{folder.name}}</span><small>{{count(folder.id)}}</small></button>
     </div>
-    <p>新建内容默认进入“未分类”，可通过“移动内容”批量整理。</p>
+
   </section>
   <el-dialog v-model="moving" title="移动内容到文件夹" width="min(560px,94vw)" :close-on-click-modal="!busy" :show-close="!busy">
     <el-form label-position="top">
@@ -73,5 +73,5 @@ onMounted(load)
 </template>
 
 <style scoped>
-.folder-panel{margin:16px 0;padding:16px;border:1px solid #e3e9f2;border-radius:10px;background:#fafcff}.folder-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.folder-heading strong{display:flex;gap:6px;align-items:center;color:#344054}.folder-actions{display:flex;gap:8px;flex-wrap:wrap}.folder-actions .el-button{margin:0}.folder-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.folder-list button{display:flex;align-items:center;gap:8px;max-width:300px;border:1px solid #e1e7ef;border-radius:7px;padding:9px 12px;color:#526176;background:white;cursor:pointer}.folder-list button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.folder-list button.active{border-color:#409eff;background:#ecf5ff;color:#2476c6}.folder-list small{color:#8693a5}.folder-panel p{margin:12px 0 0;color:#8693a5;font-size:12px}
+.folder-panel{margin:16px 0;padding:16px;border:1px solid var(--app-primary-border);border-radius:10px;background:var(--app-primary-soft)}.folder-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.folder-heading strong{display:flex;gap:6px;align-items:center;color:#3f3f3f}.folder-actions{display:flex;gap:8px;flex-wrap:wrap}.folder-actions .el-button{margin:0}.folder-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.folder-list button{display:flex;align-items:center;gap:8px;max-width:300px;border:1px solid #e6e6e6;border-radius:7px;padding:9px 12px;color:#5f5f5f;background:white;cursor:pointer}.folder-list button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.folder-list button.active{border-color:var(--app-primary);background:var(--app-primary-soft);color:var(--app-primary)}.folder-list small{color:#929292}.folder-panel p{margin:12px 0 0;color:#929292;font-size:14px}
 </style>

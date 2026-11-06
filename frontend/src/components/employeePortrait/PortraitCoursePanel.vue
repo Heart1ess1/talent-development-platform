@@ -62,4 +62,4 @@ onBeforeUnmount(()=>{sequence++;controller?.abort()})
   </section>
 </template>
 
-<style scoped>.panel{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:10px}.panel header,.filters{display:flex;align-items:center;justify-content:space-between;gap:8px}.panel header span{color:#7b8798;font-size:12px}.panel footer{display:flex;justify-content:flex-end}@media(max-width:760px){.panel header,.filters{align-items:flex-start;flex-direction:column}}</style>
+<style scoped>.panel{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:10px}.panel header,.filters{display:flex;align-items:center;justify-content:space-between;gap:8px}.panel header span{color:#868686;font-size:14px}.panel footer{display:flex;justify-content:flex-end}@media(max-width:760px){.panel header,.filters{align-items:flex-start;flex-direction:column}}</style>

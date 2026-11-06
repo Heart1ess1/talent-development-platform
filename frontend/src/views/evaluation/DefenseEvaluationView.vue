@@ -129,6 +129,4 @@ onMounted(async()=>{
   <el-dialog v-model="historyOpen" title="答辩成绩版本历史" width="min(900px,95vw)"><el-table :data="historyRows"><el-table-column prop="version" label="版本"/><el-table-column prop="score" label="成绩"/><el-table-column label="状态"><template #default="s">{{states[s.row.status]}}</template></el-table-column><el-table-column prop="revision_reason" label="修订原因"/><el-table-column prop="creator_name" label="录入人"/><el-table-column prop="published_at" label="发布时间" min-width="170"/></el-table></el-dialog>
 </div>
 </template>
-<style scoped>
-.defense-filters{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}.defense-filters>.el-select,.defense-filters>.el-input{width:180px}.defense-filters.people-filters>.el-select,.defense-filters.people-filters>.el-input{flex:1 1 140px;min-width:140px;width:auto}.defense-filters .el-form-item{width:180px;margin-bottom:8px}.import-history{padding-top:16px;border-top:1px solid #eee}.evaluation-workspace{overflow:auto}.el-alert{margin-top:14px}
-</style>
+<style scoped>.defense-filters{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px}.defense-filters>*{min-width:180px}.evaluation-filters{display:flex;flex-wrap:wrap;gap:12px}.evaluation-filters>.el-form-item{min-width:180px}</style>

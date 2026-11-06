@@ -1,0 +1,57 @@
+/* Shared palette for the shell, business pages and teleported Element Plus controls. */
+:root {
+  --app-primary: #d9001b;
+  --app-primary-soft: #fff1f3;
+  --app-primary-border: #efb3bb;
+  --app-page-bg: #f3f3f3;
+  --app-surface: #ffffff;
+  --app-border: #e7e7e7;
+  --app-text: #303030;
+  --app-text-muted: #858585;
+
+  --el-color-primary: var(--app-primary);
+  --el-color-primary-rgb: 217, 0, 27;
+  --el-color-primary-light-3: #e44d5f;
+  --el-color-primary-light-5: #ec808d;
+  --el-color-primary-light-7: #f4b3bb;
+  --el-color-primary-light-8: #f7ccd1;
+  --el-color-primary-light-9: var(--app-primary-soft);
+  --el-color-primary-dark-2: #ae0016;
+  --el-color-info: #858585;
+  --el-color-info-rgb: 133, 133, 133;
+  --el-color-info-light-3: #aaaaaa;
+  --el-color-info-light-5: #c2c2c2;
+  --el-color-info-light-7: #dadada;
+  --el-color-info-light-8: #e7e7e7;
+  --el-color-info-light-9: #f4f4f4;
+  --el-color-info-dark-2: #6a6a6a;
+  --el-bg-color-page: var(--app-page-bg);
+  --el-fill-color-blank: var(--app-surface);
+  --el-fill-color: #f0f0f0;
+  --el-fill-color-light: #f6f6f6;
+  --el-fill-color-lighter: #fafafa;
+  --el-fill-color-extra-light: #fcfcfc;
+  --el-text-color-primary: var(--app-text);
+  --el-text-color-regular: #606060;
+  --el-text-color-secondary: var(--app-text-muted);
+  --el-text-color-placeholder: #a0a0a0;
+  --el-border-color: #dedede;
+  --el-border-color-light: var(--app-border);
+  --el-border-color-lighter: #eeeeee;
+  --el-border-color-extra-light: #f3f3f3;
+}
+
+body { background: var(--app-page-bg); }
+
+.el-table {
+  --el-table-header-bg-color: #f7f7f7;
+  --el-table-header-text-color: #858585;
+  --el-table-row-hover-bg-color: #faf5f6;
+  --el-table-current-row-bg-color: var(--app-primary-soft);
+}
+
+/* Match the reference's red section markers on white panels. */
+:is(.dashboard-panel-head, .course-panel-head, .evaluation-panel-head, .exam-panel-head) h2 {
+  padding-left: 10px;
+  border-left: 4px solid var(--app-primary);
+}

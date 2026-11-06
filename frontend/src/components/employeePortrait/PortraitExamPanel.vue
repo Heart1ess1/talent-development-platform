@@ -38,4 +38,4 @@ onMounted(()=>q.load())
   </section>
 </template>
 
-<style scoped>.panel{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:10px}.panel header,.panel footer{display:flex;align-items:center;justify-content:space-between}.panel header span,.panel footer span{font-size:12px;color:#7b8798}@media(max-width:760px){.panel header{align-items:flex-start;gap:8px;flex-direction:column}}</style>
+<style scoped>.panel{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:10px}.panel header,.panel footer{display:flex;align-items:center;justify-content:space-between}.panel header span,.panel footer span{font-size:14px;color:#868686}@media(max-width:760px){.panel header{align-items:flex-start;gap:8px;flex-direction:column}}</style>

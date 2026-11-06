@@ -112,15 +112,15 @@ onMounted(load)
 <template>
   <div class="exam-module-page">
     <header class="exam-page-head">
-      <div><span class="eyebrow">考试中心 · 题库管理</span><h1>题库管理</h1><p>按业务主题建立独立题库，统一维护题目、答案、解析与启停状态。</p></div>
+      <div><h1>题库管理</h1></div>
       <div class="exam-head-actions"><el-button :icon="Download" @click="downloadTemplate">下载模板</el-button><el-button :icon="Upload" @click="importDialog=true">批量导入</el-button><el-button type="primary" :icon="Plus" @click="openQuestion()">新增题目</el-button></div>
     </header>
 
     <section class="exam-summary-grid">
-      <article class="exam-summary-card blue"><span class="exam-summary-icon"><el-icon><Collection/></el-icon></span><div><small>题库数量</small><strong>{{summary.banks}}</strong><span>{{enabledBanks.length}} 个启用</span></div></article>
-      <article class="exam-summary-card violet"><span class="exam-summary-icon"><el-icon><Document/></el-icon></span><div><small>题目总数</small><strong>{{summary.questions}}</strong><span>全部题库</span></div></article>
-      <article class="exam-summary-card green"><span class="exam-summary-icon"><el-icon><Document/></el-icon></span><div><small>可用题目</small><strong>{{summary.enabled}}</strong><span>可参与组卷</span></div></article>
-      <article class="exam-summary-card amber"><span class="exam-summary-icon"><el-icon><Document/></el-icon></span><div><small>已停用</small><strong>{{summary.disabled}}</strong><span>保留历史记录</span></div></article>
+      <article class="exam-summary-card blue"><span class="exam-summary-icon"><el-icon><Collection/></el-icon></span><div><small>题库数量</small><strong>{{summary.banks}}</strong></div></article>
+      <article class="exam-summary-card violet"><span class="exam-summary-icon"><el-icon><Document/></el-icon></span><div><small>题目总数</small><strong>{{summary.questions}}</strong></div></article>
+      <article class="exam-summary-card green"><span class="exam-summary-icon"><el-icon><Document/></el-icon></span><div><small>可用题目</small><strong>{{summary.enabled}}</strong></div></article>
+      <article class="exam-summary-card amber"><span class="exam-summary-icon"><el-icon><Document/></el-icon></span><div><small>已停用</small><strong>{{summary.disabled}}</strong></div></article>
     </section>
 
     <OrganizationFolders v-model="folderFilter" domain="question-banks" :items="banks" @changed="load"/>
@@ -159,13 +159,13 @@ onMounted(load)
     </section>
 
     <el-dialog v-model="bankDialog" :title="bank.id?'编辑题库':'新建题库'" width="520px">
-      <div class="exam-dialog-intro"><span><el-icon><Collection/></el-icon></span><div><strong>建立清晰的题目边界</strong><p>建议按业务板块、专业方向或考试用途划分题库，名称应便于组卷人员识别。</p></div></div>
+      <div class="exam-dialog-intro"><span><el-icon><Collection/></el-icon></span><div><strong>建立清晰的题目边界</strong></div></div>
       <el-form label-position="top"><el-form-item label="题库名称" required><el-input v-model="bank.name" maxlength="128" show-word-limit placeholder="例如：机动车安全规范"/></el-form-item><el-form-item label="题库说明"><el-input v-model="bank.description" type="textarea" :rows="3" maxlength="500" show-word-limit/></el-form-item><el-form-item v-if="bank.id" label="题库状态"><el-switch v-model="bank.enabled" active-text="启用" inactive-text="停用"/></el-form-item></el-form>
       <template #footer><el-button @click="bankDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveBank">保存</el-button></template>
     </el-dialog>
 
     <el-drawer v-model="questionDialog" size="680px" :close-on-click-modal="false">
-      <template #header><div class="exam-drawer-title"><h3>{{question.id?'编辑题目':'新增题目'}}</h3><p>配置题干、标准答案与解析，保存后即可参与组卷。</p></div></template>
+      <template #header><div class="exam-drawer-title"><h3>{{question.id?'编辑题目':'新增题目'}}</h3></div></template>
       <el-form label-position="top">
         <div class="exam-form-grid"><el-form-item label="所属题库" required><el-select v-model="question.bankId" filterable><el-option v-for="item in enabledBanks" :key="item.id" :label="item.name" :value="item.id"/></el-select></el-form-item><el-form-item label="题型" required><el-select v-model="question.type" filterable @change="questionTypeChanged"><el-option v-for="key in objectiveQuestionTypes" :key="key" :label="typeLabels[key]" :value="key"/></el-select></el-form-item></div>
         <el-form-item label="题干" required><el-input v-model="question.stem" type="textarea" :rows="4" maxlength="1000" show-word-limit placeholder="请输入清晰、无歧义的题目描述"/></el-form-item>
@@ -186,5 +186,5 @@ onMounted(load)
 </template>
 
 <style scoped>
-.question-filter{grid-template-columns:minmax(240px,1fr) 150px 150px auto}.question-title{display:flex;align-items:flex-start;gap:10px}.question-title>div{display:flex;min-width:0;flex-direction:column;gap:5px}.question-title strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.question-title span{color:#8b96a7;font-size:11px}.tag-list{display:flex;align-items:center;flex-wrap:wrap;gap:4px}.import-target{display:flex;gap:8px;margin-bottom:12px;color:#7d899a}.import-target strong{color:#344054}.exam-upload-zone{display:flex;min-height:190px;align-items:center;justify-content:center;flex-direction:column;border:1px dashed #cfd9e5;border-radius:10px;background:#fafcff}.exam-upload-zone>.el-icon{color:#3d83c8;font-size:34px}.exam-upload-zone strong{margin-top:10px}.exam-upload-zone span{margin:7px 0 14px;color:#8b96a7;font-size:12px}.exam-upload-zone label{padding:7px 14px;border-radius:6px;color:#fff;background:#409eff;cursor:pointer}.exam-upload-zone input{display:none}@media(max-width:900px){.question-filter{grid-template-columns:1fr}}
+.question-filter{grid-template-columns:minmax(240px,1fr) 150px 150px auto}.question-title{display:flex;align-items:flex-start;gap:10px}.question-title>div{display:flex;min-width:0;flex-direction:column;gap:5px}.question-title strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.question-title span{color:#959595;font-size:14px}.tag-list{display:flex;align-items:center;flex-wrap:wrap;gap:4px}.import-target{display:flex;gap:8px;margin-bottom:12px;color:#888888}.import-target strong{color:#3f3f3f}.exam-upload-zone{display:flex;min-height:190px;align-items:center;justify-content:center;flex-direction:column;border:1px dashed #d8d8d8;border-radius:10px;background:var(--app-primary-soft)}.exam-upload-zone>.el-icon{color:var(--app-primary);font-size:34px}.exam-upload-zone strong{margin-top:10px}.exam-upload-zone span{margin:7px 0 14px;color:#959595;font-size:14px}.exam-upload-zone label{padding:7px 14px;border-radius:6px;color:#fff;background:var(--app-primary);cursor:pointer}.exam-upload-zone input{display:none}@media(max-width:900px){.question-filter{grid-template-columns:1fr}}
 </style>

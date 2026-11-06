@@ -246,9 +246,9 @@ onMounted(()=>Promise.all([loadStations(),refresh()]));
   <div class="review-page">
     <section class="review-hero">
       <div>
-        <span class="eyebrow">人员管理 · 调站审批</span>
+
         <h1>调站审批</h1>
-        <p>集中处理新员工服务站变更申请，核对人员归属与申请路径，确保每次调整清晰、可追溯。</p>
+
       </div>
       <el-button :icon="Refresh" :loading="loading||summaryLoading" @click="refresh">刷新数据</el-button>
     </section>
@@ -256,19 +256,19 @@ onMounted(()=>Promise.all([loadStations(),refresh()]));
     <section class="summary-grid" v-loading="summaryLoading">
       <article class="summary-card pending">
         <span class="summary-icon"><el-icon><Clock/></el-icon></span>
-        <div><small>待审批</small><strong>{{summary.pending}}</strong><span>需优先处理</span></div>
+        <div><small>待审批</small><strong>{{summary.pending}}</strong></div>
       </article>
       <article class="summary-card approved">
         <span class="summary-icon"><el-icon><CircleCheck/></el-icon></span>
-        <div><small>今日通过</small><strong>{{summary.approvedToday}}</strong><span>已更新人员归属</span></div>
+        <div><small>今日通过</small><strong>{{summary.approvedToday}}</strong></div>
       </article>
       <article class="summary-card rejected">
         <span class="summary-icon"><el-icon><CircleClose/></el-icon></span>
-        <div><small>今日拒绝</small><strong>{{summary.rejectedToday}}</strong><span>已反馈处理原因</span></div>
+        <div><small>今日拒绝</small><strong>{{summary.rejectedToday}}</strong></div>
       </article>
       <article class="summary-card waiting">
         <span class="summary-icon"><el-icon><Document/></el-icon></span>
-        <div><small>平均等待</small><strong>{{Math.round(summary.averagePendingHours)}}<em>小时</em></strong><span>基于当前待办</span></div>
+        <div><small>平均等待</small><strong>{{Math.round(summary.averagePendingHours)}}<em>小时</em></strong></div>
       </article>
     </section>
 
@@ -276,7 +276,7 @@ onMounted(()=>Promise.all([loadStations(),refresh()]));
       <div class="workspace-head">
         <div>
           <h2>审批工作台</h2>
-          <p>待办按申请时间由早到晚排列，优先处理等待较久的申请</p>
+
         </div>
         <span class="result-count">共 {{rows.length}} 条</span>
       </div>
@@ -366,7 +366,7 @@ onMounted(()=>Promise.all([loadStations(),refresh()]));
             </template>
           </el-table-column>
           <template #empty>
-            <div class="empty-state"><el-icon><Document/></el-icon><strong>暂无匹配的调站申请</strong><span>可以调整筛选条件后重新查询</span></div>
+            <div class="empty-state"><el-icon><Document/></el-icon><strong>暂无匹配的调站申请</strong></div>
           </template>
         </el-table>
       </div>
@@ -397,7 +397,7 @@ onMounted(()=>Promise.all([loadStations(),refresh()]));
             </template>
           </div>
         </article>
-        <div v-if="!loading&&!rows.length" class="empty-state"><el-icon><Document/></el-icon><strong>暂无匹配的调站申请</strong><span>可以调整筛选条件后重新查询</span></div>
+        <div v-if="!loading&&!rows.length" class="empty-state"><el-icon><Document/></el-icon><strong>暂无匹配的调站申请</strong></div>
       </div>
     </section>
 
@@ -494,54 +494,54 @@ onMounted(()=>Promise.all([loadStations(),refresh()]));
 </template>
 
 <style scoped>
-.review-page{min-height:100%;padding:22px 22px 42px;background:#f5f7fb;color:#172033}
+.review-page{min-height:100%;padding:22px 22px 42px;background:var(--app-page-bg);color:#1f1f1f}
 .review-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;max-width:none;margin:0 auto 22px}
-.eyebrow{display:block;margin-bottom:7px;color:#356bd8;font-size:12px;font-weight:700;letter-spacing:.12em}
-.review-hero h1{margin:0;font-size:28px;line-height:1.25;letter-spacing:-.02em}
-.review-hero p{max-width:720px;margin:8px 0 0;color:#64748b;font-size:14px;line-height:1.7}
+.eyebrow{display:block;margin-bottom:7px;color:var(--app-primary);font-size:14px;font-weight:700;letter-spacing:.12em}
+.review-hero h1{margin:0;font-size:34px;line-height:1.25;letter-spacing:-.02em}
+.review-hero p{max-width:720px;margin:8px 0 0;color:#727272;font-size:16px;line-height:1.7}
 .review-hero .el-button{height:38px;border-radius:9px}
 .summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;max-width:none;margin:0 auto 18px}
-.summary-card{display:flex;align-items:center;gap:13px;min-height:96px;padding:17px 18px;border:1px solid #e7ebf2;border-radius:12px;background:#fff}
+.summary-card{display:flex;align-items:center;gap:13px;min-height:96px;padding:17px 18px;border:1px solid #ebebeb;border-radius:12px;background:#fff}
 .summary-icon{display:grid;flex:0 0 44px;height:44px;place-items:center;border-radius:13px;font-size:22px}
 .summary-card>div{display:grid;grid-template-columns:auto 1fr;align-items:baseline;column-gap:7px}
-.summary-card small{grid-column:1/-1;color:#788397;font-size:13px}
-.summary-card strong{font-size:25px;line-height:1.3}.summary-card strong em{margin-left:3px;font-size:12px;font-style:normal;font-weight:500;color:#8b95a7}
-.summary-card div>span{font-size:12px;color:#9aa3b2}
+.summary-card small{grid-column:1/-1;color:#828282;font-size:14px}
+.summary-card strong{font-size:30px;line-height:1.3}.summary-card strong em{margin-left:3px;font-size:14px;font-style:normal;font-weight:500;color:#949494}
+.summary-card div>span{font-size:14px;color:#a2a2a2}
 .pending .summary-icon{color:#b76e00;background:#fff7e8}.approved .summary-icon{color:#15966b;background:#eafaf4}
-.rejected .summary-icon{color:#cf4a54;background:#fff0f1}.waiting .summary-icon{color:#5a68c7;background:#f0f1ff}
-.workspace-card{max-width:none;margin:0 auto;overflow:hidden;border:1px solid #e4e9f1;border-radius:14px;background:#fff;box-shadow:0 5px 18px rgba(32,51,82,.04)}
+.rejected .summary-icon{color:#cf4a54;background:#fff0f1}.waiting .summary-icon{color:var(--app-primary);background:var(--app-page-bg)}
+.workspace-card{max-width:none;margin:0 auto;overflow:hidden;border:1px solid #e9e9e9;border-radius:14px;background:#fff;box-shadow:0 5px 18px rgba(0,0,0,.04)}
 .workspace-head{display:flex;align-items:center;justify-content:space-between;padding:19px 20px 13px}
-.workspace-head h2{margin:0;font-size:17px}.workspace-head p{margin:6px 0 0;color:#8992a3;font-size:12px}.result-count{color:#8a96a8;font-size:12px}
-.status-tabs{display:flex;gap:6px;padding:0 20px;border-bottom:1px solid #edf0f5;scrollbar-width:none}
+.workspace-head h2{margin:0;font-size:20px}.workspace-head p{margin:6px 0 0;color:#919191;font-size:14px}.result-count{color:#959595;font-size:14px}
+.status-tabs{display:flex;gap:6px;padding:0 20px;border-bottom:1px solid #f0f0f0;scrollbar-width:none}
 .status-tabs::-webkit-scrollbar{display:none}
-.status-tabs button{position:relative;padding:11px 13px;border:0;background:transparent;color:#667085;cursor:pointer;font-size:14px}
-.status-tabs button span{display:inline-grid;min-width:20px;height:20px;margin-left:4px;place-items:center;border-radius:10px;background:#fff1df;color:#b66a00;font-size:11px}
-.status-tabs button.active{color:#2077c9;font-weight:700}.status-tabs button.active:after{position:absolute;right:8px;bottom:-1px;left:8px;height:2px;border-radius:2px;background:#409eff;content:""}
+.status-tabs button{position:relative;padding:11px 13px;border:0;background:transparent;color:#6f6f6f;cursor:pointer;font-size:16px}
+.status-tabs button span{display:inline-grid;min-width:20px;height:20px;margin-left:4px;place-items:center;border-radius:10px;background:#fff1df;color:#b66a00;font-size:14px}
+.status-tabs button.active{color:var(--app-primary);font-weight:700}.status-tabs button.active:after{position:absolute;right:8px;bottom:-1px;left:8px;height:2px;border-radius:2px;background:var(--app-primary);content:""}
 .filter-bar{display:grid;grid-template-columns:minmax(170px,1fr) minmax(150px,.8fr) minmax(180px,1fr) minmax(280px,1.35fr) auto auto;gap:9px;padding:16px 20px;background:#fff}
-.person-cell{display:flex;align-items:center;gap:11px}.person-cell>div{display:flex;min-width:0;flex-direction:column}.person-cell strong{font-size:14px}.person-cell span{margin-top:4px;color:#8a94a5;font-size:12px}
-.route-cell{display:flex;align-items:center;gap:9px}.route-cell span{color:#687386}.route-cell .el-icon{color:#aab2bf}.route-cell strong{color:#1677c8}
-.meta-lines{display:flex;flex-direction:column;gap:5px}.meta-lines span{color:#3f4b5f}.meta-lines small{color:#8b95a6}
-.action-cell{display:flex;align-items:center;white-space:nowrap}.empty-state{display:flex;min-height:220px;align-items:center;justify-content:center;flex-direction:column;color:#a1a9b7}
-.empty-state .el-icon{margin-bottom:10px;font-size:34px}.empty-state strong{color:#566174}.empty-state span{margin-top:8px;font-size:12px}
+.person-cell{display:flex;align-items:center;gap:11px}.person-cell>div{display:flex;min-width:0;flex-direction:column}.person-cell strong{font-size:16px}.person-cell span{margin-top:4px;color:#939393;font-size:14px}
+.route-cell{display:flex;align-items:center;gap:9px}.route-cell span{color:#727272}.route-cell .el-icon{color:#b1b1b1}.route-cell strong{color:var(--app-primary)}
+.meta-lines{display:flex;flex-direction:column;gap:5px}.meta-lines span{color:#4a4a4a}.meta-lines small{color:#949494}
+.action-cell{display:flex;align-items:center;white-space:nowrap}.empty-state{display:flex;min-height:220px;align-items:center;justify-content:center;flex-direction:column;color:#a8a8a8}
+.empty-state .el-icon{margin-bottom:10px;font-size:34px}.empty-state strong{color:#606060}.empty-state span{margin-top:8px;font-size:14px}
 .mobile-list{display:none}
-.detail-person{display:flex;align-items:center;gap:14px;padding:3px 0 20px;border-bottom:1px solid #edf0f5}.detail-person>div{flex:1}.detail-person h3{margin:0 0 5px}.detail-person p{margin:0;color:#818b9c;font-size:13px}
-.detail-section{padding:20px 0;border-bottom:1px solid #edf0f5}.detail-section h4{margin:0 0 14px;font-size:15px}
-.detail-route{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:16px;border-radius:12px;background:#f6f9fd}.detail-route>div{display:flex;flex-direction:column;gap:6px}.detail-route small,.detail-grid small{color:#8993a4}.detail-route strong{font-size:15px}.detail-route>div:last-child strong{color:#1579c9}.detail-route .el-icon{color:#8ea3b8}
-.detail-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.detail-grid>div{display:flex;flex-direction:column;gap:6px}.detail-grid strong{font-size:14px}
-.decision-box p{margin:0 0 12px;color:#626d7f;font-size:13px}.decision-box blockquote{margin:0;padding:12px 14px;border-left:3px solid #aab6c4;border-radius:4px;background:#f7f8fa;color:#566174;font-size:13px;line-height:1.6}
-.history-list{min-height:60px}.history-item{position:relative;display:flex;gap:12px;padding:0 0 18px 3px}.history-item:after{position:absolute;top:12px;bottom:0;left:7px;width:1px;background:#dde4ed;content:""}.history-item:last-child:after{display:none}.history-dot{z-index:1;flex:0 0 9px;height:9px;margin-top:4px;border:2px solid #409eff;border-radius:50%;background:#fff}.history-item>div{display:flex;flex-direction:column;gap:5px}.history-item strong{font-size:13px}.history-item small{color:#8a94a5}.history-empty{margin:8px 0;color:#9ba4b2;text-align:center;font-size:13px}
-.review-confirm{display:flex;align-items:center;gap:13px;margin-bottom:16px;padding:14px;border-radius:12px}.review-confirm.approve{background:#eff8ff}.review-confirm.reject{background:#fff4f4}.confirm-icon{display:grid;width:38px;height:38px;place-items:center;border-radius:50%;font-size:20px}.approve .confirm-icon{color:#1979c8;background:#dcedfb}.reject .confirm-icon{color:#d34b55;background:#ffe0e2}.review-confirm p{margin:5px 0 0;color:#647083;font-size:13px}.comment-label{display:block;margin:18px 0 8px;color:#424d60;font-size:14px;font-weight:600}
+.detail-person{display:flex;align-items:center;gap:14px;padding:3px 0 20px;border-bottom:1px solid #f0f0f0}.detail-person>div{flex:1}.detail-person h3{margin:0 0 5px}.detail-person p{margin:0;color:#8a8a8a;font-size:14px}
+.detail-section{padding:20px 0;border-bottom:1px solid #f0f0f0}.detail-section h4{margin:0 0 14px;font-size:16px}
+.detail-route{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:16px;border-radius:12px;background:var(--app-page-bg)}.detail-route>div{display:flex;flex-direction:column;gap:6px}.detail-route small,.detail-grid small{color:#929292}.detail-route strong{font-size:16px}.detail-route>div:last-child strong{color:var(--app-primary)}.detail-route .el-icon{color:#a0a0a0}
+.detail-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.detail-grid>div{display:flex;flex-direction:column;gap:6px}.detail-grid strong{font-size:16px}
+.decision-box p{margin:0 0 12px;color:#6c6c6c;font-size:14px}.decision-box blockquote{margin:0;padding:12px 14px;border-left:3px solid #b4b4b4;border-radius:4px;background:#f8f8f8;color:#606060;font-size:14px;line-height:1.6}
+.history-list{min-height:60px}.history-item{position:relative;display:flex;gap:12px;padding:0 0 18px 3px}.history-item:after{position:absolute;top:12px;bottom:0;left:7px;width:1px;background:#e3e3e3;content:""}.history-item:last-child:after{display:none}.history-dot{z-index:1;flex:0 0 9px;height:9px;margin-top:4px;border:2px solid var(--app-primary);border-radius:50%;background:#fff}.history-item>div{display:flex;flex-direction:column;gap:5px}.history-item strong{font-size:14px}.history-item small{color:#939393}.history-empty{margin:8px 0;color:#a3a3a3;text-align:center;font-size:14px}
+.review-confirm{display:flex;align-items:center;gap:13px;margin-bottom:16px;padding:14px;border-radius:12px}.review-confirm.approve{background:var(--app-page-bg)}.review-confirm.reject{background:#fff4f4}.confirm-icon{display:grid;width:38px;height:38px;place-items:center;border-radius:50%;font-size:22px}.approve .confirm-icon{color:var(--app-primary);background:var(--app-page-bg)}.reject .confirm-icon{color:#d34b55;background:#ffe0e2}.review-confirm p{margin:5px 0 0;color:#6f6f6f;font-size:14px}.comment-label{display:block;margin:18px 0 8px;color:#4c4c4c;font-size:16px;font-weight:600}
 @media(max-width:1350px){.filter-bar{grid-template-columns:repeat(2,minmax(0,1fr))}.filter-bar :deep(.el-date-editor){grid-column:1/-1;width:100%}}
 @media(max-width:1100px){.summary-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){
-  .review-page{padding:18px 12px 80px}.review-hero{align-items:flex-start;flex-direction:column}.review-hero h1{font-size:24px}.review-hero .el-button{width:100%}
+  .review-page{padding:18px 12px 80px}.review-hero{align-items:flex-start;flex-direction:column}.review-hero h1{font-size:30px}.review-hero .el-button{width:100%}
   .summary-grid{gap:10px}.summary-card{min-height:92px;padding:14px}.summary-card div>span{display:none}
   .workspace-head{padding:18px 16px 12px}.workspace-head p{display:none}.status-tabs{overflow-x:auto;padding:0 10px}.status-tabs button{flex:0 0 auto}
   .filter-bar{display:flex;padding:14px 16px;flex-direction:column}.filter-bar :deep(.el-date-editor){width:100%}
-  .desktop-table{display:none}.mobile-list{display:block;padding:14px;background:#f6f8fb}
-  .request-card{margin-bottom:12px;padding:15px;border:1px solid #e4e9f1;border-radius:13px;background:#fff}.request-card-head{display:flex;align-items:center;justify-content:space-between}
-  .mobile-route{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin:14px 0;padding:13px;border-radius:10px;background:#f5f8fc;font-size:13px}.mobile-route strong{color:#1478c8}.mobile-route .el-icon{color:#9ca8b8}
-  .mobile-meta{display:flex;justify-content:space-between;color:#8993a4;font-size:12px}.mobile-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}.mobile-actions .el-button{width:100%;margin:0}
-  .detail-grid{grid-template-columns:1fr}.detail-route{font-size:12px}
+  .desktop-table{display:none}.mobile-list{display:block;padding:14px;background:var(--app-page-bg)}
+  .request-card{margin-bottom:12px;padding:15px;border:1px solid #e9e9e9;border-radius:13px;background:#fff}.request-card-head{display:flex;align-items:center;justify-content:space-between}
+  .mobile-route{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin:14px 0;padding:13px;border-radius:10px;background:var(--app-page-bg);font-size:14px}.mobile-route strong{color:var(--app-primary)}.mobile-route .el-icon{color:#a7a7a7}
+  .mobile-meta{display:flex;justify-content:space-between;color:#929292;font-size:14px}.mobile-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}.mobile-actions .el-button{width:100%;margin:0}
+  .detail-grid{grid-template-columns:1fr}.detail-route{font-size:14px}
 }
 </style>

@@ -140,7 +140,7 @@ async function importAttendance(options:UploadRequestOptions){
 <template>
   <div class="course-module-page">
     <header class="course-page-head">
-      <div><span class="eyebrow">{{isEmployee?'课程学习':'课程管理'}} · 签到记录</span><h1>{{isEmployee?'我的签到记录':'签到管理'}}</h1><p>{{isEmployee?'查看个人课程签到结果和补录说明。':'集中查询签到结果，处理人工补录和批量导入。'}}</p></div>
+      <div><h1>{{isEmployee?'我的签到记录':'签到管理'}}</h1></div>
       <div class="course-head-actions">
         <el-button v-if="isEmployee" :icon="Collection" @click="router.push('/courses/my')">返回我的课程</el-button>
         <template v-else>
@@ -152,14 +152,14 @@ async function importAttendance(options:UploadRequestOptions){
     </header>
 
     <section class="course-summary-grid">
-      <article class="course-summary-card blue"><span class="course-summary-icon"><el-icon><Collection/></el-icon></span><div><small>签到记录</small><strong>{{summary.totalAttendance}}</strong><span>当前数据范围</span></div></article>
-      <article class="course-summary-card green"><span class="course-summary-icon"><el-icon><Calendar/></el-icon></span><div><small>今日签到</small><strong>{{summary.todayAttendance}}</strong><span>今日新增记录</span></div></article>
-      <article class="course-summary-card violet"><span class="course-summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>员工自助</small><strong>{{summary.selfAttendance}}</strong><span>签到码完成</span></div></article>
-      <article class="course-summary-card amber"><span class="course-summary-icon"><el-icon><Plus/></el-icon></span><div><small>人工补录</small><strong>{{summary.manualAttendance}}</strong><span>管理员核实补录</span></div></article>
+      <article class="course-summary-card blue"><span class="course-summary-icon"><el-icon><Collection/></el-icon></span><div><small>签到记录</small><strong>{{summary.totalAttendance}}</strong></div></article>
+      <article class="course-summary-card green"><span class="course-summary-icon"><el-icon><Calendar/></el-icon></span><div><small>今日签到</small><strong>{{summary.todayAttendance}}</strong></div></article>
+      <article class="course-summary-card violet"><span class="course-summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>员工自助</small><strong>{{summary.selfAttendance}}</strong></div></article>
+      <article class="course-summary-card amber"><span class="course-summary-icon"><el-icon><Plus/></el-icon></span><div><small>人工补录</small><strong>{{summary.manualAttendance}}</strong></div></article>
     </section>
 
     <section class="course-workspace">
-      <div class="course-workspace-head"><div><h2>签到明细</h2><p>记录签到来源、时间和补录说明，便于后续核验。</p></div><span class="course-result-count">共 {{rows.length}} 条记录</span></div>
+      <div class="course-workspace-head"><div><h2>签到明细</h2></div><span class="course-result-count">共 {{rows.length}} 条记录</span></div>
       <div v-if="!isEmployee" class="course-filter-bar">
         <el-input v-model="filters.keyword" :prefix-icon="Search" clearable placeholder="员工姓名、工号或课程" @keyup.enter="search"/>
         <el-select v-model="filters.classId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
@@ -193,7 +193,7 @@ async function importAttendance(options:UploadRequestOptions){
     </section>
 
     <el-dialog v-model="manualOpen" title="人工补录签到" width="min(540px, 92vw)" destroy-on-close>
-      <div class="course-dialog-intro"><span><el-icon><Plus/></el-icon></span><div><strong>核实后补录签到结果</strong><p>未在场次人员名单中的员工会自动加入该场次，并保留补录来源。</p></div></div>
+      <div class="course-dialog-intro"><span><el-icon><Plus/></el-icon></span><div><strong>核实后补录签到结果</strong></div></div>
       <el-form label-position="top">
         <el-form-item label="培训场次" required><el-select v-model="manual.sessionId" filterable placeholder="选择场次"><el-option v-for="session in sessions" :key="session.id" :label="`${session.course_name} · ${session.title}`" :value="session.id"/></el-select></el-form-item>
         <el-form-item label="班级筛选"><el-select v-model="manualClassId" clearable filterable placeholder="全部班级" @change="manual.employeeId=null"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select></el-form-item>

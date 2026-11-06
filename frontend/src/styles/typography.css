@@ -1,0 +1,119 @@
+/* A shared text hierarchy for desktop pages, mobile pages and dialog portals. */
+:root {
+  --el-font-size-extra-large: 24px;
+  --el-font-size-large: 20px;
+  --el-font-size-medium: 18px;
+  --el-font-size-base: 16px;
+  --el-font-size-small: 14px;
+  --el-font-size-extra-small: 14px;
+  --el-menu-item-font-size: 16px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+html .shell main h1 {
+  font-size: 30px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+html .shell main h2,
+html .el-dialog h2,
+html .el-drawer h2 {
+  font-size: 22px;
+  line-height: 1.5;
+}
+
+html .shell main h3,
+html .el-dialog h3,
+html .el-drawer h3 {
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+html:root body :is(.dashboard-metric-card, .course-summary-card, .exam-summary-card,
+  .plan-summary-card, .evaluation-summary-card, .directory-summary-card,
+  .task-summary-card, .summary-card, .metric-copy) small {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #303030;
+}
+
+html:root body :is(.metric-copy, .course-summary-card, .exam-summary-card,
+  .plan-summary-card, .evaluation-summary-card, .directory-summary-card,
+  .task-summary-card, .summary-card) strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+html:root .operation-head strong,
+html .queue-copy strong,
+html .evaluation-flow-card strong,
+html .evaluation-action strong {
+  font-size: 22px;
+  line-height: 1.5;
+}
+
+html:root .operation-progress b {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+html .operation-stats b { font-size: 18px; }
+html .operation-stats small { font-size: 14px; color: #606060; }
+html .operation-progress small { font-size: 14px; color: #606060; }
+html .operation-head { min-height: 44px; }
+html .metric-copy { flex: 1; }
+html .dashboard-metric-card { min-height: 120px; }
+html .dashboard-panel-head { min-height: 34px; }
+html .evaluation-flow-card a { display: inline-block; margin-top: 14px; }
+
+html:root .evaluation-summary-grid.compact .evaluation-summary-card strong,
+html:root .evaluation-summary-card .metric-value-text { font-size: 20px; }
+html:root .portrait-shell .metric span { font-size: 20px; font-weight: 600; color: #303030; }
+html:root .portrait-shell .metric strong { font-size: 28px; }
+html:root .scoring-page .metric-grid small,
+html:root :is(.learning-summary, .manage-summary) small { font-size: 20px; font-weight: 600; color: #303030; }
+html:root .scoring-page .metric-grid strong,
+html:root :is(.learning-summary, .manage-summary) strong { font-size: 28px; }
+
+/* Tables and controls keep readable text even when a page requests size="small". */
+html .el-table { font-size: 15px; }
+html .el-table th.el-table__cell { font-weight: 600; color: #606060; }
+html .el-table .cell { line-height: 1.6; }
+html .el-button { min-height: 36px; height: auto; font-size: 16px; line-height: 1.4; }
+html .el-button.is-link,
+html .el-button.is-text { min-height: 32px; padding-top: 4px; padding-bottom: 4px; }
+html .el-table .el-button { font-size: 15px; }
+html .el-button.is-circle { width: 36px; height: 36px; padding: 8px; }
+html .el-button.is-circle .el-icon { font-size: 18px; }
+html .el-input,
+html .el-select,
+html .el-textarea { font-size: 16px; }
+html .el-input__wrapper,
+html .el-select__wrapper { min-height: 38px; }
+html .el-form-item__label { font-size: 16px; }
+html .el-tag { height: auto; min-height: 26px; font-size: 14px; line-height: 24px; white-space: nowrap; }
+html .el-tabs__item { height: 48px; font-size: 16px; }
+html .el-empty__description p { font-size: 16px; color: #707070; }
+html .el-dialog__title,
+html .el-drawer__title { font-size: 22px; font-weight: 600; }
+html .el-pagination { font-size: 15px; }
+
+@media (max-width: 800px) {
+  html .shell main h1 { font-size: 26px; }
+  html .shell main h2,
+  html .el-dialog h2,
+  html .el-drawer h2 { font-size: 20px; }
+  html:root body :is(.metric-copy, .course-summary-card, .exam-summary-card,
+    .plan-summary-card, .evaluation-summary-card, .directory-summary-card,
+    .task-summary-card, .summary-card) strong { font-size: 26px; }
+  html .dashboard-metric-card { min-height: 108px; }
+  html .mobile-nav a { font-size: 14px; }
+}

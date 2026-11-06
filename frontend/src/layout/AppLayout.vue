@@ -139,7 +139,7 @@ function handleUserCommand(command:string){
     </el-aside>
     <el-container>
       <el-header>
-        <div class="mobile-brand">人才培养平台</div>
+        <div class="mobile-brand">一人一画像人才培养平台</div>
         <el-dropdown trigger="click" placement="bottom-end" @command="handleUserCommand">
           <button class="profile-trigger" type="button" aria-label="打开个人账号菜单">
             <el-avatar :size="36" :src="userAvatar" class="header-avatar">{{userInitials}}</el-avatar>
@@ -179,41 +179,47 @@ function handleUserCommand(command:string){
 
 <style scoped>
 .shell{min-height:100vh}
-.sidebar{background:white;border-right:1px solid #e5e7eb}
-.brand,.mobile-brand{height:64px;display:flex;align-items:center;font-size:19px;font-weight:700;padding:0 22px;color:#1769aa}
-header{height:64px;padding:0 22px;background:white;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:flex-end}
-.mobile-brand{display:none}
+.sidebar{background:#f7f7f7;border-right:1px solid var(--app-border)}
+.brand,.mobile-brand{height:64px;display:flex;align-items:center;font-size:20px;font-weight:700;padding:0 22px;color:var(--app-primary)}
+header{height:64px;padding:0 22px;background:var(--app-primary);color:#fff;display:flex;align-items:center;justify-content:space-between}
+.brand{background:var(--app-primary);color:#fff}
+.mobile-brand{padding:0;color:#fff}
+.sidebar :deep(.el-menu){border-right:0;background:transparent;--el-menu-item-font-size:18px;--el-menu-text-color:#606060;--el-menu-hover-bg-color:#eeeeee}
+.sidebar :deep(.el-menu-item),.sidebar :deep(.el-sub-menu__title){font-size:18px;font-weight:500}
+.sidebar :deep(.el-sub-menu .el-menu-item){height:auto;min-height:50px;padding:12px 16px 12px 32px;line-height:1.5;white-space:normal}
+.sidebar :deep(.el-menu-item.is-active){border-left:4px solid var(--app-primary);background:var(--app-primary-soft);color:var(--app-primary);font-weight:600}
 .profile-trigger{position:relative;display:flex;align-items:center;gap:10px;min-height:46px;padding:5px 8px 5px 6px;border:0;border-radius:10px;color:inherit;background:transparent;font:inherit;text-align:left;cursor:pointer;transition:background .18s ease}
-.profile-trigger:hover,.profile-trigger:focus-visible{background:#f3f6fa;outline:none}
-.header-avatar{color:#2868c7;background:linear-gradient(145deg,#e9f2ff,#dbeafe);font-size:12px;font-weight:700}
+.profile-trigger:hover{background:rgba(255,255,255,.14)}
+.profile-trigger:focus-visible{background:rgba(255,255,255,.14);outline:2px solid #fff;outline-offset:2px}
+.header-avatar{color:var(--app-primary);background:linear-gradient(145deg,var(--app-primary-soft),var(--app-primary-soft));font-size:14px;font-weight:700}
 .header-avatar :deep(img){object-fit:cover}
 .user-copy{display:flex;flex-direction:column;gap:2px;min-width:80px}
-.user-copy strong{max-width:150px;overflow:hidden;color:#263247;font-size:13px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
-.user-copy>span{color:#8793a5;font-size:11px}
-.dropdown-arrow{color:#9aa5b5;font-size:12px;transition:transform .18s ease}
+.user-copy strong{max-width:150px;overflow:hidden;color:#fff;font-size:14px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+.user-copy>span{color:rgba(255,255,255,.8);font-size:14px}
+.dropdown-arrow{color:rgba(255,255,255,.8);font-size:14px;transition:transform .18s ease}
 .profile-trigger:hover .dropdown-arrow{transform:translateY(1px)}
 .security-dot{position:absolute;top:4px;left:34px;width:8px;height:8px;border:2px solid #fff;border-radius:50%;background:#e99a2b}
 .account-menu{width:278px;padding:7px}
-.account-menu-head{display:flex;align-items:center;gap:11px;padding:8px 9px 12px;margin-bottom:4px;border-bottom:1px solid #edf0f4}
+.account-menu-head{display:flex;align-items:center;gap:11px;padding:8px 9px 12px;margin-bottom:4px;border-bottom:1px solid #f0f0f0}
 .account-menu-head>div{display:flex;flex-direction:column;gap:3px;min-width:0}
-.account-menu-head strong{overflow:hidden;color:#263247;font-size:13px;text-overflow:ellipsis;white-space:nowrap}
-.account-menu-head span{overflow:hidden;color:#8a96a8;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.account-menu-head strong{overflow:hidden;color:#313131;font-size:14px;text-overflow:ellipsis;white-space:nowrap}
+.account-menu-head span{overflow:hidden;color:#959595;font-size:14px;text-overflow:ellipsis;white-space:nowrap}
 .account-menu-item{display:flex;flex-direction:column;gap:2px;padding:3px 0}
-.account-menu-item strong{color:#344054;font-size:13px;font-weight:500}
-.account-menu-item span{color:#98a2b3;font-size:10px}
+.account-menu-item strong{color:#3f3f3f;font-size:14px;font-weight:500}
+.account-menu-item span{color:#a1a1a1;font-size:14px}
 main{padding:0}
 .app-compliance{flex:0 0 auto}
 .mobile-nav{display:none}
 @media(max-width:800px){
   header{padding:0 12px;justify-content:space-between}
-  .mobile-brand{display:flex;padding:0;font-size:16px}
+  .mobile-brand{display:flex;padding:0;font-size:16px;flex:1;min-width:0;white-space:nowrap}
   .profile-trigger{gap:7px;padding-right:5px}
   .user-copy{min-width:0}
   .user-copy strong{max-width:86px}
   .user-copy>span{display:none}
   .mobile-nav{position:fixed;display:flex;bottom:0;left:0;right:0;background:#fff;height:54px;justify-content:space-around;align-items:center;border-top:1px solid #ddd;z-index:10}
-  .mobile-nav a{font-size:12px;color:#606266;text-decoration:none}
-  .mobile-nav a.router-link-active{color:#1769aa}
+  .mobile-nav a{font-size:14px;color:#626262;text-decoration:none}
+  .mobile-nav a.router-link-active{color:var(--app-primary)}
   main{padding-bottom:55px}
   .app-compliance{padding-bottom:68px}
 }

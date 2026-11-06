@@ -82,29 +82,29 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
   <div class="exam-module-page">
     <header class="exam-page-head">
       <div>
-        <span class="eyebrow">考试中心 · {{canManage?'成绩管理':'我的成绩'}}</span>
+
         <h1>{{canManage?'成绩管理':'我的成绩'}}</h1>
-        <p>{{canManage?'交卷后即时查看客观题得分；整场考试结束时由系统统一向员工发布。':'成绩将在整场考试结束后自动显示，避免考试期间互通答案。'}}</p>
+
       </div>
       <div class="exam-head-actions"><el-button v-if="canManage&&auth.can('history:import')" type="primary" @click="router.push('/exams/results/history-imports')">导入历史成绩</el-button><el-button v-if="canManage" :icon="Download" :loading="exporting" @click="exportResults()">导出已发布成绩</el-button></div>
     </header>
 
     <template v-if="canManage">
       <section class="exam-summary-grid">
-        <article class="exam-summary-card blue"><span class="exam-summary-icon"><el-icon><Histogram/></el-icon></span><div><small>考试总数</small><strong>{{overview.total}}</strong><span>已发布考试</span></div></article>
-        <article class="exam-summary-card violet"><span class="exam-summary-icon"><el-icon><Calendar/></el-icon></span><div><small>待开始</small><strong>{{overview.upcoming}}</strong><span>等待开放</span></div></article>
-        <article class="exam-summary-card green"><span class="exam-summary-icon"><el-icon><Timer/></el-icon></span><div><small>进行中</small><strong>{{overview.open}}</strong><span>实时参考</span></div></article>
-        <article class="exam-summary-card amber"><span class="exam-summary-icon"><el-icon><CircleCheck/></el-icon></span><div><small>已结束</small><strong>{{overview.ended}}</strong><span>可归档导出</span></div></article>
+        <article class="exam-summary-card blue"><span class="exam-summary-icon"><el-icon><Histogram/></el-icon></span><div><small>考试总数</small><strong>{{overview.total}}</strong></div></article>
+        <article class="exam-summary-card violet"><span class="exam-summary-icon"><el-icon><Calendar/></el-icon></span><div><small>待开始</small><strong>{{overview.upcoming}}</strong></div></article>
+        <article class="exam-summary-card green"><span class="exam-summary-icon"><el-icon><Timer/></el-icon></span><div><small>进行中</small><strong>{{overview.open}}</strong></div></article>
+        <article class="exam-summary-card amber"><span class="exam-summary-icon"><el-icon><CircleCheck/></el-icon></span><div><small>已结束</small><strong>{{overview.ended}}</strong></div></article>
       </section>
       <section v-if="pendingReviews.length" id="exam-review-queue" class="exam-workspace review-workspace">
-        <div class="exam-workspace-head"><div><span class="card-title">待阅卷答卷</span><span class="header-tip">主观题评分完成后，系统自动合成考试总分</span></div><el-tag type="warning" effect="plain">{{pendingReviews.length}} 份待处理</el-tag></div>
+        <div class="exam-workspace-head"><div><span class="card-title">待阅卷答卷</span></div><el-tag type="warning" effect="plain">{{pendingReviews.length}} 份待处理</el-tag></div>
         <el-table :data="pendingReviews" empty-text="暂无待阅卷答卷">
           <el-table-column prop="exam_name" label="考试" min-width="160"/><el-table-column prop="employee_name" label="员工" min-width="110"/><el-table-column prop="objective_score" label="客观题得分" width="110"><template #default="{row}">{{scoreText(row.objective_score)}}</template></el-table-column><el-table-column label="监考模式" width="104"><template #default="s"><el-tag :type="proctorMode(s.row).type" effect="plain">{{proctorMode(s.row).label}}</el-tag></template></el-table-column><el-table-column prop="event_count" label="异常次数" width="90"/><el-table-column label="提交时间" width="150"><template #default="s">{{dateTimeParts(s.row.submitted_at).date}} {{dateTimeParts(s.row.submitted_at).time}}</template></el-table-column><el-table-column label="操作" width="90"><template #default="s"><el-button link type="primary" @click="openReview(s.row)">开始阅卷</el-button></template></el-table-column>
         </el-table>
       </section>
       <section class="exam-workspace">
           <div class="exam-workspace-head">
-            <div><span class="card-title">考试完成情况</span><span class="header-tip">点击任意一行查看该考试的员工成绩单</span></div>
+            <div><span class="card-title">考试完成情况</span></div>
             <div class="filters">
               <el-input v-model="keyword" clearable placeholder="搜索考试或试卷" :prefix-icon="Search"/>
               <el-select v-model="phase" clearable filterable placeholder="考试状态">
@@ -131,7 +131,7 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
         </el-table>
       </section>
       <section v-if="historicalResults.length" class="exam-workspace history-results-workspace">
-        <div class="exam-workspace-head"><div><span class="card-title">历史导入成绩</span><span class="header-tip">已发布历史记录只读展示</span></div><el-button :icon="Download" :loading="exporting" @click="exportResults()">导出全部成绩</el-button></div>
+        <div class="exam-workspace-head"><div><span class="card-title">历史导入成绩</span></div><el-button :icon="Download" :loading="exporting" @click="exportResults()">导出全部成绩</el-button></div>
         <el-table :data="historicalResults" empty-text="暂无历史成绩"><el-table-column prop="exam_name" label="考试" min-width="180"/><el-table-column prop="employee_name" label="员工" min-width="110"/><el-table-column prop="employee_no" label="工号" width="110"/><el-table-column prop="total_score" label="成绩" width="90"><template #default="{row}">{{scoreText(row.total_score)}}</template></el-table-column><el-table-column prop="score_month" label="成绩月份" width="110"/><el-table-column label="来源" width="100"><template #default><el-tag type="warning" effect="plain">历史导入</el-tag></template></el-table-column></el-table>
       </section>
     </template>
@@ -159,7 +159,7 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
         <div><span>缺考</span><strong class="red">{{detailOverview.absent}}</strong></div>
       </div>
       <div class="detail-toolbar">
-        <div><strong>员工成绩单</strong><span class="header-tip">系统按客观题标准答案自动评分</span></div>
+        <div><strong>员工成绩单</strong></div>
         <div class="filters">
           <el-input v-model="detailKeyword" clearable placeholder="搜索姓名或工号" :prefix-icon="Search"/>
           <el-select v-model="detailClassId" clearable filterable placeholder="全部班级"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
@@ -200,6 +200,6 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
 </template>
 
 <style scoped>
-.page-head p{margin:6px 0 0}.overview-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}.overview-item{padding:18px 20px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 2px 8px rgba(31,41,55,.04)}.overview-item span{display:block;color:#7b8799;font-size:13px;margin-bottom:7px}.overview-item strong{font-size:25px;color:#253044}.overview-item.success{border-left:3px solid #67c23a}.overview-item.warning{border-left:3px solid #e6a23c}.card-head,.detail-toolbar,.drawer-title{display:flex;align-items:center;justify-content:space-between;gap:16px}.card-title{font-weight:600}.header-tip{color:#8a96a8;font-size:12px;margin-left:12px}.filters{display:flex;gap:10px}.filters .el-input{width:190px}.filters .el-select{width:130px}.summary-table :deep(.el-table__row){cursor:pointer}.summary-table :deep(.el-table__row:hover) .row-arrow{color:#409eff;transform:translateX(2px)}.exam-name{font-weight:600;color:#303846}.sub-text{color:#8a96a8;font-size:12px;margin-top:4px}.time-range{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#596579;white-space:nowrap}.row-arrow{color:#a9b1bd;transition:.2s}.drawer-title{width:100%}.drawer-title h3{font-size:20px;margin:0;color:#253044}.drawer-title p{font-size:13px;color:#7b8799;margin:7px 0 0}.detail-overview{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}.detail-overview>div{background:#f7f9fc;border-radius:6px;padding:14px 18px}.detail-overview span{display:block;color:#7b8799;font-size:12px}.detail-overview strong{display:block;font-size:22px;margin-top:5px;color:#253044}.detail-overview .green{color:#4d9f2f}.detail-overview .orange{color:#d88a1d}.detail-overview .red{color:#e34d59}.detail-toolbar{margin-bottom:14px}.datetime-cell{display:inline-flex;flex-direction:column;line-height:1.35;white-space:nowrap}.datetime-cell span:last-child{color:#606266}@media(max-width:900px){.overview-grid{grid-template-columns:repeat(2,1fr)}.card-head,.detail-toolbar,.drawer-title{align-items:flex-start;flex-direction:column}.detail-overview{grid-template-columns:repeat(2,1fr)}.filters{width:100%}.filters .el-input{flex:1}}
-.review-workspace{border-left:3px solid #e6a23c}.publish-workspace{border-left:3px solid #67c23a}.subjective-question{margin-top:16px;padding:18px;border:1px solid #e5eaf1;border-radius:9px;background:#fbfcfe}.question-title{display:flex;align-items:flex-start;gap:10px}.question-title>span{display:flex;width:25px;height:25px;flex:none;align-items:center;justify-content:center;border-radius:50%;color:#fff;background:#3977c6;font-size:12px}.question-title strong,.question-title small{display:block}.question-title small{margin-top:5px;color:#8a96a8}.answer-box{margin:14px 0;padding:13px;border-radius:7px;background:#f1f4f8}.answer-box span{color:#8a96a8;font-size:11px}.answer-box p{margin:6px 0 0;line-height:1.65;white-space:pre-wrap}.grade-form{display:grid;grid-template-columns:130px 1fr auto;gap:10px}.grade-form .el-input-number{width:100%}@media(max-width:700px){.grade-form{grid-template-columns:1fr}}
+.page-head p{margin:6px 0 0}.overview-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}.overview-item{padding:18px 20px;background:#fff;border:1px solid #e7e7e7;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.04)}.overview-item span{display:block;color:#868686;font-size:14px;margin-bottom:7px}.overview-item strong{font-size:30px;color:#2f2f2f}.overview-item.success{border-left:3px solid #67c23a}.overview-item.warning{border-left:3px solid #e6a23c}.card-head,.detail-toolbar,.drawer-title{display:flex;align-items:center;justify-content:space-between;gap:16px}.card-title{font-weight:600}.header-tip{color:#959595;font-size:14px;margin-left:12px}.filters{display:flex;gap:10px}.filters .el-input{width:190px}.filters .el-select{width:130px}.summary-table :deep(.el-table__row){cursor:pointer}.summary-table :deep(.el-table__row:hover) .row-arrow{color:var(--app-primary);transform:translateX(2px)}.exam-name{font-weight:600;color:#373737}.sub-text{color:#959595;font-size:14px;margin-top:4px}.time-range{display:flex;flex-direction:column;gap:4px;font-size:14px;color:#646464;white-space:nowrap}.row-arrow{color:#b0b0b0;transition:.2s}.drawer-title{width:100%}.drawer-title h3{font-size:22px;margin:0;color:#2f2f2f}.drawer-title p{font-size:14px;color:#868686;margin:7px 0 0}.detail-overview{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}.detail-overview>div{background:var(--app-primary-soft);border-radius:6px;padding:14px 18px}.detail-overview span{display:block;color:#868686;font-size:14px}.detail-overview strong{display:block;font-size:22px;margin-top:5px;color:#2f2f2f}.detail-overview .green{color:#4d9f2f}.detail-overview .orange{color:#d88a1d}.detail-overview .red{color:#e34d59}.detail-toolbar{margin-bottom:14px}.datetime-cell{display:inline-flex;flex-direction:column;line-height:1.35;white-space:nowrap}.datetime-cell span:last-child{color:#626262}@media(max-width:900px){.overview-grid{grid-template-columns:repeat(2,1fr)}.card-head,.detail-toolbar,.drawer-title{align-items:flex-start;flex-direction:column}.detail-overview{grid-template-columns:repeat(2,1fr)}.filters{width:100%}.filters .el-input{flex:1}}
+.review-workspace{border-left:3px solid #e6a23c}.publish-workspace{border-left:3px solid #67c23a}.subjective-question{margin-top:16px;padding:18px;border:1px solid #e9e9e9;border-radius:9px;background:var(--app-primary-soft)}.question-title{display:flex;align-items:flex-start;gap:10px}.question-title>span{display:flex;width:25px;height:25px;flex:none;align-items:center;justify-content:center;border-radius:50%;color:#fff;background:var(--app-primary);font-size:14px}.question-title strong,.question-title small{display:block}.question-title small{margin-top:5px;color:#959595}.answer-box{margin:14px 0;padding:13px;border-radius:7px;background:#f4f4f4}.answer-box span{color:#959595;font-size:14px}.answer-box p{margin:6px 0 0;line-height:1.65;white-space:pre-wrap}.grade-form{display:grid;grid-template-columns:130px 1fr auto;gap:10px}.grade-form .el-input-number{width:100%}@media(max-width:700px){.grade-form{grid-template-columns:1fr}}
 </style>
