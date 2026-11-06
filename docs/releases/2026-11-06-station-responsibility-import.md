@@ -21,6 +21,30 @@
 
 发布准备基线为`origin/main@cd390cf`。开发在独立`codex/station-manager-import`工作区进行，原工作区未提交改动保留。
 
-生产发布尚待执行：评审合并后，生成CDN构建、备份MySQL、校验上传哈希，使用既有prepare／activate脚本发布，再核对健康、V51、权限、静态资源与测试账号流程。真实服务站负责人导入仍由管理员核对预览后确认。
+功能[PR #86](https://github.com/Heart1ess1/talent-development-platform/pull/86)已合并，合并提交`c7554c53a36fe290e5dac86f67b0ca7ced41fd8c`，功能提交`0531442c51b4687683bf711386d153caf7ccb646`。仓库未配置PR自动检查；合并前已完成上述本地测试、构建及浏览器验收。北京时间2026-11-06 13:42:48通过既有prepare／activate脚本激活生产版本，97个静态资源上传成功。启动期间出现三次短暂502，重试后恢复UP，未触发回退。
+
+生产验证：
+
+- 综合就绪检查`ready: true`；主站HTTPS健康接口200、UP；应用与MySQL正常，Nginx HTTPS和OSS RAM Role配置通过核验。
+- Flyway最新V51成功，失败迁移0。生产JAR与上传候选SHA-256一致。
+- 负责人页面SPA返回200，未认证模板及导入预览接口返回401。CDN页面JS返回200、JavaScript类型、`max-age=31104000`；下载哈希与本地产物一致，OSS原始地址匿名访问403。
+- 使用独立临时测试站点和账号在生产浏览器验证：模板与错误明细下载；姓名冲突时禁止确认；有效导入创建2个账号、更新2站并转交1项测试请假责任；前导零工号搜索；新站长初始密码登录、强制改密、修改后只见所辖1名测试员工，“待我审批”显示交接申请。API另验证原负责人待办移除、短工号账号使用完整工号初始密码及改密前403拦截。
+- 临时账号、员工、站点、请假及导入批次已清理，临时凭据已移除，导入及清理审计保留。发布前／测试清理后只读计数一致：员工186、账号191、服务站136、请假4、站长范围0、区域经理范围0；临时账号／站点／请假／批次残留均为0。
+- 最终90分钟应用日志ERROR／Exception扫描无匹配，健康UP。浏览器仅发现既有favicon 401请求。
+- 真实服务站负责人尚未导入，由管理员下载模板并核对预览后确认；本次未改变真实员工、负责人范围或请假记录。
+
+| 项目 | 证据 |
+| --- | --- |
+| 生产JAR SHA-256 | `c7c217706ec50abd229514de6c2d8783cfb28eb05fe0e9128192338c915e7a66` |
+| 发布前JAR SHA-256 | `a603ac0cc78a11c90d26b1bd839f537c808e49d8bcd65906d77d0419f527d2d3` |
+| MySQL备份 | `/data/talent-platform/backups/mysql/talent-platform-20261106-134102.sql.gz` |
+| 备份SHA-256 | `cf5801edc4c0f5b2f39706acb04565853ab684a3afbd906068f21adc27da8f1b`；gzip及SHA-256检查通过 |
+| 发布候选 | `/data/talent-platform/releases/staging/cdn-station-import-0531442-20261106` |
+| 旧JAR与环境备份 | `/data/talent-platform/releases/history/cdn-activation-20261106134248-1339024` |
+| CDN主JS | `https://static.yryhx.cn/assets/index-CUJ0nFsL.js` |
+| CDN负责人JS | `https://static.yryhx.cn/assets/StationResponsibilitiesView-DkIDlTpr.js` |
+| 负责人JS SHA-256 | `f45db4f7f8701c1bd7908f62cbd46ed12119d7e842c74ede3d9346222f9c2cf4` |
+
+本地证据位于当前工作区`.codex-tmp/production-*.log`、`.codex-tmp/cdn-verification.json`及`output/playwright/production-*.png`，未提交运行产物或凭据。
 
 回退优先恢复发布前JAR及环境并核验健康和CDN资源。V51为新增独立批次表，可保留；已确认的真实负责人和请假责任属于业务数据，不随应用回退自动反向改写。需要撤销业务配置时通过负责人维护并执行反向交接，禁止直接删除真实账号或回滚其他用户业务数据。
