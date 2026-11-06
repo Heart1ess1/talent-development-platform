@@ -1,5 +1,7 @@
 # 代码库导览与文件职责
 
+月度绩效链路：`EvaluationMonthlyView.vue`中的`MonthlyPerformancePanel.vue` → `MonthlyPerformanceController` → `MonthlyPerformanceService`及`PerformanceGrading` → V52的组、成员、月份范围表。`EvaluationRevisionService`负责扩展全组及跨月修订；`EvaluationController`和历史导入入口防止逐人发布绕过；`EmployeePortraitService`及结果中心展示正式等级。绩效写操作与审计同事务，已发布迁移V1～V51保持原样。
+
 负责人批量导入链路：`StationResponsibilitiesView.vue`中的`StationResponsibilityImport.vue` → `StationResponsibilityImportController` → `StationResponsibilityImportService` → `station_responsibility_import`（V51）。`StationImportWorkbook`负责五列模板、文件结构校验与文本错误导出；导入与手动维护共用`StationResponsibilityService`的影响计算、锁定和交接执行逻辑。新账号在确认事务内创建，预览只写批次；批次行锁及预览基线保护幂等和并发，定时清理七天前批次。
 
 本文面向新加入或接手本项目的同事，说明当前代码结构、主要运行链路，以及每个源码、配置、迁移和测试文件的大致职责。接口入参和完整权限口径请继续以 [API 接口约定](api-contract.md) 和 [权限矩阵](permissions-matrix.md) 为准。

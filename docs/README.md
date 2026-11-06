@@ -6,6 +6,8 @@
 
 | 文档 | 用途 | 适合阅读对象 |
 | --- | --- | --- |
+| [monthly-performance.md](monthly-performance.md) | 月度 ABC 比例、参评名单、全组发布与关联修订操作说明。 | 管理员、培训管理员、测试与开发人员 |
+| [releases/2026-11-06-local-ui-monthly-performance.md](releases/2026-11-06-local-ui-monthly-performance.md) | 界面与绩效分批合并、生产部署、真实登录验收及回退证据。 | 项目维护者、部署运维人员 |
 | [station-responsibility-import-guide.md](station-responsibility-import-guide.md) | 五列负责人模板、账号关联、批量替换、请假交接与首次改密操作说明。 | 管理员、测试与开发人员 |
 | [requirements.md](requirements.md) | 固化阶段 1 MVP 的需求口径、目标用户、核心业务闭环和当前已支持范围。 | 产品负责人、开发者、测试人员、新协作者 |
 | [api-contract.md](api-contract.md) | 记录当前 `/api/v1` 接口约定，包括认证、响应结构、错误码、分页和主要接口。 | 前端开发、后端开发、接口联调人员 |

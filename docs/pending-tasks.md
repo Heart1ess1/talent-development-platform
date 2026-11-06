@@ -2,6 +2,8 @@
 
 本文档只记录当前尚未完成、需要继续执行或持续检查的事项。完整产品任务历史仍保留在 [task-board.md](task-board.md)，阿里云操作细节以 [aliyun-deployment.md](aliyun-deployment.md) 为准。
 
+2026-11-06界面统一与月度ABC绩效已合并部署，V52、健康、资源及临时账号生产流程验证通过，见[本次发布记录](releases/2026-11-06-local-ui-monthly-performance.md)。正式培养批次的月份比例与参评名单仍由管理员业务核对后配置；发布未自动划分真实员工绩效。
+
 ## 当前基线
 
 - 最后核对日期：2026-10-04
