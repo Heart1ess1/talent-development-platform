@@ -3,6 +3,7 @@ import {computed,onMounted,reactive,ref,watch} from 'vue'
 import {useRouter} from 'vue-router'
 import {ElMessage} from 'element-plus'
 import {api,type Envelope} from '@/api'
+import StationResponsibilityImport from '@/components/StationResponsibilityImport.vue'
 
 type Person={id:number;username:string;display_name:string;role:string;enabled:boolean}
 type Station={id:number;name:string;enabled:boolean}
@@ -20,9 +21,9 @@ const transfers=reactive<Record<string,number|null>>({})
 const labels:Record<string,string>={STATION_MANAGER:'站长',AREA_MANAGER:'区域经理'}
 const role=computed(()=>tab.value==='站长管理'?'STATION_MANAGER':'AREA_MANAGER')
 const people=(level:string)=>context.value.users.filter(x=>x.role===level)
-const selectedNames=(station:number,level:string)=>context.value.scopes.filter(x=>x.station_id===station&&x.level===level).map(x=>x.display_name).join('、')||'未配置'
+const selectedNames=(station:number,level:string)=>context.value.scopes.filter(x=>x.station_id===station&&x.level===level).map(x=>personName(x.user_id)).join('、')||'未配置'
 const stationNames=(user:number)=>context.value.scopes.filter(x=>x.user_id===user).map(x=>x.station_name).join('、')||'未分配'
-const personName=(id:number)=>context.value.users.find(x=>x.id===id)?.display_name||String(id)
+const personName=(id:number)=>{const person=context.value.users.find(x=>x.id===id);return person?`${person.display_name}（${person.username}）`:String(id)}
 const scopedIds=(station:number,level:string)=>context.value.scopes.filter(x=>x.station_id===station&&x.level===level).map(x=>x.user_id)
 const stationOptions=computed(()=>context.value.stations.map(x=>({key:x.id,label:x.name+(x.enabled?'':'（停用）')})))
 const stationRows=computed(()=>context.value.stations.filter(x=>!keyword.value||`${x.name} ${selectedNames(x.id,'STATION_MANAGER')} ${selectedNames(x.id,'AREA_MANAGER')}`.includes(keyword.value.trim())))
@@ -76,7 +77,7 @@ onMounted(load)
 
 <template>
   <div class="responsibility-page">
-    <header class="page-head"><div><h1>站长与区域经理管理</h1><p>维护服务站负责人及其负责范围，人员变更时一并交接请假责任。</p></div><div><el-button @click="router.push('/users')">账号管理</el-button><el-button :loading="loading" @click="load">刷新</el-button></div></header>
+    <header class="page-head"><div><h1>站长与区域经理管理</h1><p>维护服务站负责人及其负责范围，人员变更时一并交接请假责任。</p></div><div class="page-actions"><StationResponsibilityImport @completed="load"/><el-button @click="router.push('/users')">账号管理</el-button><el-button :loading="loading" @click="load">刷新</el-button></div></header>
     <div class="summary"><span>服务站 <strong>{{context.stations.length}}</strong></span><span>站长 <strong>{{people('STATION_MANAGER').length}}</strong></span><span>区域经理 <strong>{{people('AREA_MANAGER').length}}</strong></span><span>在用站点待完善 <strong>{{unconfigured}}</strong></span></div>
     <el-tabs v-model="tab"><el-tab-pane v-for="item in ['服务站维护','站长管理','区域经理管理']" :key="item" :name="item" :label="item"/></el-tabs>
     <div class="toolbar"><el-input v-model="keyword" clearable placeholder="搜索服务站、负责人或账号"/><span>共 {{total}} 项</span></div>
@@ -88,7 +89,7 @@ onMounted(load)
       <el-table-column label="操作" width="130" fixed="right"><template #default="{row}"><el-button link type="primary" @click="editStation(row)">调整负责人</el-button></template></el-table-column>
     </el-table>
     <el-table v-else v-loading="loading" :data="visiblePeople" row-key="id">
-      <el-table-column prop="display_name" label="负责人" min-width="130"/><el-table-column prop="username" label="账号" min-width="140"/>
+      <el-table-column label="负责人（工号 / 账号）" min-width="220"><template #default="{row}">{{personName(row.id)}}</template></el-table-column>
       <el-table-column label="当前负责服务站" min-width="300"><template #default="{row}">{{stationNames(row.id)}}</template></el-table-column>
       <el-table-column label="状态" width="90"><template #default="{row}"><el-tag :type="row.enabled?'success':'info'">{{row.enabled?'启用':'停用'}}</el-tag></template></el-table-column>
       <el-table-column label="操作" width="150" fixed="right"><template #default="{row}"><el-button link type="primary" @click="editPerson(row)">调整负责服务站</el-button></template></el-table-column>
@@ -117,5 +118,6 @@ onMounted(load)
 </template>
 
 <style scoped>
+.page-actions{display:flex;gap:8px;flex-wrap:wrap}.page-actions :deep(.el-button+.el-button){margin-left:0}
 .responsibility-page{padding:24px;background:#f7f8fa;min-height:100%;color:#24313d}.page-head{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:20px}.page-head h1{font-size:25px;margin:0 0 8px}.page-head p{color:#637581;margin:0}.summary{display:flex;gap:28px;flex-wrap:wrap;padding:18px 20px;background:white;border:1px solid #e2e8ee;border-radius:8px;margin-bottom:18px}.summary strong{font-size:21px;margin-left:8px;color:#286c8f}.toolbar{display:flex;align-items:center;gap:20px;margin:12px 0}.toolbar .el-input{max-width:340px}.toolbar span{color:#6a7783;font-size:13px}.pagination{justify-content:flex-end;margin-top:16px}.full-width{width:100%}.replacement{margin-top:18px}.replacement small{color:#687986;margin-top:7px}.impact-preview{border-top:1px solid #e2e8ee;padding-top:16px}.impact-row{display:flex;align-items:center;gap:16px;padding:14px 0;flex-wrap:wrap}.impact-row>div:first-child{display:flex;flex-direction:column;gap:6px;flex:1}.impact-row span,.impact-preview p{color:#667783;font-size:13px}.impact-row .el-select{width:230px}.warning{color:#b4532c}.responsibility-page :deep(.el-transfer){display:flex;align-items:center;justify-content:center}.responsibility-page :deep(.el-transfer-panel){flex:1;max-width:310px}.responsibility-page :deep(.el-transfer__buttons){padding:0 18px}.responsibility-page :deep(.el-transfer-panel__body){height:260px}@media(max-width:650px){.responsibility-page{padding:14px}.page-head{align-items:flex-start;flex-direction:column}.summary{gap:14px}.responsibility-page :deep(.el-transfer){flex-wrap:wrap}.responsibility-page :deep(.el-transfer-panel){min-width:100%;max-width:none}.responsibility-page :deep(.el-transfer__buttons){display:flex;gap:12px;padding:12px;transform:none}.responsibility-page :deep(.el-transfer__buttons .el-icon){transform:rotate(90deg)}.responsibility-page :deep(.el-transfer__button+.el-transfer__button){margin-left:0}.responsibility-page :deep(.el-dialog__body){max-height:60vh;overflow-y:auto}.responsibility-page :deep(.el-transfer-panel__body){height:180px}.impact-row .el-select{width:100%}}
 </style>

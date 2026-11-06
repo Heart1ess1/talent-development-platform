@@ -31,10 +31,14 @@ public class StationResponsibilityService {
   public Map<String,Object> preview(Change change){
     permissions.require(Permissions.USER_OPS_ROLE_MANAGE);
     validate(change);
+    return inspect(change.assignments());
+  }
+
+  Map<String,Object> inspect(List<Assignment> assignments){
     List<Map<String,Object>> current=scopes();
     List<Map<String,Object>> impacts=new ArrayList<>();
     List<Map<String,Object>> affectedRows=new ArrayList<>();
-    for(Assignment assignment:change.assignments()){
+    for(Assignment assignment:assignments){
       Set<Long> desired=new LinkedHashSet<>(assignment.userIds());
       for(var scope:current){
         long station=number(scope.get("station_id")),user=number(scope.get("user_id"));
@@ -59,7 +63,7 @@ public class StationResponsibilityService {
     }
     var users=db.queryForList("select id,role,enabled,security_version from sys_user where role in ('STATION_MANAGER','AREA_MANAGER') order by id");
     return Map.of("baselineHash",hash(current.toString()+users+affectedRows),"impacts",impacts,
-        "affectedVersions",affectedRows.size(),"assignments",change.assignments());
+        "affectedVersions",affectedRows.size(),"assignments",assignments);
   }
 
   @Transactional(isolation=Isolation.READ_COMMITTED)
@@ -67,12 +71,20 @@ public class StationResponsibilityService {
     permissions.require(Permissions.USER_OPS_ROLE_MANAGE);
     if(change==null||change.reason()==null||change.reason().isBlank()||change.reason().length()>500)throw bad("请填写调整原因（最多500字）");
     Map<String,Object> initial=preview(change);
+    Set<Long> userIds=lockAssignments(change.assignments());
+    Map<String,Object> latest=preview(change);
+    if(change.baselineHash()==null||!change.baselineHash().equals(latest.get("baselineHash"))||!initial.get("baselineHash").equals(latest.get("baselineHash")))throw new BusinessException(409,"负责人或请假待办已变化，请重新预览");
+    return applyVerified(change,latest,userIds);
+  }
+
+  // Called inside the same transaction by manual changes and imports.
+  Set<Long> lockAssignments(List<Assignment> assignments){
     // Station edits are serialized; leave operations lock employees before requests and accounts.
-    var stationIds=change.assignments().stream().map(Assignment::stationId).distinct().sorted().toList();
+    var stationIds=assignments.stream().map(Assignment::stationId).distinct().sorted().toList();
     for(long station:stationIds)db.queryForList("select id from service_station where id=? for update",station);
     var employeeIds=new TreeSet<Long>();
     var userIds=new TreeSet<Long>();
-    for(var assignment:change.assignments()){
+    for(var assignment:assignments){
       userIds.addAll(assignment.userIds());
       userIds.addAll(db.queryForList("select user_id from "+table(assignment.level())+" where station_id=?",Long.class,assignment.stationId()));
       for(var row:db.queryForList("select v.approver_user_id,r.employee_id from leave_request_version v join leave_request r on r.id=v.request_id where v.station_id=? and v.approver_level=? and (v.status='PENDING' or (r.status='APPROVED' and r.current_version=v.version_no))",assignment.stationId(),assignment.level())){
@@ -81,8 +93,10 @@ public class StationResponsibilityService {
     }
     for(long employee:employeeIds)db.queryForList("select id from employee where id=? for update",employee);
     for(long user:userIds)db.queryForList("select id from sys_user where id=? for update",user);
-    Map<String,Object> latest=preview(change);
-    if(change.baselineHash()==null||!change.baselineHash().equals(latest.get("baselineHash"))||!initial.get("baselineHash").equals(latest.get("baselineHash")))throw new BusinessException(409,"负责人或请假待办已变化，请重新预览");
+    return userIds;
+  }
+
+  Map<String,Object> applyVerified(Change change,Map<String,Object> latest,Set<Long> userIds){
     @SuppressWarnings("unchecked") var impacts=(List<Map<String,Object>>)latest.get("impacts");
     for(var impact:impacts){
       Long target=change.transfers()==null?null:change.transfers().get(String.valueOf(impact.get("key")));
@@ -108,7 +122,7 @@ public class StationResponsibilityService {
   }
 
   private List<Map<String,Object>> scopes(){return db.queryForList("""
-      select x.level,x.user_id,x.station_id,u.display_name,s.name station_name from (
+      select x.level,x.user_id,x.station_id,u.display_name,u.username,s.name station_name from (
         select 'STATION_MANAGER' level,user_id,station_id from station_manager_scope
         union all select 'AREA_MANAGER' level,user_id,station_id from area_manager_scope
       ) x join sys_user u on u.id=x.user_id join service_station s on s.id=x.station_id

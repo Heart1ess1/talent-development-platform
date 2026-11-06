@@ -6,6 +6,7 @@
 
 | 文档 | 用途 | 适合阅读对象 |
 | --- | --- | --- |
+| [station-responsibility-import-guide.md](station-responsibility-import-guide.md) | 五列负责人模板、账号关联、批量替换、请假交接与首次改密操作说明。 | 管理员、测试与开发人员 |
 | [requirements.md](requirements.md) | 固化阶段 1 MVP 的需求口径、目标用户、核心业务闭环和当前已支持范围。 | 产品负责人、开发者、测试人员、新协作者 |
 | [api-contract.md](api-contract.md) | 记录当前 `/api/v1` 接口约定，包括认证、响应结构、错误码、分页和主要接口。 | 前端开发、后端开发、接口联调人员 |
 | [permissions-matrix.md](permissions-matrix.md) | 说明角色、权限点、数据范围、特殊规则和前端路由权限。 | 后端开发、前端开发、测试人员、权限相关需求负责人 |

@@ -1,5 +1,25 @@
 # API 接口约定
 
+## 站长与区域经理批量导入
+
+以下路径均以`/api/v1/station-responsibilities`为前缀，要求`user:ops-role:manage`。批次还要求当前用户为创建人，否则返回404。
+
+| 方法 | 路径 | 输入 | 返回 |
+| --- | --- | --- | --- |
+| GET | `/import-template` | 无 | 五列.xlsx，预填当前启用服务站，含独立填写说明 |
+| POST | `/imports/preview` | multipart字段`file` | `Preview`：batchId、status、expiresAt、summary、rows、errors、warnings、people、groups、impacts |
+| GET | `/imports/{batchId}` | 批次ID | batchId、status、preview，已完成时含result |
+| GET | `/imports/{batchId}/errors` | 批次ID | .xlsx错误明细，含原始五列、原行号和处理建议 |
+| POST | `/imports/{batchId}/commit` | `{reason,transfers}` | batchId、status=COMPLETED、result；同批次重试返回原结果 |
+
+`summary`包含validRows、skippedRows、duplicateRelations、createdAccounts、reusedAccounts、changedStations、unchangedRelations、affectedVersions。`errors/warnings`为`{row,field,message,suggestion}`，row=0表示文件级错误。`people`为`{ref,employeeNo,name,role,userId,action}`，action为CREATE或REUSE；新账号userId为空。`groups`包含stationId、stationName、level、refs、before、after、changed、unchangedRelations。
+
+`impacts`为`{key,stationName,level,fromName,count,candidateRefs}`；`transfers`按impact.key映射到candidateRefs中的人员ref（角色＋工号），不能提交任意账号ID或修改批次原始数据。reason非空，最多500字。`result`包含createdAccounts、reusedAccounts、changedStations、affectedVersions、unchangedRelations。
+
+预览状态为VALIDATED或INVALID，有效期30分钟；确认时重新校验账号、服务站、范围和请假责任。错误或缺少交接选择返回400；过期、基线变化或并发账号冲突返回409。仅.xlsx、5MB、1000条非空数据行、500组站点角色配置、每组最多50人；拒绝公式。姓名与工号成对填写，空白不清空，重复站点同级人员合并为完整替换名单。
+
+新账号使用工号、工号后六位初始密码（不足六位使用完整工号），强制首次改密。已有账号姓名、角色必须一致且启用，不重置密码、不生成员工档案。账号、范围、责任交接及审计同事务；批次行锁保证重复提交只执行一次。批次明细七天清理，审计保留，不记录密码或密码哈希。
+
 本文档记录当前 MVP 的 `/api/v1` 接口约定。当前口径来自后端 Controller 实现，不代表未来稳定公开 API。
 
 ## 通用约定
