@@ -40,19 +40,19 @@ onMounted(load)
 <template>
   <div class="evaluation-module-page" v-loading="loading">
     <header class="evaluation-page-head">
-      <div><span class="eyebrow">综合评价 · 评价模板</span><h1>评价模板与评分方案</h1><p>配置月度评分项、满分及权重，并按批次和生效月份发布方案。</p></div>
+      <div><h1>评价模板与评分方案</h1></div>
       <div class="evaluation-head-actions"><el-button :icon="SwitchButton" :disabled="!activeTemplates.length" @click="openApply()">应用到月份</el-button><el-button type="primary" :icon="Plus" @click="openCreate">新建模板</el-button></div>
     </header>
 
     <section class="evaluation-summary-grid">
-      <article class="evaluation-summary-card blue"><span class="summary-icon"><el-icon><Setting/></el-icon></span><div><small>可用模板</small><strong>{{activeTemplates.length}}</strong><span>可应用到任意批次月份</span></div></article>
-      <article class="evaluation-summary-card amber"><span class="summary-icon"><el-icon><CopyDocument/></el-icon></span><div><small>待发布方案</small><strong>{{draftSchemes.length}}</strong><span>仍可删除或重新应用</span></div></article>
-      <article class="evaluation-summary-card green"><span class="summary-icon"><el-icon><SwitchButton/></el-icon></span><div><small>已发布方案</small><strong>{{publishedSchemes.filter(x=>x.status==='PUBLISHED').length}}</strong><span>按批次和月份自动匹配</span></div></article>
-      <article class="evaluation-summary-card violet"><span class="summary-icon"><el-icon><Setting/></el-icon></span><div><small>历史方案</small><strong>{{publishedSchemes.filter(x=>x.status==='RETIRED').length}}</strong><span>用于历史快照追溯</span></div></article>
+      <article class="evaluation-summary-card blue"><span class="summary-icon"><el-icon><Setting/></el-icon></span><div><small>可用模板</small><strong>{{activeTemplates.length}}</strong></div></article>
+      <article class="evaluation-summary-card amber"><span class="summary-icon"><el-icon><CopyDocument/></el-icon></span><div><small>待发布方案</small><strong>{{draftSchemes.length}}</strong></div></article>
+      <article class="evaluation-summary-card green"><span class="summary-icon"><el-icon><SwitchButton/></el-icon></span><div><small>已发布方案</small><strong>{{publishedSchemes.filter(x=>x.status==='PUBLISHED').length}}</strong></div></article>
+      <article class="evaluation-summary-card violet"><span class="summary-icon"><el-icon><Setting/></el-icon></span><div><small>历史方案</small><strong>{{publishedSchemes.filter(x=>x.status==='RETIRED').length}}</strong></div></article>
     </section>
 
     <section class="evaluation-workspace">
-      <div class="evaluation-workspace-head"><div><h2>模板库</h2><p>建议按培养类型维护少量稳定模板；月度差异通过复制模板后调整，避免直接修改历史规则。</p></div></div>
+      <div class="evaluation-workspace-head"><div><h2>模板库</h2></div></div>
       <div v-if="templates.length" class="template-list">
         <article v-for="row in templates" :key="row.id" class="template-card">
           <div class="template-card-head"><div><h3>{{row.name}}</h3><p>{{row.description||'暂无模板说明'}}</p></div><el-tag :type="row.status==='ACTIVE'?'success':'info'" effect="plain">{{row.status==='ACTIVE'?'可用':'停用'}}</el-tag></div>
@@ -64,27 +64,27 @@ onMounted(load)
     </section>
 
     <section class="evaluation-workspace">
-      <div class="evaluation-workspace-head"><div><h2>待发布方案</h2><p>应用模板只生成草稿；发布后才会成为批次在对应月份的正式计算规则。</p></div></div>
+      <div class="evaluation-workspace-head"><div><h2>待发布方案</h2></div></div>
       <el-table :data="draftSchemes" empty-text="暂无待发布方案">
         <el-table-column prop="batch_name" label="培养批次" min-width="140"/><el-table-column prop="template_name" label="来源模板" min-width="150"><template #default="s">{{s.row.template_name||'历史手工方案'}}</template></el-table-column><el-table-column label="生效月份" width="105"><template #default="s">{{monthText(s.row.effective_month)}}</template></el-table-column><el-table-column prop="version" label="版本" width="75"><template #default="s">V{{s.row.version}}</template></el-table-column><el-table-column label="操作" width="150"><template #default="s"><el-button link type="primary" @click="publishScheme(s.row)">发布</el-button><el-button link type="danger" @click="deleteScheme(s.row)">删除</el-button></template></el-table-column>
       </el-table>
     </section>
 
     <section class="evaluation-workspace">
-      <div class="evaluation-workspace-head"><div><h2>已发布与历史方案</h2><p>同一批次新方案发布后，旧方案自动转为历史版本；已经生成的结果仍保留快照。</p></div></div>
+      <div class="evaluation-workspace-head"><div><h2>已发布与历史方案</h2></div></div>
       <el-table :data="publishedSchemes" empty-text="暂无已发布方案">
         <el-table-column prop="batch_name" label="培养批次" min-width="140"/><el-table-column prop="template_name" label="来源模板" min-width="150"><template #default="s">{{s.row.template_name||'历史手工方案'}}</template></el-table-column><el-table-column label="生效月份" width="105"><template #default="s">{{monthText(s.row.effective_month)}}</template></el-table-column><el-table-column prop="version" label="版本" width="75"><template #default="s">V{{s.row.version}}</template></el-table-column><el-table-column label="状态" width="100"><template #default="s"><el-tag :type="s.row.status==='PUBLISHED'?'success':'info'" effect="plain">{{schemeStatus(s.row.status)}}</el-tag></template></el-table-column><el-table-column label="操作" width="90"><template #default="s"><el-button link type="danger" @click="deleteScheme(s.row)">删除</el-button></template></el-table-column>
       </el-table>
     </section>
 
     <el-drawer v-model="editorOpen" size="min(760px, 94vw)" :close-on-click-modal="false">
-      <template #header><div><h3 style="margin:0">{{editingId?'编辑评价模板':'新建评价模板'}}</h3><p class="evaluation-muted">设置每项满分与综合权重；自动来源会先换算到本项满分，再参与百分制综合计算。</p></div></template>
+      <template #header><div><h3 style="margin:0">{{editingId?'编辑评价模板':'新建评价模板'}}</h3></div></template>
       <el-form label-position="top">
         <el-form-item label="模板名称" required><el-input v-model="editor.name" maxlength="128" show-word-limit placeholder="例如：生产一线新员工月度评价"/></el-form-item>
         <el-form-item label="适用说明"><el-input v-model="editor.description" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="说明适用人群、评价目标和使用注意事项"/></el-form-item>
         <el-divider content-position="left">月度评分项</el-divider>
         <div class="template-component-row" style="font-size:12px;color:#8a96a8"><span>启用</span><span>评分项</span><span>本项满分</span><span>综合权重</span></div>
-        <div v-for="item in monthlyComponentDefinitions" :key="item.code" class="template-component-row"><el-switch v-model="editor[item.enabled]" @change="toggle(item)"/><div><strong>{{item.label}}</strong><small>{{item.description}}</small></div><el-input-number v-model="editor[item.maxScore]" :min="1" :max="999.99" :precision="2" controls-position="right"/><el-input-number :key="`${item.code}-${editor[item.enabled]}`" v-model="editor[item.weight]" :disabled="!editor[item.enabled]" :min="0" :max="100" :precision="2" controls-position="right"/></div>
+        <div v-for="item in monthlyComponentDefinitions" :key="item.code" class="template-component-row"><el-switch v-model="editor[item.enabled]" @change="toggle(item)"/><div><strong>{{item.label}}</strong></div><el-input-number v-model="editor[item.maxScore]" :min="1" :max="999.99" :precision="2" controls-position="right"/><el-input-number :key="`${item.code}-${editor[item.enabled]}`" v-model="editor[item.weight]" :disabled="!editor[item.enabled]" :min="0" :max="100" :precision="2" controls-position="right"/></div>
         <el-alert v-if="weightTotal!==100" :title="'请手动调整权重，距离100%差额：'+(100-weightTotal).toFixed(2)+'%'" type="warning" :closable="false"/><div class="template-total"><span>启用项权重合计</span><strong :class="{bad:weightTotal!==100}">{{weightTotal.toFixed(2)}}%</strong></div>
         <el-form-item v-if="editor.stationEnabled" label="跨站月份的站点评价汇总方式" style="margin-top:18px">
           <el-radio-group v-model="editor.stationAggregationMode"><el-radio-button value="AUTO_BY_DAYS">按实际在站天数加权</el-radio-button><el-radio-button value="PRIMARY_STATION">仅采用在站最久站点</el-radio-button></el-radio-group>

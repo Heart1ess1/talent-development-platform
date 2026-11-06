@@ -57,11 +57,11 @@ onMounted(load)
   <div class="dashboard-page" v-loading="loading">
     <header class="dashboard-head">
       <div>
-        <span class="dashboard-eyebrow">{{isEmployee?'个人学习主页':`${data?.period_key||''} · 培养运营`}}</span>
+
         <h1 v-if="isEmployee">{{greeting}}，{{data?.profile?.name||auth.user?.displayName}}</h1>
         <h1 v-else>培养运营工作台</h1>
         <p v-if="isEmployee&&data?.profile">{{data.profile.batch_name||'未分配批次'}} · {{data.profile.station_name||'未分配服务站'}} · 导师 {{data.profile.mentor_name||'待分配'}}</p>
-        <p v-else>{{data?.role_label}} · {{data?.scope_label}}。从这里掌握培养执行状态并处理职责内事项。</p>
+
       </div>
       <div class="dashboard-head-actions">
         <span>{{generatedAt(data?.generated_at)}}</span>
@@ -79,18 +79,18 @@ onMounted(load)
       <section class="dashboard-summary-grid">
         <button v-for="item in employeeSummary" :key="item.label" class="dashboard-metric-card" :class="item.tone" type="button" @click="open(item.route)">
           <span class="metric-icon"><el-icon><component :is="item.icon"/></el-icon></span>
-          <span class="metric-copy"><small>{{item.label}}</small><strong>{{item.value}}</strong><span>{{item.detail}}</span></span>
+          <span class="metric-copy"><small>{{item.label}}</small><strong>{{item.value}}</strong></span>
           <el-icon class="metric-arrow"><Right/></el-icon>
         </button>
       </section>
 
       <section class="dashboard-employee-grid">
         <article class="dashboard-panel dashboard-actions-panel">
-          <div class="dashboard-panel-head"><div><h2>我的待办</h2><p>按截止时间汇总任务、考试与请假事项</p></div><el-button link type="primary" @click="open('/leave-requests')">请假待办 {{data.action_items?.filter((x:AnyRecord)=>x.type==='LEAVE').length||0}}</el-button></div>
+          <div class="dashboard-panel-head"><div><h2>我的待办</h2></div><el-button link type="primary" @click="open('/leave-requests')">请假待办 {{data.action_items?.filter((x:AnyRecord)=>x.type==='LEAVE').length||0}}</el-button></div>
           <div v-if="data.action_items?.length" class="dashboard-action-list">
             <button v-for="item in data.action_items" :key="`${item.type}-${item.title}-${item.due_at}`" type="button" class="dashboard-action-row" @click="open(item.route)">
               <span class="action-marker" :class="item.tone.toLowerCase()"><el-icon><component :is="item.type==='TASK'?List:DocumentChecked"/></el-icon></span>
-              <span class="action-copy"><span><strong>{{item.title}}</strong><el-tag size="small" :type="statusType(item.status)" effect="plain">{{statusLabel(item.status)}}</el-tag></span><small>{{item.description}}</small></span>
+              <span class="action-copy"><span><strong>{{item.title}}</strong><el-tag size="small" :type="statusType(item.status)" effect="plain">{{statusLabel(item.status)}}</el-tag></span></span>
               <span class="action-time"><b>{{dateTime(item.due_at)}}</b><small>截止时间</small></span>
               <el-icon><Right/></el-icon>
             </button>
@@ -99,14 +99,14 @@ onMounted(load)
         </article>
 
         <aside class="dashboard-panel dashboard-growth-panel">
-          <div class="dashboard-panel-head"><div><h2>学习成长概览</h2><p>任务、课程与考试完成情况</p></div><span class="growth-score"><small>最新月度评价</small><strong>{{score(metrics.latest_month_score)}}</strong></span></div>
-          <div class="growth-progress"><div><span>任务完成率 <b>{{percent(metrics.task_completion_rate)}}</b></span><el-progress :percentage="Number(metrics.task_completion_rate||0)" :show-text="false"/></div><div><span>课程出勤率 <b>{{percent(metrics.course_attendance_rate)}}</b></span><el-progress :percentage="Number(metrics.course_attendance_rate||0)" :show-text="false" color="#41a273"/></div><div><span>考试完成率 <b>{{percent(metrics.exam_completion_rate)}}</b></span><el-progress :percentage="Number(metrics.exam_completion_rate||0)" :show-text="false" color="#7b63c7"/></div></div>
+          <div class="dashboard-panel-head"><div><h2>学习成长概览</h2></div><span class="growth-score"><small>最新月度评价</small><strong>{{score(metrics.latest_month_score)}}</strong></span></div>
+          <div class="growth-progress"><div><span>任务完成率 <b>{{percent(metrics.task_completion_rate)}}</b></span><el-progress :percentage="Number(metrics.task_completion_rate||0)" :show-text="false"/></div><div><span>课程出勤率 <b>{{percent(metrics.course_attendance_rate)}}</b></span><el-progress :percentage="Number(metrics.course_attendance_rate||0)" :show-text="false" color="#777777"/></div><div><span>考试完成率 <b>{{percent(metrics.exam_completion_rate)}}</b></span><el-progress :percentage="Number(metrics.exam_completion_rate||0)" :show-text="false" color="var(--app-primary)"/></div></div>
           <button class="dashboard-soft-link" type="button" @click="open('/evaluation/results')"><span><el-icon><TrendCharts/></el-icon>查看完整综合评价</span><el-icon><Right/></el-icon></button>
         </aside>
       </section>
 
       <section class="dashboard-panel">
-        <div class="dashboard-panel-head"><div><h2>近期学习日程</h2><p>未来 30 天已安排的课程与考试</p></div><el-icon class="panel-head-icon"><Calendar/></el-icon></div>
+        <div class="dashboard-panel-head"><div><h2>近期学习日程</h2></div><el-icon class="panel-head-icon"><Calendar/></el-icon></div>
         <div v-if="data.learning_schedule?.length" class="dashboard-timeline">
           <button v-for="item in data.learning_schedule" :key="`${item.type}-${item.id}`" type="button" @click="open(item.route)">
             <span class="timeline-date"><b>{{dateTime(item.starts_at).split(' ')[0]}}</b><small>{{dateTime(item.starts_at).split(' ')[1]}}</small></span>
@@ -120,14 +120,14 @@ onMounted(load)
 
       <section class="dashboard-two-column">
         <article class="dashboard-panel">
-          <div class="dashboard-panel-head"><div><h2>导师评价</h2><p>评价结果发布后在这里呈现导师反馈</p></div><el-icon class="panel-head-icon"><ChatDotRound/></el-icon></div>
+          <div class="dashboard-panel-head"><div><h2>导师评价</h2></div><el-icon class="panel-head-icon"><ChatDotRound/></el-icon></div>
           <div v-if="data.mentor_feedback?.length" class="feedback-list"><div v-for="item in data.mentor_feedback" :key="item.period_key"><span class="feedback-score">{{score(item.score)}}</span><span><strong>{{item.period_key}} · {{item.evaluator_name}}</strong><p>{{item.comment}}</p></span></div></div>
           <el-empty v-else :image-size="66" description="暂无已发布导师评价"/>
         </article>
       </section>
 
       <section class="dashboard-panel">
-        <div class="dashboard-panel-head"><div><h2>最近完成的任务</h2><p>保留完成时间和审核得分，便于回顾阶段成果</p></div><el-icon class="panel-head-icon"><Medal/></el-icon></div>
+        <div class="dashboard-panel-head"><div><h2>最近完成的任务</h2></div><el-icon class="panel-head-icon"><Medal/></el-icon></div>
         <el-table :data="data.completed_tasks||[]" empty-text="暂无已完成任务">
           <el-table-column prop="title" label="任务" min-width="220"/><el-table-column label="完成时间" width="150"><template #default="scope">{{shortDate(scope.row.completed_at)}}</template></el-table-column><el-table-column label="审核得分" width="110"><template #default="scope"><strong class="table-score">{{score(scope.row.final_score)}}</strong></template></el-table-column><el-table-column label="状态" width="100"><template #default><el-tag type="success" effect="plain">已完成</el-tag></template></el-table-column>
         </el-table>
@@ -137,16 +137,16 @@ onMounted(load)
     <template v-else-if="data">
       <section class="dashboard-summary-grid">
         <button v-for="item in managerSummary" :key="item.label" class="dashboard-metric-card" :class="item.tone" type="button" @click="open(item.route)">
-          <span class="metric-icon"><el-icon><component :is="item.icon"/></el-icon></span><span class="metric-copy"><small>{{item.label}}</small><strong>{{item.value}}</strong><span>{{item.detail}}</span></span><el-icon v-if="item.route" class="metric-arrow"><Right/></el-icon>
+          <span class="metric-icon"><el-icon><component :is="item.icon"/></el-icon></span><span class="metric-copy"><small>{{item.label}}</small><strong>{{item.value}}</strong></span><el-icon v-if="item.route" class="metric-arrow"><Right/></el-icon>
         </button>
       </section>
 
       <section class="dashboard-panel">
-        <div class="dashboard-panel-head"><div><h2>职责待办</h2><p>只呈现当前角色有权限处理的事项，已清零项目仍保留核对入口</p></div><span class="dashboard-count-badge">{{metrics.pending_actions||0}} 项待处理</span></div>
+        <div class="dashboard-panel-head"><div><h2>职责待办</h2></div><span class="dashboard-count-badge">{{metrics.pending_actions||0}} 项待处理</span></div>
         <div v-if="data.work_queue?.length" class="manager-queue-grid">
           <button v-for="item in data.work_queue" :key="item.code" type="button" :class="item.tone.toLowerCase()" @click="open(item.route)">
             <span class="queue-icon"><el-icon><component :is="queueIcon(item.code)"/></el-icon></span>
-            <span class="queue-copy"><strong>{{item.title}}</strong><small>{{item.description}}</small></span>
+            <span class="queue-copy"><strong>{{item.title}}</strong></span>
             <span class="queue-count" :class="{done:Number(item.count)===0}"><b>{{item.count}}</b><small>{{Number(item.count)===0?'已清零':'待处理'}}</small></span>
             <el-icon><Right/></el-icon>
           </button>
@@ -156,7 +156,7 @@ onMounted(load)
 
       <section v-if="!['AREA_MANAGER','TRAINING_DIRECTOR'].includes(auth.user?.role||'')" class="dashboard-operation-grid">
         <button v-for="item in operationCards" :key="item.key" type="button" class="operation-card" :class="item.tone" @click="open(item.route)">
-          <span class="operation-head"><span class="operation-icon"><el-icon><component :is="item.icon"/></el-icon></span><span><strong>{{item.title}}</strong><small>{{item.description}}</small></span><el-icon class="operation-arrow"><Right/></el-icon></span>
+          <span class="operation-head"><span class="operation-icon"><el-icon><component :is="item.icon"/></el-icon></span><span><strong>{{item.title}}</strong></span><el-icon class="operation-arrow"><Right/></el-icon></span>
           <span class="operation-progress"><span><b>{{percent(item.rate)}}</b><small>{{item.key==='evaluation'?'发布覆盖率':item.key==='course'?'出勤完成率':'完成率'}}</small></span><el-progress :percentage="item.rate" :show-text="false"/></span>
           <span class="operation-stats"><span v-for="stat in item.stats" :key="stat[0]"><small>{{stat[0]}}</small><b>{{stat[1]}}</b></span></span>
         </button>
@@ -164,13 +164,13 @@ onMounted(load)
 
       <section class="dashboard-two-column dashboard-manager-lower">
         <article class="dashboard-panel">
-          <div class="dashboard-panel-head"><div><h2>近期培养日程</h2><p>未来 30 天课程和考试安排</p></div><el-icon class="panel-head-icon"><Calendar/></el-icon></div>
+          <div class="dashboard-panel-head"><div><h2>近期培养日程</h2></div><el-icon class="panel-head-icon"><Calendar/></el-icon></div>
           <div v-if="data.schedule?.length" class="manager-schedule-list"><button v-for="item in data.schedule" :key="`${item.type}-${item.id}`" type="button" @click="open(item.route)"><span class="schedule-day"><b>{{dateTime(item.starts_at).slice(0,5)}}</b><small>{{dateTime(item.starts_at).slice(6)}}</small></span><span class="timeline-icon" :class="item.type.toLowerCase()"><el-icon><component :is="scheduleIcon(item.type)"/></el-icon></span><span class="timeline-copy"><strong>{{item.title}}</strong><small>{{item.type==='COURSE'?`${item.course_name}${item.location?` · ${item.location}`:''}`:`考试 · ${item.exam_name}`}}</small></span><span class="schedule-target">{{item.target_count}} 人</span><el-icon><Right/></el-icon></button></div>
           <el-empty v-else :image-size="66" description="未来 30 天暂无培养安排"/>
         </article>
 
         <article class="dashboard-panel">
-          <div class="dashboard-panel-head"><div><h2>需要关注的员工</h2><p>根据逾期、退回、缺考和本月评价状态聚合</p></div><el-icon class="panel-head-icon warning"><Warning/></el-icon></div>
+          <div class="dashboard-panel-head"><div><h2>需要关注的员工</h2></div><el-icon class="panel-head-icon warning"><Warning/></el-icon></div>
           <div v-if="data.attention_employees?.length" class="attention-list"><button v-for="item in data.attention_employees" :key="item.id" type="button" @click="open(`/evaluation/monthly?employeeId=${item.id}`)"><span class="attention-avatar">{{String(item.name||'员').slice(0,1)}}</span><span class="attention-copy"><span><strong>{{item.name}}</strong><small>{{item.employee_no}} · {{item.station_name||item.batch_name||'未分组'}}</small></span><span class="attention-reasons"><em v-if="item.overdue_tasks">逾期任务 {{item.overdue_tasks}}</em><em v-if="item.returned_tasks">退回任务 {{item.returned_tasks}}</em><em v-if="item.absent_exams">缺考 {{item.absent_exams}}</em><em v-if="item.evaluation_missing">本月评价未发布</em></span></span><el-tag :type="riskType(item.risk_level)" effect="plain" size="small">{{riskLabel(item.risk_level)}}</el-tag><el-icon><Right/></el-icon></button></div>
           <el-empty v-else :image-size="66" description="当前没有需要特别关注的员工"/>
         </article>

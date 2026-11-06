@@ -142,10 +142,13 @@ public class EmployeePortraitService {
     var rows=query.rows("""
       select id,summary_type,period_key,version,status,source_type,read_only,exam_score,task_score,mentor_score,station_score,training_score,defense_score,
         bonus,deduction,final_score,missing_items,cast(component_snapshot as char) component_snapshot,
-        cast(quarter_snapshot as char) quarter_snapshot,generated_at,published_at
-      from score_summary where employee_id=? and summary_type=?
+        cast(quarter_snapshot as char) quarter_snapshot,generated_at,published_at,
+        (select m.grade from monthly_performance_member m join monthly_performance_group g on g.id=m.group_id where m.summary_id=s.id and g.status in ('PUBLISHED','SUPERSEDED') order by g.version desc limit 1) performance_grade,
+        (select g.version from monthly_performance_member m join monthly_performance_group g on g.id=m.group_id where m.summary_id=s.id and g.status in ('PUBLISHED','SUPERSEDED') order by g.version desc limit 1) performance_version,
+        exists(select 1 from monthly_performance_member m join monthly_performance_group g on g.id=m.group_id where m.employee_id=s.employee_id and g.period_month=str_to_date(concat(s.period_key,'-01'),'%Y-%m-%d') and g.status='DRAFT' and g.version>1) performance_pending
+      from score_summary s where employee_id=? and summary_type=?
       """+visibility+" order by period_key desc,version desc limit ? offset ?",args.toArray());
-    var data=rows.stream().map(x->new Evaluation(nl(x,"id"),s(x,"summary_type"),s(x,"period_key"),integer(x,"version"),s(x,"status"),decimal(x,"exam_score"),decimal(x,"task_score"),decimal(x,"mentor_score"),decimal(x,"station_score"),decimal(x,"training_score"),decimal(x,"defense_score"),decimal(x,"bonus"),decimal(x,"deduction"),decimal(x,"final_score"),s(x,"missing_items"),s(x,"component_snapshot"),s(x,"quarter_snapshot"),dt(x,"generated_at"),dt(x,"published_at"),"DRAFT".equals(s(x,"status")),s(x,"source_type"),bool(x,"read_only"))).toList();
+    var data=rows.stream().map(x->new Evaluation(nl(x,"id"),s(x,"summary_type"),s(x,"period_key"),integer(x,"version"),s(x,"status"),decimal(x,"exam_score"),decimal(x,"task_score"),decimal(x,"mentor_score"),decimal(x,"station_score"),decimal(x,"training_score"),decimal(x,"defense_score"),decimal(x,"bonus"),decimal(x,"deduction"),decimal(x,"final_score"),s(x,"missing_items"),s(x,"component_snapshot"),s(x,"quarter_snapshot"),dt(x,"generated_at"),dt(x,"published_at"),"DRAFT".equals(s(x,"status")),s(x,"source_type"),bool(x,"read_only"),s(x,"performance_grade"),integer(x,"performance_version"),bool(x,"performance_pending"))).toList();
     return new PageResult<>(data,total,page,limit);
   }
 

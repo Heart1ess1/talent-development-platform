@@ -30,6 +30,7 @@ public class EvaluationController {
 
   @org.springframework.beans.factory.annotation.Autowired private com.talent.platform.schedule.ScheduleService schedules;
   @org.springframework.beans.factory.annotation.Autowired private EvaluationRevisionService revisions;
+  @org.springframework.beans.factory.annotation.Autowired private MonthlyPerformanceService performance;
   public record SchemeRequest(
     @NotNull Long batchId, @NotNull YearMonth effectiveMonth,
     boolean examEnabled, @NotNull @DecimalMin("0") @Digits(integer=5,fraction=2) BigDecimal examWeight, @DecimalMin(value="0", inclusive=false) @Digits(integer=5,fraction=2) BigDecimal examMaxScore,
@@ -278,12 +279,15 @@ public class EvaluationController {
   }
 
   @PutMapping("/monthly/station-weights")
+  @Transactional
   public ApiResponse<Void> stationWeights(@Valid @RequestBody StationWeightRequest q){requireAdmin();permissions.requireEmployee(q.employeeId());ensureUnlocked(q.employeeId(),q.month());Map<Long,BigDecimal> weights=new LinkedHashMap<>();for(var item:q.stations())if(weights.put(item.stationId(),item.weight())!=null)throw new BusinessException(400,"站点不能重复");service.replaceStationWeights(q.employeeId(),q.month(),weights,SecurityUtils.current().id());audit.log("UPDATE_MONTHLY_STATION_WEIGHTS","EMPLOYEE",q.employeeId(),null,q);return ApiResponse.ok(null);}
 
   @DeleteMapping("/monthly/station-weights")
+  @Transactional
   public ApiResponse<Void> clearStationWeights(@RequestParam Long employeeId,@RequestParam YearMonth month){requireAdmin();permissions.requireEmployee(employeeId);ensureUnlocked(employeeId,month);service.clearStationWeights(employeeId,month);audit.log("CLEAR_MONTHLY_STATION_WEIGHTS","EMPLOYEE",employeeId,null,Map.of("month",month));return ApiResponse.ok(null);}
 
   @PutMapping("/monthly/overrides/{component}")
+  @Transactional
   public ApiResponse<Void> override(@PathVariable String component, @Valid @RequestBody OverrideRequest q) {
     requireAdmin(); permissions.requireEmployee(q.employeeId());
     component = component.toUpperCase(Locale.ROOT);
@@ -299,6 +303,7 @@ public class EvaluationController {
   }
 
   @DeleteMapping("/monthly/overrides/{component}")
+  @Transactional
   public ApiResponse<Void> deleteOverride(@PathVariable String component, @RequestParam Long employeeId, @RequestParam YearMonth month) {
     requireAdmin(); permissions.requireEmployee(employeeId); component=component.toUpperCase(Locale.ROOT);
     if (!Set.copyOf(EvaluationService.COMPONENTS).contains(component)) throw new BusinessException(400,"不支持的评分项");
@@ -319,6 +324,7 @@ public class EvaluationController {
   }
 
   @PostMapping("/adjustments")
+  @Transactional
   public ApiResponse<Long> adjustment(@Valid @RequestBody AdjustmentRequest q) {
     permissions.require(Permissions.EVALUATION_MANAGE); ensureUnlocked(q.employeeId(),q.month());
     db.update("insert into score_adjustment(employee_id,period_month,adjustment_type,points,reason,evidence_file_id,created_by) values(?,?,?,?,?,?,?)",q.employeeId(),q.month().atDay(1),q.type(),q.points(),q.reason(),q.evidenceFileId(),SecurityUtils.current().id());
@@ -333,7 +339,7 @@ public class EvaluationController {
     permissions.require(Permissions.EVALUATION_VIEW); permissions.requireEmployee(employeeId);
     boolean manage=SecurityUtils.current().can(Permissions.EVALUATION_MANAGE);
     List<Map<String,Object>> rows=db.queryForList("select * from score_summary where employee_id=? and summary_type='MONTH'"+(manage?" and status<>'REVOKED'":" and status='PUBLISHED'")+" order by generated_at desc",employeeId);
-    for(Map<String,Object> row:rows){row.put("pending_revision",db.queryForObject("select count(*) from evaluation_revision_member m join evaluation_revision_group g on g.id=m.group_id where m.employee_id=? and m.period_key=? and m.summary_type=? and g.status='DRAFT'",Integer.class,employeeId,row.get("period_key"),row.get("summary_type"))>0);parseJson(row,"component_snapshot");parseJson(row,"quarter_snapshot");}
+    for(Map<String,Object> row:rows){row.put("pending_revision",db.queryForObject("select count(*) from evaluation_revision_member m join evaluation_revision_group g on g.id=m.group_id where m.employee_id=? and m.period_key=? and m.summary_type=? and g.status='DRAFT'",Integer.class,employeeId,row.get("period_key"),row.get("summary_type"))>0);performance.decorateSummary(row);parseJson(row,"component_snapshot");parseJson(row,"quarter_snapshot");}
     return ApiResponse.ok(rows);
   }
 
@@ -345,6 +351,7 @@ public class EvaluationController {
     if(!"MONTH".equals(summary.get("summary_type")))throw new BusinessException(410,"季度评价已停止");
     permissions.requireEmployee(((Number)summary.get("employee_id")).longValue());
     db.queryForMap("select id from employee where id=? for update",summary.get("employee_id"));
+    performance.requireIndividualPublication(((Number)summary.get("employee_id")).longValue(),YearMonth.parse(summary.get("period_key").toString()));
     var currentVersions=db.queryForList("select version from score_summary where employee_id=? and summary_type=? and period_key=? and status='PUBLISHED' for update",summary.get("employee_id"),summary.get("summary_type"),summary.get("period_key"));
     int requestedVersion=((Number)summary.get("version")).intValue();
     if(currentVersions.stream().anyMatch(row->((Number)row.get("version")).intValue()>=requestedVersion))throw new BusinessException(409,"已有更新的正式版本，请重新生成草稿");
@@ -365,6 +372,7 @@ public class EvaluationController {
     requireAdmin();
     Map<String,Object> old=db.queryForMap("select * from score_summary where id=? and status='PUBLISHED'",id);
     if(!"MONTH".equals(old.get("summary_type"))) throw new BusinessException(400,"季度汇总请重新生成");
+    performance.requireIndividualPublication(((Number)old.get("employee_id")).longValue(),YearMonth.parse(old.get("period_key").toString()));
     Long employeeId=((Number)old.get("employee_id")).longValue();
     Long created=service.generateMonth(employeeId,YearMonth.parse(String.valueOf(old.get("period_key"))),service.schemeById(((Number)old.get("scheme_id")).longValue()),q.reason());
     audit.log("REOPEN_SCORE_SUMMARY","SCORE_SUMMARY",created,old,q); return ApiResponse.ok(created);
@@ -390,7 +398,7 @@ public class EvaluationController {
   @SuppressWarnings("unchecked") private boolean canCurrentUserEvaluatePending(Map<String,Object> component){boolean personal=Boolean.TRUE.equals(component.get("personalOpportunity"));if(!"PENDING".equals(component.get("status"))&&!personal)return false;String code=Objects.toString(component.get("code"),"");Object raw=component.get("breakdown");List<?> entries=raw instanceof List<?> list?list:List.of();if("TRAINING".equals(code)){if(Boolean.TRUE.equals(component.get("canEvaluate")))return true;return "TRAINING_ADMIN".equals(SecurityUtils.current().role())&&numberOrZero(component.get("requiredCount"))==1&&entries.isEmpty();}return entries.stream().filter(Map.class::isInstance).map(x->(Map<String,Object>)x).anyMatch(x->Boolean.TRUE.equals(x.get("canEvaluate"))&&(personal||"PENDING".equals(x.get("status"))));}
   private long numberOrZero(Object value){return value instanceof Number number?number.longValue():0;}
   private static String blankToNull(String value){return value==null||value.isBlank()?null:value.trim();}
-  private void ensureUnlocked(Long employeeId,YearMonth month){if(service.isLocked(employeeId,month)||revisions.pending(employeeId,month))throw new BusinessException(409,"月度评价已发布，请由管理员重开后修改");}
+  private void ensureUnlocked(Long employeeId,YearMonth month){db.queryForMap("select id from employee where id=? for update",employeeId);if(service.isLocked(employeeId,month)||revisions.pending(employeeId,month))throw new BusinessException(409,"月度评价已发布，请由管理员重开后修改");}
   private void requireAdmin(){if(!List.of("ADMIN","SUPER_ADMIN").contains(SecurityUtils.current().role()))throw new BusinessException(403,"仅管理员可执行此操作");}
   private String componentForRole(String role){return switch(role){case "MENTOR"->"MENTOR";case "STATION_MANAGER"->"STATION";case "TRAINING_ADMIN"->"TRAINING";default->throw new BusinessException(403,"当前角色不能提交人工评分");};}
   @SuppressWarnings("unchecked") private Map<String,Object> component(Map<String,Object> detail,String code){return ((List<Map<String,Object>>)detail.get("components")).stream().filter(x->code.equals(x.get("code"))).findFirst().orElseThrow();}

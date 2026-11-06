@@ -48,7 +48,8 @@ public final class EmployeePortraitDtos {
       BigDecimal examScore,BigDecimal taskScore,BigDecimal mentorScore,BigDecimal stationScore,
       BigDecimal trainingScore,BigDecimal defenseScore,BigDecimal bonus,BigDecimal deduction,BigDecimal finalScore,
       String missingItems,String componentSnapshot,String quarterSnapshot,LocalDateTime generatedAt,
-      LocalDateTime publishedAt,boolean provisional,String sourceType,boolean readOnly) {}
+      LocalDateTime publishedAt,boolean provisional,String sourceType,boolean readOnly,
+      String performanceGrade,Integer performanceVersion,boolean performancePending) {}
   public record StationHistory(Long id,String fromStation,String toStation,LocalDateTime effectiveAt,
       String source,String comment) {}
   public record Stations(EmployeeSummary employee,List<StationHistory> history,LocalDateTime fetchedAt) {}

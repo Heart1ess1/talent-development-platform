@@ -18,6 +18,7 @@ public class EvaluationRevisionService {
   private final JdbcTemplate db;
   private final EvaluationService evaluation;
   private final ObjectMapper json;
+  @org.springframework.beans.factory.annotation.Autowired private MonthlyPerformanceService performance;
   public EvaluationRevisionService(JdbcTemplate db,EvaluationService evaluation,ObjectMapper json){this.db=db;this.evaluation=evaluation;this.json=json;}
 
   /** No draft or formal result is written while the administrator previews a time change. */
@@ -48,6 +49,7 @@ public class EvaluationRevisionService {
 
   private Long changed(Map<Long,Set<YearMonth>> affected,String reason,boolean quarterOnly){
     if(affected.isEmpty()) return null;
+    affected=performance.expandAffected(affected,reason);
     for(Long employee:new TreeSet<>(affected.keySet()))db.queryForMap("select id from employee where id=? for update",employee);
     Set<Long> groups=new TreeSet<>();
     boolean published=false;
@@ -104,11 +106,12 @@ public class EvaluationRevisionService {
   public List<Map<String,Object>> list(){return db.queryForList("select g.*,u.display_name creator_name,(select count(*) from evaluation_revision_member m where m.group_id=g.id) member_count from evaluation_revision_group g join sys_user u on u.id=g.created_by where g.status='DRAFT' order by g.id desc");}
   public Map<String,Object> detail(Long id){
     var result=new LinkedHashMap<>(db.queryForMap("select * from evaluation_revision_group where id=?",id));
-    var rows=members(id);result.put("members",rows);result.put("reviewToken",token(Map.of("generation",result.get("generation"),"members",rows)));return result;
+    var rows=members(id);result.put("members",rows);result.put("performanceGroupIds",performance.revisionPerformanceGroups(id));result.put("performanceGroups",performance.revisionPerformanceGroups(id).stream().map(performance::detail).map(g->Map.of("batchId",g.get("talent_batch_id"),"month",g.get("period_month").toString().substring(0,7))).toList());result.put("reviewToken",token(Map.of("generation",result.get("generation"),"members",rows)));return result;
   }
   private List<Map<String,Object>> members(Long id){return db.queryForList("select m.*,e.name employee_name,e.employee_no,s.final_score,s.missing_items,s.waiver_reason,s.revision_override_score,s.version,s.component_snapshot,s.quarter_snapshot,(select old.final_score from score_summary old where old.employee_id=m.employee_id and old.summary_type=m.summary_type and old.period_key=m.period_key and old.status='PUBLISHED' order by old.version desc limit 1) old_final_score from evaluation_revision_member m join employee e on e.id=m.employee_id left join score_summary s on s.id=m.summary_id where m.group_id=? order by m.employee_id,m.summary_type,m.period_key",id);}
   @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
   public void publish(Long id,String reviewToken){
+    if(!performance.revisionPerformanceGroups(id).isEmpty())throw new BusinessException(409,"该修订涉及 ABC 绩效，请到月度评价的绩效划分中统一预览和发布");
     for(Long employee:db.queryForList("select distinct employee_id from evaluation_revision_member where group_id=? order by employee_id",Long.class,id))db.queryForMap("select id from employee where id=? for update",employee);
     requireDraft(id);var fresh=refresh(id);
     if(reviewToken==null||!reviewToken.equals(fresh.get("reviewToken")))throw new BusinessException(409,"评分来源已变化，请刷新并重新核对修订稿");
