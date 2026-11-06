@@ -1,5 +1,7 @@
 # 权限矩阵
 
+站长与区域经理批量导入的模板、预览、查询、错误下载及确认接口均要求`user:ops-role:manage`（当前ADMIN、SUPER_ADMIN）。批次还校验创建人；TRAINING_ADMIN及站长、区域经理不能导入或读取他人的批次。导入仅创建STATION_MANAGER或AREA_MANAGER，不自动变更已有账号角色、姓名、启停或密码，不支持同一账号兼任。负责人替换继续执行请假责任交接与员工数据范围校验，新账号首次登录强制改密。
+
 本文档固化当前 MVP 的角色、权限点和数据范围。当前口径来自 `Permissions.java`、`PermissionService.java`、前端路由权限和各 Controller 中的额外角色校验。
 
 ## 角色与数据范围
