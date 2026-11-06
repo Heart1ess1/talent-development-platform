@@ -24,7 +24,7 @@ public class MonthlyPerformanceService {
   private boolean yes(Object x){return Boolean.TRUE.equals(x)||x instanceof Number n&&n.intValue()!=0;}
   private List<BigDecimal> ratios(Map<String,Object> g){return List.of((BigDecimal)g.get("ratio_a"),(BigDecimal)g.get("ratio_b"),(BigDecimal)g.get("ratio_c"));}
   private YearMonth month(Map<String,Object> g){return YearMonth.parse(g.get("period_month").toString().substring(0,7));}
-  private long operator(){var auth=org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();return auth!=null&&auth.getPrincipal() instanceof com.talent.platform.security.CurrentUser u?u.id():db.queryForObject("select min(id) from sys_user where role='SUPER_ADMIN'",Long.class);}
+  private long operator(){var auth=org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();return auth!=null&&auth.getPrincipal() instanceof com.talent.platform.security.CurrentUser u?u.id():db.queryForObject("select min(u.id) from sys_user u join sys_user_role r on r.user_id=u.id and r.role_code='SUPER_ADMIN'",Long.class);}
   private String encode(Object x){try{return json.writeValueAsString(x);}catch(Exception ex){throw new IllegalStateException(ex);}}
   private String token(Object x){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(encode(x).getBytes(StandardCharsets.UTF_8)));}catch(Exception ex){throw new IllegalStateException(ex);}}
   private Map<String,Object> group(long id){var rows=db.queryForList("select g.*,b.name batch_name from monthly_performance_group g join talent_batch b on b.id=g.talent_batch_id where g.id=?",id);if(rows.isEmpty())throw new BusinessException(404,"绩效方案不存在");return new LinkedHashMap<>(rows.get(0));}

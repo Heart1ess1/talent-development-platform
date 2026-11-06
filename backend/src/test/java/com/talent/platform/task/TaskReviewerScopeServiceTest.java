@@ -23,7 +23,7 @@ class TaskReviewerScopeServiceTest {
   void setUp() {
     db = mock(JdbcTemplate.class);
     service = new TaskReviewerScopeService(db, mock(PermissionService.class), mock(AuditService.class));
-    when(db.queryForObject(contains("enabled=true and role in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN')"), eq(Integer.class), any(Object[].class)))
+    when(db.queryForObject(contains("and exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN')"), eq(Integer.class), any(Object[].class)))
         .thenAnswer(invocation -> invocation.getArguments().length - 2);
     when(db.queryForList(startsWith("select name from talent_batch"), eq(String.class), anyLong()))
         .thenReturn(List.of("2026届"));

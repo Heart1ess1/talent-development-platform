@@ -17,7 +17,7 @@ class UserControllerTest {
     verify(db).queryForList(sql.capture(),args.capture());
     assertThat(sql.getValue()).contains("left join employee e on e.user_id=u.id",
         "e.employee_no", "b.name batch_name", "bu.name business_unit_name", "cls.label class_name",
-        "where u.role in", "group by sms.user_id");
+        "where exists(select 1 from sys_user_role ur", "group by sms.user_id");
     assertThat(args.getValue()).contains("EMPLOYEE").doesNotContain("SUPER_ADMIN", "ADMIN");
   }
 

@@ -24,7 +24,11 @@ public class StationResponsibilityService {
   public Map<String,Object> context(){
     permissions.require(Permissions.USER_OPS_ROLE_MANAGE);
     return Map.of("stations",db.queryForList("select id,name,enabled from service_station order by name,id"),
-        "users",db.queryForList("select id,username,display_name,role,enabled from sys_user where role in ('STATION_MANAGER','AREA_MANAGER') order by display_name,id"),
+        "users",db.queryForList("select u.id,u.username,u.display_name,u.enabled,"
+            +"coalesce((select r.role_code from sys_user_role r where r.user_id=u.id and r.role_code in ('STATION_MANAGER','AREA_MANAGER') "
+            +"order by r.is_primary desc,r.assigned_at,r.role_code limit 1),u.role) role "
+            +"from sys_user u where exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code in ('STATION_MANAGER','AREA_MANAGER')) "
+            +"order by u.display_name,u.id"),
         "scopes",scopes());
   }
 
@@ -61,7 +65,11 @@ public class StationResponsibilityService {
         }
       }
     }
-    var users=db.queryForList("select id,role,enabled,security_version from sys_user where role in ('STATION_MANAGER','AREA_MANAGER') order by id");
+    var users=db.queryForList("select u.id,u.enabled,u.security_version,"
+        +"coalesce((select r.role_code from sys_user_role r where r.user_id=u.id and r.role_code in ('STATION_MANAGER','AREA_MANAGER') "
+        +"order by r.is_primary desc,r.assigned_at,r.role_code limit 1),u.role) role "
+        +"from sys_user u where exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code in ('STATION_MANAGER','AREA_MANAGER')) "
+        +"order by u.id");
     return Map.of("baselineHash",hash(current.toString()+users+affectedRows),"impacts",impacts,
         "affectedVersions",affectedRows.size(),"assignments",assignments);
   }
@@ -135,7 +143,7 @@ public class StationResponsibilityService {
       if(assignment==null||assignment.stationId()==null||assignment.level()==null||!List.of("STATION_MANAGER","AREA_MANAGER").contains(assignment.level())||assignment.userIds()==null||assignment.userIds().size()>50||assignment.userIds().stream().anyMatch(Objects::isNull))throw bad("负责人配置无效");
       if(!seen.add(assignment.level()+":"+assignment.stationId()))throw bad("同一服务站的同级负责人不能重复配置");
       if(db.queryForObject("select count(*) from service_station where id=?",Integer.class,assignment.stationId())==0)throw bad("服务站不存在");
-      for(Long user:new LinkedHashSet<>(assignment.userIds()))if(db.queryForObject("select count(*) from sys_user where id=? and role=? and enabled=true",Integer.class,user,assignment.level())==0)throw bad("负责人账号已停用或角色不匹配");
+      for(Long user:new LinkedHashSet<>(assignment.userIds()))if(db.queryForObject("select count(*) from sys_user u where u.id=? and u.enabled=true and exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code=?)",Integer.class,user,assignment.level())==0)throw bad("负责人账号已停用或角色不匹配");
     }
   }
   private String key(String level,long station,long user){return level+":"+station+":"+user;}

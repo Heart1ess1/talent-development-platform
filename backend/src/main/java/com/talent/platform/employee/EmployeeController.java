@@ -186,6 +186,8 @@ public class EmployeeController {
         """, request.employeeNo(), encoder.encode(UUID.randomUUID().toString()), request.name(),
         "ACTIVE".equals(normalizedStatus(request.status(), "ACTIVE")));
     Long userId = db.queryForObject("select last_insert_id()", Long.class);
+    db.update("insert ignore into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,'EMPLOYEE',true,?)",
+        userId, SecurityUtils.current().id());
     db.update("""
         insert into employee(
           user_id,employee_no,name,gender,batch_id,class_id,class_position_id,business_unit_id,station_id,
@@ -237,8 +239,16 @@ public class EmployeeController {
         set username=?,display_name=?,version=version+1,security_version=security_version+1
         where id=?
         """, request.employeeNo(), request.name(), userId);
-    db.update("update sys_user set enabled=?,security_version=security_version+1 where id=? and role='EMPLOYEE'",
-        "ACTIVE".equals(normalizedStatus(request.status(), previousStatus)), userId);
+    // 仅当账号的唯一角色是 EMPLOYEE 时才联动停用/启用；多角色账号（如员工+导师）只调整员工档案，不锁账号。
+    // 兼容尚未写入 sys_user_role 的历史账号：没有任何角色行时仍按 sys_user.role 判断。
+    db.update("""
+        update sys_user u
+        set enabled=?,security_version=security_version+1
+        where u.id=?
+          and ((u.role='EMPLOYEE' and not exists(select 1 from sys_user_role r where r.user_id=u.id))
+               or (exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code='EMPLOYEE')
+                   and (select count(*) from sys_user_role r where r.user_id=u.id)=1))
+        """, "ACTIVE".equals(normalizedStatus(request.status(), previousStatus)), userId);
     if (!Objects.equals(previousStationId, request.stationId())) {
       var currentUser = SecurityUtils.current();
       db.update("""
@@ -524,7 +534,15 @@ public class EmployeeController {
   }
 
   private void syncLinkedAccount(Long employeeId, String status) {
-    db.update("update sys_user u join employee e on e.user_id=u.id set u.enabled=?,u.version=u.version+1,u.security_version=u.security_version+1 where e.id=?", "ACTIVE".equals(status), employeeId);
+    // 与单个编辑保持同一语义：仅当账号唯一角色是 EMPLOYEE 时才联动停用/启用。
+    db.update("""
+        update sys_user u join employee e on e.user_id=u.id
+        set u.enabled=?,u.version=u.version+1,u.security_version=u.security_version+1
+        where e.id=?
+          and ((u.role='EMPLOYEE' and not exists(select 1 from sys_user_role r where r.user_id=u.id))
+               or (exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code='EMPLOYEE')
+                   and (select count(*) from sys_user_role r where r.user_id=u.id)=1))
+        """, "ACTIVE".equals(status), employeeId);
   }
 
   private void ensureRequestNotUsed(String requestId, String action) {
@@ -555,7 +573,7 @@ public class EmployeeController {
 
   private void requireMentor(Long mentorId) {
     Integer count = db.queryForObject(
-        "select count(*) from sys_user where id=? and role='MENTOR' and enabled=true",
+        "select count(*) from sys_user u where u.id=? and u.enabled=true and exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code='MENTOR')",
         Integer.class,
         mentorId);
     if (count == null || count == 0) {

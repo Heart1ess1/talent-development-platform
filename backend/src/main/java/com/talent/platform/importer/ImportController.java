@@ -145,6 +145,8 @@ public class ImportController {
                 """, r.getEmployeeNo(), encoder.encode(initialPassword), r.getName(),
                     "ACTIVE".equals(status));
             Long uid = db.queryForObject("select last_insert_id()", Long.class);
+            db.update("insert ignore into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,'EMPLOYEE',true,?)",
+                uid, uid);
 
             db.update("""
                 insert into employee(
@@ -271,7 +273,8 @@ public class ImportController {
     private String firstEnabledMentor() {
         var usernames = db.queryForList("""
                 select username from sys_user
-                where role='MENTOR' and enabled=true
+                where enabled=true
+                  and exists(select 1 from sys_user_role r where r.user_id=sys_user.id and r.role_code='MENTOR')
                 order by id limit 1
                 """, String.class);
         return usernames.isEmpty() ? null : usernames.get(0);
@@ -341,12 +344,14 @@ public class ImportController {
         String normalized = value.trim();
         var usernames = db.queryForList("""
             select id from sys_user
-            where role='MENTOR' and enabled=true and username=?
+            where enabled=true and username=?
+              and exists(select 1 from sys_user_role r where r.user_id=sys_user.id and r.role_code='MENTOR')
             """, Long.class, normalized);
         if (usernames.size() == 1) return usernames.get(0);
         var matches = db.queryForList("""
             select id from sys_user
-            where role='MENTOR' and enabled=true and display_name=?
+            where enabled=true and display_name=?
+              and exists(select 1 from sys_user_role r where r.user_id=sys_user.id and r.role_code='MENTOR')
             """, Long.class, normalized);
         return matches.size() == 1 ? matches.get(0) : null;
     }

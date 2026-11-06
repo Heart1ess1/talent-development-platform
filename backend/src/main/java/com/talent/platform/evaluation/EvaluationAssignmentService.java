@@ -41,7 +41,7 @@ public class EvaluationAssignmentService {
         created+=createTask(employeeId,month,"MENTOR",0,effectiveDue,operator,defaults);
       }
       if(enabled(scheme,"STATION"))for(var station:evaluation.stationPeriods(employeeId,month)){
-        List<Long> defaults=db.queryForList("select u.id from station_manager_scope s join sys_user u on u.id=s.user_id where s.station_id=? and u.enabled=true and u.role='STATION_MANAGER' order by u.display_name,u.id",Long.class,station.stationId());
+        List<Long> defaults=db.queryForList("select u.id from station_manager_scope s join sys_user u on u.id=s.user_id where s.station_id=? and u.enabled=true and exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code='STATION_MANAGER') order by u.display_name,u.id",Long.class,station.stationId());
         created+=createTask(employeeId,month,"STATION",station.stationId(),effectiveDue,operator,defaults);
       }
       if(enabled(scheme,"TRAINING"))created+=createTask(employeeId,month,"TRAINING",0,effectiveDue,operator,List.of());
@@ -95,7 +95,10 @@ public class EvaluationAssignmentService {
 
   public List<Map<String,Object>> reviewerOptions(String component){
     String role=roleFor(requireComponent(component.toUpperCase(Locale.ROOT)));
-    return db.queryForList("select id,username,display_name,role from sys_user where enabled=true and role=? order by display_name,username,id",role);
+    return db.queryForList("select u.id,u.username,u.display_name,"
+        +"(select r.role_code from sys_user_role r where r.user_id=u.id and r.role_code=? limit 1) role "
+        +"from sys_user u where u.enabled=true and exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code=?) "
+        +"order by u.display_name,u.username,u.id",role,role);
   }
 
   public List<Map<String,Object>> scopeRules(YearMonth month,String component){
@@ -104,7 +107,10 @@ public class EvaluationAssignmentService {
     for(var row:db.queryForList("select * from evaluation_reviewer_scope_rule where period_month=? and component_type=? and status='ACTIVE' order by case target_type when 'BUSINESS_UNIT' then 1 when 'BATCH' then 2 else 3 end,target_id,id",month.atDay(1),code)){
       var item=new LinkedHashMap<>(row);long ruleId=number(row.get("id"));String type=String.valueOf(row.get("target_type"));long targetId=number(row.get("target_id"));
       item.put("targetName",scopeTargetName(type,targetId));
-      item.put("reviewers",db.queryForList("select u.id,u.username,u.display_name,u.role from evaluation_reviewer_scope_member m join sys_user u on u.id=m.reviewer_user_id where m.rule_id=? order by u.display_name,u.id",ruleId));
+      var reviewers=db.queryForList("select u.id,u.username,u.display_name from evaluation_reviewer_scope_member m join sys_user u on u.id=m.reviewer_user_id where m.rule_id=? order by u.display_name,u.id",ruleId);
+      // 回显本次评分项对应的角色，而不是账号主角色，避免“导师名单里显示管理员”。
+      for(var reviewer:reviewers)reviewer.put("role",roleFor(code));
+      item.put("reviewers",reviewers);
       item.put("matchedEmployeeCount",matchedCount(month,code,type,targetId,true));item.put("matchedTaskCount",matchedCount(month,code,type,targetId,false));
       result.add(item);
     }
@@ -185,13 +191,15 @@ public class EvaluationAssignmentService {
     long taskId=number(task.get("id")),employeeId=number(task.get("employee_id")),scopeId=number(task.get("scope_id"));
     String component=String.valueOf(task.get("component_type"));LocalDate month=toDate(task.get("period_month"));
     List<Map<String,Object>> reviewers=db.queryForList("""
-      select r.reviewer_user_id reviewerId,u.display_name reviewerName,u.username,u.role,r.assigned_at assignedAt,
+      select r.reviewer_user_id reviewerId,u.display_name reviewerName,u.username,r.assigned_at assignedAt,
         r.assignment_source assignmentSource,r.scope_rule_id scopeRuleId,
         m.score,m.comment,m.submitted_at submittedAt
       from evaluation_rating_reviewer r join sys_user u on u.id=r.reviewer_user_id
       left join monthly_evaluation m on m.employee_id=? and m.period_month=? and m.evaluator_type=? and m.scope_id=? and m.evaluator_user_id=r.reviewer_user_id
       where r.task_id=? and r.status='ACTIVE' order by u.display_name,u.id
       """,employeeId,month,component,scopeId,taskId);
+    // 回显评分项对应的角色，而不是账号主角色。
+    for(var reviewer:reviewers)reviewer.put("role",roleFor(component));
     int submitted=(int)reviewers.stream().filter(x->x.get("score")!=null).count();
     List<BigDecimal> scores=reviewers.stream().filter(x->x.get("score")!=null).map(x->new BigDecimal(String.valueOf(x.get("score")))).toList();
     BigDecimal average=EvaluationRules.average(scores);
@@ -247,12 +255,12 @@ public class EvaluationAssignmentService {
   private void validateReviewers(String component,Set<Long> reviewerIds){
     if(reviewerIds.isEmpty())return;String role=roleFor(component);
     String placeholders=String.join(",",Collections.nCopies(reviewerIds.size(),"?"));List<Object> args=new ArrayList<>(reviewerIds);args.add(role);
-    Integer count=db.queryForObject("select count(*) from sys_user where id in ("+placeholders+") and enabled=true and role=?",Integer.class,args.toArray());
+    Integer count=db.queryForObject("select count(*) from sys_user u where u.id in ("+placeholders+") and u.enabled=true and exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code=?)",Integer.class,args.toArray());
     if(count==null||count!=reviewerIds.size())throw new BusinessException(400,"评分人账号不存在、已停用或角色与评分项不匹配");
   }
 
   private boolean eligibleReviewer(String component,Long reviewerId){
-    Integer count=db.queryForObject("select count(*) from sys_user where id=? and enabled=true and role=?",Integer.class,reviewerId,roleFor(component));
+    Integer count=db.queryForObject("select count(*) from sys_user u where u.id=? and u.enabled=true and exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code=?)",Integer.class,reviewerId,roleFor(component));
     return count!=null&&count>0;
   }
 

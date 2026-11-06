@@ -1,13 +1,15 @@
 package com.talent.platform.auth;
 
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;import com.talent.platform.persistence.*;import org.springframework.beans.factory.annotation.Value; import org.springframework.boot.ApplicationArguments; import org.springframework.boot.ApplicationRunner;
+import com.talent.platform.persistence.*;import org.springframework.beans.factory.annotation.Value; import org.springframework.boot.ApplicationArguments; import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate; import org.springframework.security.crypto.password.PasswordEncoder; import org.springframework.stereotype.Component;
 
 @Component
 public class BootstrapAdmin implements ApplicationRunner {
   private final SysUserMapper users;private final JdbcTemplate db;private final PasswordEncoder encoder;private final String username,password;private final boolean demoUsersEnabled;
   public BootstrapAdmin(SysUserMapper users,JdbcTemplate db,PasswordEncoder encoder,@Value("${app.bootstrap.username}")String username,@Value("${app.bootstrap.password}")String password,@Value("${app.bootstrap.demo-users-enabled}")boolean demoUsersEnabled){this.users=users;this.db=db;this.encoder=encoder;this.username=username;this.password=password;this.demoUsersEnabled=demoUsersEnabled;}
-  public void run(ApplicationArguments args){if(demoUsersEnabled){seedDemoUsers();return;}Long n=users.selectCount(Wrappers.<SysUser>lambdaQuery().eq(SysUser::getRole,"SUPER_ADMIN"));if(n==0){var u=new SysUser();u.setUsername(username);u.setPasswordHash(encoder.encode(password));u.setDisplayName("超级管理员");u.setRole("SUPER_ADMIN");u.setEnabled(true);u.setMustChangePassword(true);u.setVersion(0);users.insert(u);}}
+  public void run(ApplicationArguments args){if(demoUsersEnabled){seedDemoUsers();return;}
+    Integer n=db.queryForObject("select count(*) from sys_user u where u.role='SUPER_ADMIN' or exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code='SUPER_ADMIN')",Integer.class);
+    if(n==null||n==0){var u=new SysUser();u.setUsername(username);u.setPasswordHash(encoder.encode(password));u.setDisplayName("超级管理员");u.setRole("SUPER_ADMIN");u.setEnabled(true);u.setMustChangePassword(true);u.setVersion(0);users.insert(u);syncRole(u.getId(),"SUPER_ADMIN",u.getId());}}
   private void seedDemoUsers(){
     upsertUser("superadmin","superadmin","超级管理员","SUPER_ADMIN");
     upsertUser("admin","12345678","管理员","ADMIN");
@@ -20,9 +22,16 @@ public class BootstrapAdmin implements ApplicationRunner {
   private Long upsertUser(String username,String password,String displayName,String role){
     var rows=db.queryForList("select id from sys_user where username=?",username);
     String hash=encoder.encode(password);
-    if(rows.isEmpty()){db.update("insert into sys_user(username,password_hash,display_name,role,enabled,must_change_password) values(?,?,?,?,true,false)",username,hash,displayName,role);return db.queryForObject("select last_insert_id()",Long.class);}
+    if(rows.isEmpty()){db.update("insert into sys_user(username,password_hash,display_name,role,enabled,must_change_password) values(?,?,?,?,true,false)",username,hash,displayName,role);Long id=db.queryForObject("select last_insert_id()",Long.class);syncRole(id,role,id);return id;}
     Long id=((Number)rows.get(0).get("id")).longValue();
     db.update("update sys_user set password_hash=?,display_name=?,role=?,enabled=true,must_change_password=false,security_version=security_version+1,version=version+1 where id=?",hash,displayName,role,id);
+    syncRole(id,role,id);
     return id;
+  }
+  /** 只维护 sys_user_role 的主角色行，不修改 sys_user.role。 */
+  private void syncRole(Long userId,String role,Long assignedBy){
+    db.update("update sys_user_role set is_primary=false where user_id=? and role_code<>? and is_primary=true",userId,role);
+    db.update("insert ignore into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,?,true,?)",userId,role,assignedBy);
+    db.update("update sys_user_role set is_primary=true where user_id=? and role_code=?",userId,role);
   }
 }

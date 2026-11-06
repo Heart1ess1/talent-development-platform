@@ -42,7 +42,7 @@ class MonthlyDefenseIntegrationTest {
   long person(String suffix){db.update("insert into employee(employee_no,name,batch_id,status) values(?,?,?,'ACTIVE')",tag+suffix,tag+suffix,batch);return last();}
   @BeforeEach void fixture(){
     tag="md-"+UUID.randomUUID().toString().substring(0,8);
-    db.update("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused','ADMIN',false)",tag,tag);admin=last();login(admin);
+    db.update("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused','ADMIN',false)",tag,tag);admin=last();db.update("insert into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,'ADMIN',true,?)",admin,admin);login(admin);
     db.update("insert into talent_batch(name) values(?)",tag);batch=last();employee=person("-01");second=person("-02");
     db.update("insert into score_scheme(batch_id,version,status,effective_month,exam_enabled,task_enabled,mentor_enabled,station_enabled,training_enabled,defense_enabled,exam_weight,task_weight,mentor_weight,station_weight,training_weight,defense_weight,defense_scope,created_by) values(?,1,'PUBLISHED',?,false,false,false,false,false,true,0,0,0,0,0,100,'MONTH',?)",batch,month.atDay(1),admin);scheme=last();
   }
@@ -129,7 +129,7 @@ class MonthlyDefenseIntegrationTest {
   @Test void taskPermissionsAndLegacyQuarterPublishAreClosed(){
     long id=task();db.update("insert into score_summary(employee_id,summary_type,period_key,version,scheme_id) values(?,'QUARTER','2027-Q1',1,?)",employee,scheme);long summary=last();
     assertThatThrownBy(()->evaluations.publish(summary,new EvaluationController.PublishRequest(null,null))).hasMessageContaining("季度");
-    db.update("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused','MENTOR',false)",tag+"mentor",tag);long mentor=last();login(mentor);
+    db.update("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused','MENTOR',false)",tag+"mentor",tag);long mentor=last();db.update("insert into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,'MENTOR',true,?)",mentor,mentor);login(mentor);
     assertThatThrownBy(()->tasks.grades(id)).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
   }
   @Test void legacyAndTaskScoresCanCoexistWithoutBeingMixed(){

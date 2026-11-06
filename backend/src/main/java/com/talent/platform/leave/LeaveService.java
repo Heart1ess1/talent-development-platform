@@ -92,9 +92,12 @@ public class LeaveService {
     };
     // TRAINING_DIRECTOR is the persisted approval level, fulfilled by existing training admins.
     String role="TRAINING_DIRECTOR".equals(level)?"TRAINING_ADMIN":level;
-    return db.queryForList("select distinct u.id,u.display_name,u.role from sys_user u " + join +
-        " where u.role=? and u.enabled=true order by u.display_name,u.id",
-        level.equals("TRAINING_DIRECTOR") ? new Object[]{role} : new Object[]{station,role});
+    return db.queryForList("select distinct u.id,u.display_name,"
+        +"(select r.role_code from sys_user_role r where r.user_id=u.id and r.role_code=? limit 1) role "
+        +"from sys_user u " + join
+        +" where exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code=?) and u.enabled=true "
+        +"order by u.display_name,u.id",
+        level.equals("TRAINING_DIRECTOR") ? new Object[]{role,role} : new Object[]{role,station,role});
   }
 
   @Transactional(isolation=Isolation.READ_COMMITTED)

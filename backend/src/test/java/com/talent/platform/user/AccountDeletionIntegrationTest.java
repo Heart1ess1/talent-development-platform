@@ -56,7 +56,9 @@ class AccountDeletionIntegrationTest {
   }
   @AfterEach void reset() {SecurityContextHolder.clearContext();RequestContextHolder.resetRequestAttributes();}
   long user(String suffix,String role) {
-    return insert("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused',?,false)",tag+suffix,tag+suffix,role);
+    long id=insert("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused',?,false)",tag+suffix,tag+suffix,role);
+    db.update("insert into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,?,true,?)",id,role,id);
+    return id;
   }
   long insert(String sql,Object... args) {
     var key=new GeneratedKeyHolder();

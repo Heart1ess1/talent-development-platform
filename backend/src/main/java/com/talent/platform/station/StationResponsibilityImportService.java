@@ -90,6 +90,7 @@ public class StationResponsibilityImportService {
         if(user==null){
           db.update("insert into sys_user(username,display_name,password_hash,role,enabled,must_change_password) values(?,?,?,?,true,true)",person.employeeNo(),person.name(),encoder.encode(initialPassword(person.employeeNo())),person.role());
           user=db.queryForObject("select last_insert_id()",Long.class);
+          db.update("insert ignore into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,?,true,?)",user,person.role(),SecurityUtils.current().id());
         }
         resolved.put(person.ref(),user);users.add(user);
       }
@@ -135,7 +136,10 @@ public class StationResponsibilityImportService {
         if(roles.containsKey(folded)&&!roles.get(folded).equals(role))errors.add(error(row.row(),field,"同一工号不能同时导入站长与区域经理","请先核实角色，本次不支持兼任"));
         names.putIfAbsent(folded,name);roles.putIfAbsent(folded,role);
         String ref=role+":"+no;
-        var matches=db.queryForList("select id,username,display_name,role,enabled,version,security_version from sys_user where username=? order by id",no);
+        var matches=db.queryForList("select u.id,u.username,u.display_name,u.role,u.enabled,u.version,u.security_version,"
+            +"(select group_concat(r.role_code order by r.is_primary desc,r.assigned_at,r.role_code separator ',') "
+            +"from sys_user_role r where r.user_id=u.id) roles "
+            +"from sys_user u where u.username=? order by u.id",no);
         var linked=db.queryForList("select e.id,e.user_id,e.employee_no,u.username from employee e join sys_user u on u.id=e.user_id where e.employee_no=? order by e.id",no);
         identity.add(List.of(no,matches,linked));Long user=null;
         if(!linked.isEmpty()&&linked.stream().anyMatch(x->!no.equals(x.get("username"))))errors.add(error(row.row(),field,"员工档案存在相同工号但关联账号不一致","请先核实员工与账号关联，避免重复建号"));
@@ -143,7 +147,8 @@ public class StationResponsibilityImportService {
           var account=matches.get(0);user=number(account.get("id"));
           if(!no.equals(account.get("username")))errors.add(error(row.row(),field,"工号与已有账号字符或大小写不完全一致","请核实账号，不自动改写工号"));
           if(!name.equals(account.get("display_name")))errors.add(error(row.row(),field,"姓名不一致，系统为“"+account.get("display_name")+"”，文件为“"+name+"”","请先核实并修正姓名"));
-          if(!role.equals(account.get("role")))errors.add(error(row.row(),field,"账号角色冲突，现有角色为"+account.get("role"),"请通过账号管理核实处理后重新导入"));
+          String ownedRoles=Objects.toString(account.get("roles"),Objects.toString(account.get("role"),""));
+          if(!List.of(ownedRoles.split(",")).contains(role))errors.add(error(row.row(),field,"账号角色冲突，现有角色为"+ownedRoles,"请通过账号管理核实处理后重新导入"));
           if(!Boolean.TRUE.equals(account.get("enabled")))errors.add(error(row.row(),field,"账号已停用","请先核实并启用账号"));
         }
         people.putIfAbsent(ref,new Person(ref,no,name,role,user,user==null?"CREATE":"REUSE"));

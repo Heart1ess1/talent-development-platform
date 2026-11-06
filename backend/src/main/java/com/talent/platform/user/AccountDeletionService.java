@@ -51,7 +51,7 @@ public class AccountDeletionService {
   }
 
   private void lockSuperAdmins() {
-    db.queryForList("select id from sys_user where role='SUPER_ADMIN' and enabled=true order by id for update");
+    db.queryForList("select u.id from sys_user u where u.enabled=true and exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code='SUPER_ADMIN') order by u.id for update");
   }
 
   private Map<String,Object> employee(long id) {
@@ -65,10 +65,19 @@ public class AccountDeletionService {
     var rows=db.queryForList("select id,username,display_name,role,enabled from sys_user where id=? for update",id);
     if(rows.isEmpty())throw new BusinessException(404,"账号不存在");
     var user=rows.get(0);
-    if("SUPER_ADMIN".equals(user.get("role"))&&Boolean.TRUE.equals(user.get("enabled")))
-      block("select count(*) from sys_user where role='SUPER_ADMIN' and enabled=true and id<>?",id,
+    if(Boolean.TRUE.equals(user.get("enabled"))&&ownsSuperAdmin(id))
+      block("select count(distinct r.user_id) from sys_user_role r join sys_user u on u.id=r.user_id where r.role_code='SUPER_ADMIN' and u.enabled=true and r.user_id<>?",id,
           "必须保留至少一个启用的超级管理员",true);
     return user;
+  }
+
+  /** 是否拥有 SUPER_ADMIN 角色（不看主角色）；完全没有角色行时回退 sys_user.role。 */
+  private boolean ownsSuperAdmin(long id) {
+    Integer owned=db.queryForObject("select count(*) from sys_user_role where user_id=? and role_code='SUPER_ADMIN'",Integer.class,id);
+    if(owned!=null&&owned>0)return true;
+    Integer rows=db.queryForObject("select count(*) from sys_user_role where user_id=?",Integer.class,id);
+    if(rows!=null&&rows>0)return false;
+    return Boolean.TRUE.equals(db.queryForObject("select role='SUPER_ADMIN' from sys_user where id=?",Boolean.class,id));
   }
 
   private void delete(Map<String,Object> employee,Map<String,Object> user,String action) {

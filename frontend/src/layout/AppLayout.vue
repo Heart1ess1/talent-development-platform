@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import {computed} from 'vue'
+import {computed,ref} from 'vue'
 import {useRoute,useRouter} from 'vue-router'
-import {ArrowDown,Lock,SwitchButton} from '@element-plus/icons-vue'
+import {ElMessage,ElMessageBox} from 'element-plus'
+import {ArrowDown,CircleCheck,Loading,Lock,SwitchButton} from '@element-plus/icons-vue'
 import {useAuthStore} from '@/stores/auth'
+import {resolveAccessRedirect} from '@/router'
 import {avatarUrl,nameInitial} from '@/utils/avatar'
-import {roleLabel as formatRoleLabel} from '@/utils/role'
+import {roleLabel as formatRoleLabel,type Role} from '@/utils/role'
+import {loadRoleTodos} from '@/utils/roleTodo'
 import ComplianceFooter from '@/components/ComplianceFooter.vue'
 
 const auth=useAuthStore(),route=useRoute(),router=useRouter()
@@ -116,8 +119,43 @@ const mobileMenus=computed(()=>{
     :item.to?[item]:[]
   ).slice(0,4)
 })
+const ROLE_COMMAND='role:'
+const switching=ref(false)
+const todos=ref<Record<string,number|null>>({})
+const todosLoading=ref(false)
+const multiRole=computed(()=>auth.availableRoles.length>1)
+function todoOf(role:Role){const value=todos.value[role];return typeof value==='number'?value:null}
+async function loadTodos(){
+  if(!multiRole.value||todosLoading.value||!auth.user)return
+  const token=localStorage.getItem('token')
+  if(!token)return
+  todosLoading.value=true
+  try{todos.value=await loadRoleTodos(token,auth.availableRoles,auth.activeRole,auth.user.id)}
+  catch{todos.value={}}
+  finally{todosLoading.value=false}
+}
+function onUserMenuVisible(visible:boolean){if(visible)void loadTodos()}
+async function switchTo(role:Role){
+  if(switching.value||role===auth.activeRole)return
+  const confirmed=await ElMessageBox.confirm(`切换为「${formatRoleLabel(role)}」后页面会刷新，未保存的修改请先保存。`,'切换身份',{confirmButtonText:'切换并刷新',cancelButtonText:'取消',type:'warning'}).catch(()=>false)
+  if(!confirmed)return
+  switching.value=true
+  try{
+    await auth.switchRole(role)
+    const redirect=resolveAccessRedirect(route)
+    if(redirect){
+      ElMessage.warning(`已切换为「${formatRoleLabel(role)}」，当前身份无权访问原页面，已返回首页`)
+      await router.replace(redirect)
+      return
+    }
+    location.reload()
+  }catch(e:any){
+    ElMessage.error(e?.response?.data?.message||'切换身份失败，请稍后重试')
+  }finally{switching.value=false}
+}
 function logout(){auth.logout();router.push('/login')}
 function handleUserCommand(command:string){
+  if(command.startsWith(ROLE_COMMAND)){void switchTo(command.slice(ROLE_COMMAND.length) as Role);return}
   if(command==='settings')router.push('/profile')
   if(command==='logout')logout()
 }
@@ -140,14 +178,15 @@ function handleUserCommand(command:string){
     <el-container>
       <el-header>
         <div class="mobile-brand">一人一画像人才培养平台</div>
-        <el-dropdown trigger="click" placement="bottom-end" @command="handleUserCommand">
+        <el-dropdown trigger="click" placement="bottom-end" @visible-change="onUserMenuVisible" @command="handleUserCommand">
           <button class="profile-trigger" type="button" aria-label="打开个人账号菜单">
             <el-avatar :size="36" :src="userAvatar" class="header-avatar">{{userInitials}}</el-avatar>
             <span class="user-copy">
               <strong>{{auth.user?.displayName}}</strong>
               <span>{{roleLabel}}</span>
             </span>
-            <el-icon class="dropdown-arrow"><ArrowDown/></el-icon>
+            <el-icon v-if="switching" class="dropdown-arrow is-loading"><Loading/></el-icon>
+            <el-icon v-else class="dropdown-arrow"><ArrowDown/></el-icon>
             <span v-if="auth.user?.mustChangePassword" class="security-dot" title="需要修改密码"></span>
           </button>
           <template #dropdown>
@@ -159,6 +198,23 @@ function handleUserCommand(command:string){
                   <span>@{{auth.user?.username}} · {{roleLabel}}</span>
                 </div>
               </div>
+              <template v-if="multiRole">
+                <div class="account-menu-section">
+                  <div class="account-menu-caption">切换身份</div>
+                  <el-dropdown-item v-for="role in auth.availableRoles" :key="role" :command="`${ROLE_COMMAND}${role}`" :disabled="switching">
+                    <div class="role-option" :class="{current:role===auth.activeRole}">
+                      <el-icon v-if="role===auth.activeRole" class="role-option-mark"><CircleCheck/></el-icon>
+                      <el-icon v-else-if="switching" class="role-option-mark is-loading"><Loading/></el-icon>
+                      <span class="role-option-name">{{formatRoleLabel(role)}}</span>
+                      <span v-if="todoOf(role)!==null" class="role-option-count" :class="{zero:todoOf(role)===0}" title="该身份待办数">{{todoOf(role)}}</span>
+                      <span v-if="role===auth.activeRole" class="role-option-tag">当前</span>
+                    </div>
+                  </el-dropdown-item>
+                  <div v-if="todosLoading" class="account-menu-hint">正在加载各身份待办…</div>
+                  <div v-else-if="switching" class="account-menu-hint">正在切换身份，页面即将刷新…</div>
+                </div>
+                <div class="account-menu-divider"></div>
+              </template>
               <el-dropdown-item command="settings" :icon="Lock">
                 <div class="account-menu-item">
                   <strong>{{accountEntryTitle}}</strong>
@@ -207,6 +263,17 @@ header{height:64px;padding:0 22px;background:var(--app-primary);color:#fff;displ
 .account-menu-item{display:flex;flex-direction:column;gap:2px;padding:3px 0}
 .account-menu-item strong{color:#3f3f3f;font-size:14px;font-weight:500}
 .account-menu-item span{color:#a1a1a1;font-size:14px}
+.account-menu-section{padding:2px 0 4px}
+.account-menu-caption{padding:5px 12px 7px;color:#959595;font-size:13px}
+.account-menu-hint{padding:4px 12px 2px;color:#a1a1a1;font-size:13px}
+.account-menu-divider{height:1px;margin:4px 9px;background:#f0f0f0}
+.role-option{display:flex;align-items:center;gap:8px;min-width:0;padding:2px 0}
+.role-option-mark{color:var(--app-primary);font-size:15px}
+.role-option-name{flex:1;overflow:hidden;color:#3f3f3f;font-size:14px;text-overflow:ellipsis;white-space:nowrap}
+.role-option.current .role-option-name{color:var(--app-primary);font-weight:600}
+.role-option-count{min-width:20px;padding:0 6px;border-radius:9px;color:#fff;background:#e99a2b;font-size:12px;line-height:18px;text-align:center}
+.role-option-count.zero{color:#a1a1a1;background:#f0f0f0}
+.role-option-tag{padding:0 6px;border:1px solid var(--app-primary);border-radius:9px;color:var(--app-primary);font-size:12px;line-height:16px}
 main{padding:0}
 .app-compliance{flex:0 0 auto}
 .mobile-nav{display:none}

@@ -49,7 +49,7 @@ class LeaveIntegrationTest {
   long employeeUser,employee,station,otherStation,stationManager,areaManager,director,admin,otherArea;
   String tag;
   LocalDate day(){return LocalDate.now(ZoneId.of("Asia/Shanghai"));}
-  long user(String suffix,String role){String username=tag+suffix;db.update("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused',?,false)",username,username,role);return db.queryForObject("select id from sys_user where username=?",Long.class,username);}
+  long user(String suffix,String role){String username=tag+suffix;db.update("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused',?,false)",username,username,role);long id=db.queryForObject("select id from sys_user where username=?",Long.class,username);db.update("insert into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,?,true,?)",id,role,id);return id;}
   void login(long id){RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(permissions.load(id),null,List.of()));}
   @BeforeEach void fixture(){
     tag="leave-"+UUID.randomUUID().toString().substring(0,8);

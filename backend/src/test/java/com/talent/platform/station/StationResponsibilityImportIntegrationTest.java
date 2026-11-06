@@ -47,7 +47,7 @@ class StationResponsibilityImportIntegrationTest {
   @MockitoSpyBean AuditService audit;
   String tag,stationName,otherName;
   long admin,otherAdmin,station,otherStation,oldManager,areaManager,employeeUser,employee;
-  long user(String no,String name,String role){db.update("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,?,?,false)",no,name,encoder.encode("Existing123!"),role);return db.queryForObject("select id from sys_user where username=?",Long.class,no);}
+  long user(String no,String name,String role){db.update("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,?,?,false)",no,name,encoder.encode("Existing123!"),role);long id=db.queryForObject("select id from sys_user where username=?",Long.class,no);db.update("insert into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,?,true,?)",id,role,id);return id;}
   void login(long id){RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(permissions.load(id),null,List.of()));}
   @BeforeEach void fixture(){
     tag="si"+UUID.randomUUID().toString().replace("-","").substring(0,12);stationName=tag+"服务站";otherName=tag+"另一站";

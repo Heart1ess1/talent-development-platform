@@ -41,10 +41,15 @@ public class TaskScoringService {
   public List<Map<String, Object>> reviewerOptions() {
     permissions.require(Permissions.TASK_MANAGE);
     return db.queryForList("""
-        select id,username,display_name,role
-        from sys_user
-        where enabled=true and role in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN')
-        order by display_name,username,id
+        select u.id,u.username,u.display_name,
+          coalesce((select r.role_code from sys_user_role r
+            where r.user_id=u.id and r.role_code in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN')
+            order by r.is_primary desc,r.assigned_at,r.role_code limit 1),u.role) role
+        from sys_user u
+        where u.enabled=true
+          and exists(select 1 from sys_user_role r
+            where r.user_id=u.id and r.role_code in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN'))
+        order by u.display_name,u.username,u.id
         """);
   }
 
@@ -244,7 +249,11 @@ public class TaskScoringService {
     boolean finished = Set.of("APPROVED", "RETURNED").contains(submissionStatus);
     Long currentId = SecurityUtils.current().id();
     var rows = db.queryForList("""
-        select r.reviewer_user_id,u.display_name reviewer_name,u.role,r.status,r.decision,r.score,r.comment,r.submitted_at
+        select r.reviewer_user_id,u.display_name reviewer_name,
+          coalesce((select ur.role_code from sys_user_role ur
+            where ur.user_id=u.id and ur.role_code in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN')
+            order by ur.is_primary desc,ur.assigned_at,ur.role_code limit 1),u.role) role,
+          r.status,r.decision,r.score,r.comment,r.submitted_at
         from task_submission_review r join sys_user u on u.id=r.reviewer_user_id
         where r.submission_id=? order by u.display_name,u.id
         """, submissionId);
@@ -412,7 +421,10 @@ public class TaskScoringService {
 
   public List<Map<String, Object>> reviewers(Long taskId) {
     return db.queryForList("""
-        select distinct u.id,u.username,u.display_name,u.role,u.enabled
+        select distinct u.id,u.username,u.display_name,u.enabled,
+          coalesce((select ur.role_code from sys_user_role ur
+            where ur.user_id=u.id and ur.role_code in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN')
+            order by ur.is_primary desc,ur.assigned_at,ur.role_code limit 1),u.role) role
         from task_reviewer_scope rs join task_reviewer_scope_member m on m.scope_id=rs.id
         join sys_user u on u.id=m.reviewer_user_id
         where rs.task_id=? and rs.status='ACTIVE' order by u.display_name,u.id

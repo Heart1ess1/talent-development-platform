@@ -31,6 +31,8 @@ type UserRow=AccountPersonnel&{
   username:string
   display_name:string
   role:Role
+  roles?:Role[]
+  primary_role?:Role
   enabled:boolean
   must_change_password:boolean
   created_at?:string
@@ -54,8 +56,8 @@ const dialog=ref(false)
 const scopeDialog=ref(false)
 const passwordDialog=ref(false)
 const scopeUser=ref<UserRow|null>(null)
-const roleDialog=ref(false),roleUser=ref<UserRow|null>(null)
-const roleForm=reactive<{role:Role;stationIds:number[]}>({role:'AREA_MANAGER',stationIds:[]})
+const rolesDialog=ref(false),rolesUser=ref<UserRow|null>(null)
+const rolesForm=reactive<{roles:Role[];primaryRole:Role|null;stationIds:number[]}>({roles:[],primaryRole:null,stationIds:[]})
 const formRef=ref<FormInstance>()
 const page=ref(1)
 const pageSize=ref(10)
@@ -115,7 +117,7 @@ const formRules:FormRules={
 const stats=computed(()=>({
   total:rows.value.length,
   enabled:rows.value.filter(row=>row.enabled).length,
-  admin:rows.value.filter(row=>['ADMIN','SUPER_ADMIN','TRAINING_ADMIN'].includes(row.role)).length,
+  admin:rows.value.filter(row=>rowRoles(row).some(role=>['ADMIN','SUPER_ADMIN','TRAINING_ADMIN'].includes(role))).length,
   pending:rows.value.filter(row=>row.must_change_password).length
 }))
 const filteredRows=computed(()=>filterAccounts(rows.value,filters))
@@ -126,6 +128,9 @@ const pagedRows=computed(()=>filteredRows.value.slice((page.value-1)*pageSize.va
 const hasFilters=computed(()=>Object.values(filters).some(Boolean))
 
 watch(filters,()=>{page.value=1})
+watch(()=>rolesForm.roles,roles=>{
+  if(rolesForm.primaryRole&&!roles.includes(rolesForm.primaryRole))rolesForm.primaryRole=roles[0]??null
+})
 watch(()=>form.role,role=>{
   if(!['STATION_MANAGER','AREA_MANAGER'].includes(role))form.stationIds=[]
   formRef.value?.clearValidate('stationIds')
@@ -294,24 +299,45 @@ async function toggle(row:UserRow){
   await load()
 }
 
-async function changeRole(row:UserRow,role:Role){
-  if(role===row.role)return
-  if(['STATION_MANAGER','AREA_MANAGER'].includes(role)){
-    roleUser.value=row;roleForm.role=role;roleForm.stationIds=stationIds(row);roleDialog.value=true;return
-  }
-  await ElMessageBox.confirm(
-    `将 ${row.display_name} 的角色从“${roleLabels[row.role]}”调整为“${roleLabels[role]}”。调整后原登录状态将失效。`,
-    '确认变更角色？',
-    {confirmButtonText:'确认变更',cancelButtonText:'取消',type:'warning'}
-  )
-  await api.put(`/users/${row.id}/role`,{role})
-  ElMessage.success('角色已更新')
-  await load()
+function rowRoles(row:UserRow):Role[]{
+  const list=row.roles?.length?row.roles:[row.role]
+  return [...new Set(list)] as Role[]
 }
-async function saveRole(){
-  if(!roleUser.value||!roleForm.stationIds.length)return ElMessage.warning('请选择负责的服务站')
+function primaryRoleOf(row:UserRow):Role{
+  return row.primary_role||rowRoles(row)[0]||row.role
+}
+function roleSummary(row:UserRow){
+  return rowRoles(row).map(role=>roleLabels[role]).join('、')
+}
+function assignableRoles(row:UserRow|null):Role[]{
+  return row?.has_employee_profile?['EMPLOYEE',...changeRoles]:[...changeRoles]
+}
+function openRoles(row:UserRow,addEmployee=false){
+  const current=rowRoles(row)
+  const roles=addEmployee&&!current.includes('EMPLOYEE')?['EMPLOYEE' as Role,...current]:current
+  rolesUser.value=row
+  rolesForm.roles=roles
+  rolesForm.primaryRole=primaryRoleOf(row)
+  if(!roles.includes(rolesForm.primaryRole))rolesForm.primaryRole=roles[0]??null
+  rolesForm.stationIds=stationIds(row)
+  rolesDialog.value=true
+}
+async function saveRoles(){
+  if(!rolesUser.value)return
+  if(!rolesForm.roles.length)return ElMessage.warning('请至少选择一个角色')
+  if(!rolesForm.primaryRole||!rolesForm.roles.includes(rolesForm.primaryRole))return ElMessage.warning('请选择已分配角色中的主身份')
+  if((rolesForm.roles.includes('STATION_MANAGER')||rolesForm.roles.includes('AREA_MANAGER'))&&!rolesForm.stationIds.length)return ElMessage.warning('请选择负责的服务站')
   saving.value=true
-  try{await api.put(`/users/${roleUser.value.id}/role`,roleForm);roleDialog.value=false;ElMessage.success('角色和服务站范围已更新');await load()}finally{saving.value=false}
+  try{
+    await api.put(`/users/${rolesUser.value.id}/roles`,{
+      roles:rolesForm.roles,
+      primaryRole:rolesForm.primaryRole,
+      stationIds:rolesForm.stationIds
+    })
+    rolesDialog.value=false
+    ElMessage.success('角色与主身份已更新，该账号原有登录状态将失效')
+    await load()
+  }finally{saving.value=false}
 }
 
 async function changeDisplayName(row:UserRow){
@@ -411,17 +437,14 @@ function canOperate(row:UserRow){
     || (['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_DIRECTOR','TRAINING_ADMIN'].includes(row.role)&&canOps.value)
     || superAdmin.value
 }
-function isEmployeeAccount(row:UserRow){
-  return row.has_employee_profile||row.role==='EMPLOYEE'
-}
 function canChangeRole(row:UserRow){
-  return superAdmin.value&&row.id!==auth.user?.id&&!isEmployeeAccount(row)
+  return superAdmin.value&&row.id!==auth.user?.id
 }
 function canChangeUsername(row:UserRow){
   return superAdmin.value&&row.role!=='SUPER_ADMIN'
 }
 function needsEmployeeRoleRepair(row:UserRow){
-  return superAdmin.value&&row.id!==auth.user?.id&&row.has_employee_profile&&row.role!=='EMPLOYEE'
+  return superAdmin.value&&row.id!==auth.user?.id&&row.has_employee_profile&&!rowRoles(row).includes('EMPLOYEE')
 }
 function hasMoreActions(row:UserRow){
   return superAdmin.value
@@ -506,7 +529,7 @@ onMounted(load)
         <span>已选择 <strong>{{selectedRows.length}}</strong> 个账号</span>
         <el-button size="small" text @click="selectFilteredAccounts">全选当前筛选</el-button>
         <el-button size="small" type="primary" @click="openAccountBulk('enabled')">批量启停</el-button>
-        <el-button v-if="superAdmin" size="small" @click="openAccountBulk('role')">批量改角色</el-button>
+        <el-button v-if="superAdmin" size="small" @click="openAccountBulk('role')">批量设为唯一角色</el-button>
         <el-button v-if="canOps||superAdmin" size="small" @click="openAccountBulk('stationIds')">批量设服务站</el-button>
         <el-button size="small" text @click="clearAccountSelection">取消选择</el-button>
       </div>
@@ -543,25 +566,20 @@ onMounted(load)
         <el-table-column label="批次" min-width="100"><template #default="{row}">{{row.batch_name||(row.has_employee_profile?'未设置':'未关联台账')}}</template></el-table-column>
         <el-table-column label="板块" min-width="120"><template #default="{row}">{{row.business_unit_name||'—'}}</template></el-table-column>
         <el-table-column label="班级" min-width="110"><template #default="{row}">{{row.class_name||'—'}}</template></el-table-column>
-        <el-table-column label="角色" min-width="150">
+        <el-table-column label="角色" min-width="210">
           <template #default="{row}">
             <div class="role-cell">
-              <el-button
-                v-if="needsEmployeeRoleRepair(row)"
-                link
-                type="warning"
-                @click="changeRole(row,'EMPLOYEE')"
-              >恢复为员工</el-button>
-              <el-select
-                v-else-if="canChangeRole(row)"
-                class="role-select"
-                :model-value="row.role"
-                filterable
-                @change="(value:Role)=>changeRole(row,value)"
-              >
-                <el-option v-for="role in changeRoles" :key="role" :value="role" :label="roleLabels[role]"/>
-              </el-select>
-              <span v-else :class="['role-badge',`role-${row.role.toLowerCase()}`]">{{roleLabel(row.role)}}</span>
+              <el-tooltip :content="`主身份：${roleLabel(primaryRoleOf(row))}；全部角色：${roleSummary(row)}`" placement="top">
+                <div class="role-badges">
+                  <span
+                    v-for="role in rowRoles(row)"
+                    :key="role"
+                    :class="['role-badge',`role-${role.toLowerCase()}`,{'is-primary':role===primaryRoleOf(row)}]"
+                  >{{roleLabel(role)}}</span>
+                </div>
+              </el-tooltip>
+              <el-button v-if="needsEmployeeRoleRepair(row)" link type="warning" @click="openRoles(row,true)">补员工角色</el-button>
+              <el-button v-else-if="canChangeRole(row)" link type="primary" @click="openRoles(row)">调整</el-button>
             </div>
           </template>
         </el-table-column>
@@ -648,14 +666,38 @@ onMounted(load)
       </div>
     </section>
 
-    <el-dialog v-model="roleDialog" title="调整角色与负责范围" width="520px"><el-form label-position="top"><el-form-item label="目标角色">{{roleLabels[roleForm.role]}}</el-form-item><el-form-item label="负责服务站" required><el-select v-model="roleForm.stationIds" multiple filterable class="full-width"><el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/></el-select></el-form-item></el-form><template #footer><el-button @click="roleDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveRole">保存</el-button></template></el-dialog>
-    <el-dialog v-model="accountBulkOpen" class="account-dialog" :title="accountBulkAction==='enabled'?'批量启停账号':accountBulkAction==='role'?'批量调整角色':'批量设置服务站范围'" width="560px" destroy-on-close>
+    <el-dialog v-model="rolesDialog" class="account-dialog" title="角色与主身份" width="560px" destroy-on-close>
+      <div class="bulk-account-tip">{{rolesUser?.display_name}}（@{{rolesUser?.username}}）可同时拥有多个角色；登录时默认使用主身份。</div>
+      <el-form label-position="top">
+        <el-form-item label="角色（可多选）" required>
+          <el-checkbox-group v-model="rolesForm.roles" class="role-checks">
+            <el-checkbox v-for="role in assignableRoles(rolesUser)" :key="role" :label="role">{{roleLabels[role]}}</el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item label="主身份" required>
+          <el-select v-model="rolesForm.primaryRole" class="full-width" filterable placeholder="请选择主身份">
+            <el-option v-for="role in rolesForm.roles" :key="role" :label="roleLabels[role]" :value="role"/>
+          </el-select>
+          <div class="field-help">主身份决定登录默认身份，并同步为账号列表展示的主角色。</div>
+        </el-form-item>
+        <el-form-item v-if="rolesForm.roles.includes('STATION_MANAGER')||rolesForm.roles.includes('AREA_MANAGER')" label="负责服务站" required>
+          <el-select v-model="rolesForm.stationIds" class="full-width" multiple filterable collapse-tags collapse-tags-tooltip placeholder="请至少选择一个服务站">
+            <el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/>
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rolesDialog=false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveRoles">保存</el-button>
+      </template>
+    </el-dialog>
+    <el-dialog v-model="accountBulkOpen" class="account-dialog" :title="accountBulkAction==='enabled'?'批量启停账号':accountBulkAction==='role'?'批量设为唯一角色':'批量设置服务站范围'" width="560px" destroy-on-close>
       <div class="bulk-account-tip">已选择 {{selectedRows.length}} 个账号；执行前会重新校验权限和账号安全约束。</div>
       <el-form label-position="top">
         <el-form-item v-if="accountBulkAction==='enabled'" label="目标状态">
           <el-radio-group v-model="accountBulkEnabled"><el-radio :label="true">启用</el-radio><el-radio :label="false">停用</el-radio></el-radio-group>
         </el-form-item>
-        <el-form-item v-if="accountBulkAction==='role'" label="目标角色">
+        <el-form-item v-if="accountBulkAction==='role'" label="目标角色（将替换该账号现有全部角色）">
           <el-select v-model="accountBulkRole" class="full-width" filterable placeholder="请选择角色"><el-option v-for="role in changeRoles" :key="role" :label="roleLabels[role]" :value="role"/></el-select>
         </el-form-item>
         <el-form-item v-if="accountBulkAction==='stationIds'||(accountBulkAction==='role'&&['STATION_MANAGER','AREA_MANAGER'].includes(accountBulkRole||''))" label="服务站范围">
@@ -810,8 +852,10 @@ onMounted(load)
 .self-badge{padding:2px 6px;border-radius:4px;color:var(--app-primary);background:var(--app-page-bg);font-size:14px;white-space:nowrap}
 .role-badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:6px;color:var(--app-primary);background:var(--app-page-bg);font-size:14px;font-weight:600}
 .role-badge.role-employee{color:#5f5f5f;background:#f3f3f3}
-.role-select{width:130px}
-.role-select :deep(.el-select__wrapper){min-height:30px;border-radius:7px}
+.role-badge.is-primary{box-shadow:inset 0 0 0 1px currentColor}
+.role-cell{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.role-badges{display:flex;flex-wrap:wrap;gap:6px}
+.role-checks{display:flex;flex-wrap:wrap;gap:4px 18px}
 .station-cell{display:flex;align-items:center;gap:6px;min-width:0;color:#5f5f5f}
 .station-cell .el-icon{flex:0 0 auto;color:#989898}
 .station-cell span{overflow:hidden;max-width:220px;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
