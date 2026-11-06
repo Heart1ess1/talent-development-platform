@@ -380,6 +380,29 @@ Authorization: Bearer <token>
 
 新方案使用 TASK_MONTH_V1，答辩贡献 = 成绩 / 任务满分 × 月度权重。已发布旧方案和结果快照不重算。新方案从管理员选择的月份起沿用；无答辩月份须显式应用关闭答辩并重新配置权重的方案。季度生成、发布、历史导入与普通查询均关闭；待审季度成员归档，混合修订组保留月度成员并失效原审核令牌。
 
+### 月度 ABC 绩效划分
+
+以下接口使用 `evaluation:manage`，适用 `TRAINING_ADMIN`、`ADMIN`、`SUPER_ADMIN`。所有月份格式为 `YYYY-MM`，比例为 0～100 的最多两位小数，三档合计必须为 100。
+
+| 方法 | 路径（前缀 `/api/v1/evaluation/performance`） | 入参 | 返回/行为 |
+| --- | --- | --- | --- |
+| GET | 空路径 | `batchId`、`month` | 该培养批次月份的全部绩效版本，版本倒序 |
+| PUT | 空路径 | `batchId`、`month`、`ratioA`、`ratioB`、`ratioC` | 创建或更新当月草稿，首次创建载入当前在培人员；比例不自动沿用 |
+| GET | `/{id}` | 绩效方案 ID | 比例、发布状态、版本、名单、成绩版本引用和正式分档快照 |
+| POST | `/{id}/roster/refresh` | 无 | 首次发布前显式刷新名单；保留人工排除原因，发布后名单固定 |
+| PUT | `/{id}/members/{employeeId}` | `participating`、`reason` | 排除或恢复参评；排除原因必填，不计入分母 |
+| POST | `/{id}/preview` | 无 | `groups`、`revisionMembers`、`revisionIds`、`blockingMessages`、`canPublish`、`reviewToken` |
+| POST | `/{id}/waivers` | `employeeId`、`reason`、`score` | 仅管理员核定缺项综合分，返回更新后的预览 |
+| POST | `/{id}/publish` | `reviewToken` | 全组成绩与等级事务发布；跨月份关联修订一并核对和发布 |
+| POST | `/{id}/reopen` | `reason` | 仅管理员重开，返回新草稿；原正式版本继续有效 |
+| GET | `/{id}/export` | 无 | Excel；包含比例、参评状态、分数、等级和版本，草稿明确标记 |
+
+预览会刷新草稿成绩，须使用 POST。`groups[].members` 包含 `employee_id`、`employee_no`、`employee_name`、`participating`、`exclusion_reason`、`summary_id`、`summary_version`、`final_score`、`rank_no`、`grade`、`old_score`、`old_grade`、`missing_items`、`error`；组级返回 `targets`、`actual`、`tie_expanded`。组内任何参评人缺分时不输出部分等级，以免形成误导。零分正常参与排名。
+
+名额采用最大余数法，小数余数相同时按 A/B/C 顺序；同分组以首位名次分档，允许扩入较高档，零名额档位跳过。查询过滤与分页仅影响前端展示。比例、名单、分数或评分依据变化时，旧 `reviewToken` 返回 409，必须重新预览。重复发布返回 409，不会产生重复正式版本。
+
+启用绩效的参评人员禁止通过逐人汇总发布/重开、历史评价导入发布或原关联修订发布绕过绩效流程。首次启用时该批次月份不得已有正式成绩；历史记录不自动补划。结果查询 `/evaluation/summaries` 增加 `performance_grade`、`performance_version`、`performance_managed`、`performance_batch_id`、`performance_pending`；培养画像评价增加 `performanceGrade`、`performanceVersion`、`performancePending`。员工仅可读取本人已发布结果，导师和站点负责人继续按员工数据范围读取正式等级。
+
 ## 考试中心
 
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |

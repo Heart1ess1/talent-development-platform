@@ -156,6 +156,7 @@ public class EvaluationService {
   }
 
   private Long writeMonthly(Long employeeId, YearMonth month, Map<String,Object> scheme, String reopenReason) {
+    db.queryForMap("select id from employee where id=? for update",employeeId);
     if (isLocked(employeeId, month) && (reopenReason == null || reopenReason.isBlank())) throw new BusinessException(400, "已发布月度汇总必须填写原因后重开");
     MonthlyCalculation calculation = calculate(employeeId, month, scheme);
     var draft = db.queryForList("select id from score_summary where employee_id=? and summary_type='MONTH' and period_key=? and status='DRAFT' order by version desc limit 1", employeeId, month.toString());

@@ -12,7 +12,7 @@ onMounted(()=>q.load())
 
 <template>
   <section class="panel">
-    <header><div class="filters"><el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="生成日期起" end-placeholder="生成日期止" range-separator="至"/></div><span>月度评价按生成时间筛选；暂定结果不覆盖已发布结果</span></header>
+    <header><div class="filters"><el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="生成日期起" end-placeholder="生成日期止" range-separator="至"/></div></header>
     <el-alert v-if="q.error.value" type="error" :title="q.error.value" show-icon>
       <template #default><el-button link type="primary" @click="q.load(q.page.value)">重试</el-button></template>
     </el-alert>
@@ -22,6 +22,7 @@ onMounted(()=>q.load())
       <el-table-column prop="version" label="版本" width="80"/>
       <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="s.row.status==='SUPERSEDED'?'info':s.row.provisional?'warning':'success'">{{s.row.status==='SUPERSEDED'?'历史版本':s.row.provisional?'暂定':'已发布'}}</el-tag></template></el-table-column>
       <el-table-column label="最终得分" width="110"><template #default="s"><strong>{{score(s.row.finalScore)}}</strong></template></el-table-column>
+      <el-table-column label="绩效等级" min-width="120"><template #default="s"><el-tag v-if="s.row.performanceGrade">{{s.row.performanceGrade}}</el-tag><span v-else>未划分</span><el-tag v-if="s.row.performancePending" type="warning" size="small">待修订</el-tag></template></el-table-column>
       <el-table-column prop="missingItems" label="缺项" min-width="180"><template #default="s">{{s.row.missingItems||'-'}}</template></el-table-column>
       <el-table-column label="生成 / 发布时间" min-width="190"><template #default="s">{{dateTime(s.row.generatedAt)}}<br>{{dateTime(s.row.publishedAt)}}</template></el-table-column>
     </el-table>

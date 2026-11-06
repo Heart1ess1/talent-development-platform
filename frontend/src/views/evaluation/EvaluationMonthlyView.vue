@@ -7,6 +7,7 @@ import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData'
 import {componentLabels,componentStatusLabels,scoreText,type ComponentCode,type ScoreComponent} from '@/evaluation/model'
+import MonthlyPerformancePanel from '@/components/MonthlyPerformancePanel.vue'
 import '@/styles/evaluation-center.css'
 
 type CandidateStatus='MY_PENDING'|'IN_PROGRESS'|'READY'|'PUBLISHED'|'NO_SCHEME'
@@ -14,10 +15,11 @@ interface Candidate{id:number;employee_no:string;name:string;class_id?:number;cl
 interface ManualInput{score:number;comment:string}
 
 const auth=useAuthStore(),route=useRoute(),router=useRouter()
+const activeTab=ref(route.query.tab==='performance'?'performance':'scores')
 const canManage=computed(()=>auth.can('evaluation:manage'))
 const canSubmit=computed(()=>auth.can('evaluation:submit'))
 const isAdmin=computed(()=>['ADMIN','SUPER_ADMIN'].includes(auth.user?.role||''))
-const month=ref(new Date().toISOString().slice(0,7)),candidates=ref<Candidate[]>([]),selected=ref<number>(),detail=ref<any>()
+const month=ref(typeof route.query.month==='string'&&/^\d{4}-\d{2}$/.test(route.query.month)?route.query.month:new Date().toISOString().slice(0,7)),candidates=ref<Candidate[]>([]),selected=ref<number>(),detail=ref<any>()
 const loading=ref(false),queueLoading=ref(false),loadError=ref(''),keyword=ref(''),statusFilter=ref('')
 const classId=ref<number|null>(null),classOptions=ref<DictionaryOption[]>([])
 const classPositionId=ref<number|null>(null),classPositionOptions=ref<DictionaryOption[]>([])
@@ -34,7 +36,7 @@ const stationComponent=computed<any>(()=>detail.value?.components?.find((x:any)=
 const stationWeightTotal=computed(()=>Number(stationWeights.value.reduce((sum,row)=>sum+Number(row.weight||0),0).toFixed(2)))
 
 const candidateStatusLabels:Record<CandidateStatus,string>={MY_PENDING:'待我评价',IN_PROGRESS:'评价进行中',READY:'评分已齐全',PUBLISHED:'结果已发布',NO_SCHEME:'未配置方案'}
-const candidateStatusTypes:Record<CandidateStatus,''|'success'|'warning'|'info'|'danger'>={MY_PENDING:'warning',IN_PROGRESS:'info',READY:'success',PUBLISHED:'',NO_SCHEME:'danger'}
+const candidateStatusTypes:Record<CandidateStatus,'primary'|'success'|'warning'|'info'|'danger'>={MY_PENDING:'warning',IN_PROGRESS:'info',READY:'success',PUBLISHED:'primary',NO_SCHEME:'danger'}
 const stationModeLabels:Record<string,string>={AUTO_BY_DAYS:'按在站天数自动加权',PRIMARY_STATION:'仅采用在站最久站点',MANUAL:'管理员手动设置权重'}
 
 function manualKey(code:ComponentCode,scopeId?:number|null){return `${code}:${scopeId||0}`}
@@ -61,6 +63,8 @@ function openStationWeights(){stationWeights.value=(stationComponent.value?.brea
 async function saveStationWeights(){if(stationWeightTotal.value!==100)return ElMessage.warning('站点权重合计必须为 100%');await api.put('/evaluation/monthly/station-weights',{employeeId:selected.value,month:month.value,stations:stationWeights.value.map(x=>({stationId:x.stationId,weight:x.weight}))});ElMessage.success('站点权重已按本员工本月单独保存');stationWeightOpen.value=false;await refreshAll()}
 async function resetStationWeights(){await ElMessageBox.confirm('确认恢复模板设定的自动站点权重吗？','恢复自动权重');await api.delete('/evaluation/monthly/station-weights',{params:{employeeId:selected.value,month:month.value}});stationWeightOpen.value=false;await refreshAll()}
 
+watch(()=>route.query.tab,value=>{activeTab.value=value==='performance'?'performance':'scores'})
+watch(()=>route.query.month,value=>{if(typeof value==='string'&&/^\d{4}-\d{2}$/.test(value))month.value=value})
 watch(month,async()=>{selected.value=undefined;await loadCandidates();await loadDetail()})
 watch(classId,async()=>{selected.value=undefined;await loadCandidates();await loadDetail()})
 watch(classPositionId,async()=>{selected.value=undefined;await loadCandidates();await loadDetail()})
@@ -71,13 +75,14 @@ onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promis
 <template>
   <div class="evaluation-module-page">
     <header class="evaluation-page-head">
-      <div><span class="eyebrow">综合评价 · 月度评分</span><h1>月度评价工作台</h1><p>按待办队列逐人完成评价。考试、任务自动取数；多位导师分别提交后取平均；跨站月份按实际在站天数汇总。</p></div>
-      <div class="evaluation-head-actions"><el-date-picker v-model="month" type="month" value-format="YYYY-MM" :clearable="false"/><el-button :icon="Refresh" @click="refreshAll">刷新</el-button><el-button v-if="canManage" type="primary" @click="generate">生成本月汇总</el-button></div>
+      <div><h1>月度评价工作台</h1></div>
+      <div class="evaluation-head-actions"><el-date-picker v-model="month" type="month" value-format="YYYY-MM" :clearable="false"/><el-button v-if="activeTab==='scores'" :icon="Refresh" @click="refreshAll">刷新</el-button><el-button v-if="canManage&&activeTab==='scores'" type="primary" @click="generate">生成本月汇总</el-button></div>
     </header>
-
-    <div class="monthly-review-layout">
+    <el-tabs v-if="canManage" v-model="activeTab"><el-tab-pane label="月度评分" name="scores"/><el-tab-pane label="绩效划分" name="performance"/></el-tabs>
+    <MonthlyPerformancePanel v-if="canManage&&activeTab==='performance'" :month="month"/>
+    <div v-else class="monthly-review-layout">
       <aside class="employee-review-queue" v-loading="queueLoading">
-        <div class="queue-title"><div><span class="eyebrow">评价对象</span><h2>员工队列</h2></div><el-tag effect="plain">{{filteredCandidates.length}} 人</el-tag></div>
+        <div class="queue-title"><div><h2>员工队列</h2></div><el-tag effect="plain">{{filteredCandidates.length}} 人</el-tag></div>
         <el-input v-model="keyword" :prefix-icon="Search" clearable placeholder="搜索姓名、工号、班级、批次或站点"/>
         <el-select v-model="classId" clearable filterable placeholder="全部班级" style="width:100%;margin-top:10px"><el-option v-for="item in classOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
         <el-select v-model="classPositionId" clearable filterable placeholder="全部班级职务" style="width:100%;margin-top:10px"><el-option v-for="item in classPositionOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select>
@@ -98,18 +103,18 @@ onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promis
       </aside>
 
       <main class="monthly-review-detail" v-loading="loading">
-        <div v-if="!selectedCandidate" class="detail-empty"><el-icon><User/></el-icon><h3>请选择一名员工</h3><p>左侧会优先显示需要你评价的员工。</p></div>
+        <div v-if="!selectedCandidate" class="detail-empty"><el-icon><User/></el-icon><h3>请选择一名员工</h3></div>
         <template v-else>
-          <div class="detail-person-head"><div><span class="eyebrow">当前评价对象</span><h2>{{selectedCandidate.name}} <small>{{selectedCandidate.employee_no}}</small></h2><p>{{selectedCandidate.batch_name||'未分配批次'}} · {{selectedCandidate.station_name||'未分配站点'}} · {{month}}</p></div><el-tag :type="candidateStatusTypes[selectedCandidate.status]" effect="plain" size="large">{{candidateStatusLabels[selectedCandidate.status]}}</el-tag></div>
+          <div class="detail-person-head"><div><h2>{{selectedCandidate.name}} <small>{{selectedCandidate.employee_no}}</small></h2><p>{{selectedCandidate.batch_name||'未分配批次'}} · {{selectedCandidate.station_name||'未分配站点'}} · {{month}}</p></div><el-tag :type="candidateStatusTypes[selectedCandidate.status]" effect="plain" size="large">{{candidateStatusLabels[selectedCandidate.status]}}</el-tag></div>
           <el-alert v-if="loadError" :title="loadError" description="请先在“评价模板”中把模板应用到该员工所属批次和月份，并发布方案。" type="warning" :closable="false" show-icon/>
           <template v-else-if="detail">
             <el-alert v-if="detail.pendingRevision" title="本月存在关联修订，正式结果在成组审核发布前保持不变。" type="info" :closable="false"/>
             <el-alert v-if="detail.locked" title="该月结果已经发布并锁定" description="如确需修改，请由管理员在结果中心重开。" type="warning" :closable="false" show-icon/>
             <div class="evaluation-summary-grid compact">
-              <article class="evaluation-summary-card blue"><span class="summary-icon"><el-icon><Document/></el-icon></span><div><small>当前模板</small><strong class="template-name">{{detail.templateName||`方案 V${detail.schemeVersion}`}}</strong><span>方案版本 V{{detail.schemeVersion}}</span></div></article>
-              <article class="evaluation-summary-card green"><span class="summary-icon"><el-icon><CircleCheck/></el-icon></span><div><small>已完成评分项</small><strong>{{completedCount}} / {{enabledCount}}</strong><span>自动与人工评分合计</span></div></article>
-              <article class="evaluation-summary-card violet"><span class="summary-icon"><el-icon><EditPen/></el-icon></span><div><small>加分 / 扣分</small><strong>{{scoreText(detail.bonus)}} / {{scoreText(detail.deduction)}}</strong><span>受模板上限约束</span></div></article>
-              <article class="evaluation-summary-card amber"><span class="summary-icon"><el-icon><Right/></el-icon></span><div><small>月度预览</small><strong>{{scoreText(detail.finalScore)}}</strong><span>{{detail.missingItems.length?`仍缺 ${detail.missingItems.length} 项`:'评分项已齐全'}}</span></div></article>
+              <article class="evaluation-summary-card blue"><span class="summary-icon"><el-icon><Document/></el-icon></span><div><small>当前模板</small><strong class="template-name">{{detail.templateName||`方案 V${detail.schemeVersion}`}}</strong></div></article>
+              <article class="evaluation-summary-card green"><span class="summary-icon"><el-icon><CircleCheck/></el-icon></span><div><small>已完成评分项</small><strong>{{completedCount}} / {{enabledCount}}</strong></div></article>
+              <article class="evaluation-summary-card violet"><span class="summary-icon"><el-icon><EditPen/></el-icon></span><div><small>加分 / 扣分</small><strong>{{scoreText(detail.bonus)}} / {{scoreText(detail.deduction)}}</strong></div></article>
+              <article class="evaluation-summary-card amber"><span class="summary-icon"><el-icon><Right/></el-icon></span><div><small>月度预览</small><strong>{{scoreText(detail.finalScore)}}</strong></div></article>
             </div>
 
             <div class="evaluation-component-grid monthly-components">
@@ -172,7 +177,7 @@ onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promis
 
             <div class="evaluation-total-card"><div><span>当前月度综合分</span><strong>{{scoreText(detail.finalScore)}}</strong></div><div v-if="detail.missingItems.length" class="evaluation-missing">待补齐：{{detail.missingItems.map((x:ComponentCode)=>componentLabels[x]).join('、')}}</div><div v-else>所有启用项已齐全，可以生成并发布汇总。</div></div>
 
-            <section v-if="canManage" class="adjustment-panel"><div><h3>加扣分登记</h3><p>仅登记有明确事实依据的额外表现，最终值受模板上限约束。</p></div><div class="evaluation-filters"><el-select v-model="adjustment.type" filterable><el-option label="加分" value="BONUS"/><el-option label="扣分" value="DEDUCTION"/></el-select><el-input-number v-model="adjustment.points" :min="0.01" :precision="2" controls-position="right"/><el-input v-model="adjustment.reason" maxlength="1000" placeholder="填写事实依据和原因"/><el-button type="primary" :disabled="detail.locked||detail.pendingRevision||!adjustment.reason.trim()" @click="addAdjustment">登记</el-button></div></section>
+            <section v-if="canManage" class="adjustment-panel"><div><h3>加扣分登记</h3></div><div class="evaluation-filters"><el-select v-model="adjustment.type" filterable><el-option label="加分" value="BONUS"/><el-option label="扣分" value="DEDUCTION"/></el-select><el-input-number v-model="adjustment.points" :min="0.01" :precision="2" controls-position="right"/><el-input v-model="adjustment.reason" maxlength="1000" placeholder="填写事实依据和原因"/><el-button type="primary" :disabled="detail.locked||detail.pendingRevision||!adjustment.reason.trim()" @click="addAdjustment">登记</el-button></div></section>
           </template>
         </template>
       </main>
