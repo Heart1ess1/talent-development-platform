@@ -117,5 +117,5 @@ onMounted(load)
 </template>
 
 <style scoped>
-.source-weight-section{margin-top:16px;padding:16px;border:1px solid #e7ebf2;border-radius:12px;background:#fafbfd}.source-weight-head{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:12px}.source-weight-head div{display:flex;flex-direction:column;gap:4px}.source-weight-head small{color:#8490a3}.source-weight-row{display:grid;grid-template-columns:minmax(220px,1fr) 150px 18px 36px;gap:8px;align-items:center;margin:8px 0}.source-weight-row .el-select{width:100%}
+.source-weight-section{margin-top:16px;padding:16px;border:1px solid #ebebeb;border-radius:12px;background:var(--app-primary-soft)}.source-weight-head{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:12px}.source-weight-head div{display:flex;flex-direction:column;gap:4px}.source-weight-head small{color:#8f8f8f}.source-weight-row{display:grid;grid-template-columns:minmax(220px,1fr) 150px 18px 36px;gap:8px;align-items:center;margin:8px 0}.source-weight-row .el-select{width:100%}
 </style>

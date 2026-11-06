@@ -13,9 +13,9 @@ withDefaults(defineProps<{compact?:boolean}>(),{compact:false})
 </template>
 
 <style scoped>
-.compliance-footer{display:flex;align-items:center;justify-content:center;gap:6px;padding:14px 20px;color:#8a96a8;background:transparent;font-size:12px;line-height:1.5;text-align:center}
-.compliance-footer.compact{padding:10px 0 0;font-size:10px}
+.compliance-footer{display:flex;align-items:center;justify-content:center;gap:6px;padding:14px 20px;color:#959595;background:transparent;font-size:14px;line-height:1.5;text-align:center}
+.compliance-footer.compact{padding:10px 0 0;font-size:14px}
 .compliance-footer a{color:inherit;text-decoration:none;transition:color .18s ease}
-.compliance-footer a:hover,.compliance-footer a:focus-visible{color:#1769aa;text-decoration:underline;outline:none}
+.compliance-footer a:hover,.compliance-footer a:focus-visible{color:var(--app-primary);text-decoration:underline;outline:none}
 @media(max-width:520px){.compliance-footer{flex-wrap:wrap;padding-right:14px;padding-left:14px}}
 </style>

@@ -142,7 +142,7 @@ onMounted(async()=>{
     <div class="page-head profile-head">
       <div>
         <h2>{{isEmployee?'个人资料':'账号设置'}}</h2>
-        <p>{{isEmployee?'维护个人证件照、联系方式与登录密码':'管理当前账号的头像与登录密码'}}</p>
+
       </div>
     </div>
     <el-alert v-if="auth.user?.mustChangePassword" title="当前使用临时密码，修改后才能使用其他功能" type="warning" show-icon :closable="false"/>
@@ -156,11 +156,7 @@ onMounted(async()=>{
             </el-avatar>
             <div class="avatar-copy">
               <strong>{{isEmployee?'个人证件照':'账号头像'}}</strong>
-              <p>
-                {{isEmployee
-                  ?'证件照由本人维护，并会同步作为右上角账号头像及人员档案照片。'
-                  :'上传后将用于右上角账号头像及账号管理列表。'}}
-              </p>
+
               <div class="avatar-actions">
                 <el-upload
                   accept=".jpg,.jpeg,.png,image/jpeg,image/png"
@@ -269,17 +265,17 @@ onMounted(async()=>{
 </template>
 
 <style scoped>
-.profile-head p{margin:6px 0 0;color:#8492a6;font-size:13px}
+.profile-head p{margin:6px 0 0;color:#909090;font-size:14px}
 .avatar-settings{display:flex;align-items:center;gap:18px;padding:4px 2px 20px}
-.profile-avatar{flex:0 0 auto;color:#2868c7;background:#e8f2fb;font-size:26px;font-weight:700}
+.profile-avatar{flex:0 0 auto;color:var(--app-primary);background:var(--app-primary-soft);font-size:30px;font-weight:700}
 .profile-avatar :deep(img){object-fit:cover}
 .avatar-copy{min-width:0}
-.avatar-copy>strong{display:block;color:#273348;font-size:14px}
-.avatar-copy>p{margin:5px 0 10px;color:#7b8798;font-size:12px;line-height:1.6}
+.avatar-copy>strong{display:block;color:#323232;font-size:16px}
+.avatar-copy>p{margin:5px 0 10px;color:#868686;font-size:14px;line-height:1.6}
 .avatar-actions{display:flex;align-items:center;gap:8px}
-.avatar-help{display:block;margin-top:8px;color:#9aa4b3;font-size:11px}
+.avatar-help{display:block;margin-top:8px;color:#a3a3a3;font-size:14px}
 .request-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
-.request-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:13px}
+.request-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:14px}
 @media(max-width:600px){
   .avatar-settings{align-items:flex-start}
   .profile-avatar{width:72px;height:72px}

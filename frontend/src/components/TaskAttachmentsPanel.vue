@@ -171,7 +171,7 @@ watch(()=>[props.listUrl,props.items] as const,load,{immediate:true,deep:true})
     <div v-if="!compact" class="attachment-head">
       <div>
         <h4><el-icon><Paperclip/></el-icon>{{title}}</h4>
-        <p>{{description}}</p>
+
       </div>
       <el-upload
         v-if="canManage&&uploadUrl"
@@ -228,17 +228,17 @@ watch(()=>[props.listUrl,props.items] as const,load,{immediate:true,deep:true})
 <style scoped>
 .task-attachment-panel{min-height:150px}
 .attachment-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:13px}
-.attachment-head h4{display:flex;align-items:center;gap:7px;margin:0;color:#344054;font-size:14px}.attachment-head p{margin:6px 0 0;color:#8993a4;font-size:12px}
+.attachment-head h4{display:flex;align-items:center;gap:7px;margin:0;color:#3f3f3f;font-size:16px}.attachment-head p{margin:6px 0 0;color:#929292;font-size:14px}
 .attachment-list{display:flex;flex-direction:column;gap:8px}
-.attachment-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e5eaf1;border-radius:9px;background:#fff}
-.attachment-icon{display:grid;flex:0 0 34px;height:34px;place-items:center;border-radius:9px;color:#347cc5;background:#edf6ff}
-.attachment-copy{display:flex;min-width:0;flex:1;flex-direction:column;gap:4px}.attachment-copy button{overflow:hidden;padding:0;border:0;color:#356fa9;background:none;text-align:left;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.attachment-copy button:hover{text-decoration:underline}.attachment-copy span{color:#929cab;font-size:11px}
+.attachment-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e9e9e9;border-radius:9px;background:#fff}
+.attachment-icon{display:grid;flex:0 0 34px;height:34px;place-items:center;border-radius:9px;color:var(--app-primary);background:var(--app-primary-soft)}
+.attachment-copy{display:flex;min-width:0;flex:1;flex-direction:column;gap:4px}.attachment-copy button{overflow:hidden;padding:0;border:0;color:var(--app-primary);background:none;text-align:left;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.attachment-copy button:hover{text-decoration:underline}.attachment-copy span{color:#9b9b9b;font-size:14px}
 .attachment-actions{display:flex;align-items:center;white-space:nowrap}.attachment-actions .el-button{margin:0}
-.attachment-empty{display:flex;min-height:135px;align-items:center;justify-content:center;flex-direction:column;border:1px dashed #dce3ec;border-radius:10px;color:#99a4b3}.attachment-empty .el-icon{font-size:27px}.attachment-empty strong{margin-top:8px;color:#647084;font-size:13px}.attachment-empty span{margin-top:5px;font-size:11px}
-.compact{min-height:0}.compact .attachment-list{flex-direction:row;flex-wrap:wrap;gap:6px}.compact .attachment-item{max-width:230px;padding:5px 9px;border-color:#dce8f6;background:#f7fbff}.compact .attachment-icon{display:none}.compact .attachment-copy button{max-width:205px;font-size:12px}
+.attachment-empty{display:flex;min-height:135px;align-items:center;justify-content:center;flex-direction:column;border:1px dashed #e2e2e2;border-radius:10px;color:#a3a3a3}.attachment-empty .el-icon{font-size:34px}.attachment-empty strong{margin-top:8px;color:#6f6f6f;font-size:14px}.attachment-empty span{margin-top:5px;font-size:14px}
+.compact{min-height:0}.compact .attachment-list{flex-direction:row;flex-wrap:wrap;gap:6px}.compact .attachment-item{max-width:230px;padding:5px 9px;border-color:var(--app-primary-border);background:var(--app-primary-soft)}.compact .attachment-icon{display:none}.compact .attachment-copy button{max-width:205px;font-size:14px}
 .attachment-preview{width:100%;border:0}.pdf-preview{height:65vh}.image-preview{display:block;max-height:65vh;object-fit:contain}
-.text-preview,.docx-preview{max-height:65vh;margin:0;padding:20px;overflow:auto;border-radius:8px;background:#f8fafc;white-space:pre-wrap;line-height:1.7}
+.text-preview,.docx-preview{max-height:65vh;margin:0;padding:20px;overflow:auto;border-radius:8px;background:var(--app-primary-soft);white-space:pre-wrap;line-height:1.7}
 .docx-preview{background:#fff;white-space:normal}.docx-preview :deep(img){max-width:100%}
-.unsupported-preview{display:flex;min-height:320px;align-items:center;justify-content:center;flex-direction:column;color:#929dac}.unsupported-preview .el-icon{font-size:44px}.unsupported-preview strong{margin-top:13px;color:#566174}.unsupported-preview span{margin-top:7px;font-size:12px}
+.unsupported-preview{display:flex;min-height:320px;align-items:center;justify-content:center;flex-direction:column;color:#9c9c9c}.unsupported-preview .el-icon{font-size:44px}.unsupported-preview strong{margin-top:13px;color:#606060}.unsupported-preview span{margin-top:7px;font-size:14px}
 @media(max-width:700px){.attachment-head{align-items:stretch;flex-direction:column}.attachment-item{align-items:flex-start}.attachment-actions{flex-direction:column;align-items:flex-end}}
 </style>

@@ -133,9 +133,9 @@ onMounted(load)
   <div class="course-module-page">
     <header class="course-page-head">
       <div>
-        <span class="eyebrow">课程管理 · 课程库</span>
+
         <h1>课程库</h1>
-        <p>维护可复用的课程内容与课件资料，培训日期、地点和参加人员在场次安排中配置。</p>
+
       </div>
       <div class="course-head-actions">
         <el-button :icon="Collection" @click="openSessions()">场次安排</el-button>
@@ -144,15 +144,15 @@ onMounted(load)
     </header>
 
     <section class="course-summary-grid">
-      <article class="course-summary-card blue"><span class="course-summary-icon"><el-icon><Collection/></el-icon></span><div><small>全部课程</small><strong>{{summary.totalCourses}}</strong><span>课程资产总数</span></div></article>
-      <article class="course-summary-card green"><span class="course-summary-icon"><el-icon><SwitchButton/></el-icon></span><div><small>已启用课程</small><strong>{{summary.enabledCourses}}</strong><span>可继续安排场次</span></div></article>
-      <article class="course-summary-card violet"><span class="course-summary-icon"><el-icon><Document/></el-icon></span><div><small>课件资料</small><strong>{{summary.totalMaterials}}</strong><span>跨场次复用</span></div></article>
-      <article class="course-summary-card amber"><span class="course-summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>累计课程安排</small><strong>{{summary.totalEnrollments}}</strong><span>员工参训人次</span></div></article>
+      <article class="course-summary-card blue"><span class="course-summary-icon"><el-icon><Collection/></el-icon></span><div><small>全部课程</small><strong>{{summary.totalCourses}}</strong></div></article>
+      <article class="course-summary-card green"><span class="course-summary-icon"><el-icon><SwitchButton/></el-icon></span><div><small>已启用课程</small><strong>{{summary.enabledCourses}}</strong></div></article>
+      <article class="course-summary-card violet"><span class="course-summary-icon"><el-icon><Document/></el-icon></span><div><small>课件资料</small><strong>{{summary.totalMaterials}}</strong></div></article>
+      <article class="course-summary-card amber"><span class="course-summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>累计课程安排</small><strong>{{summary.totalEnrollments}}</strong></div></article>
     </section>
 
     <section class="course-workspace">
       <div class="course-workspace-head">
-        <div><h2>课程资产</h2><p>课程内容和课件统一维护，避免每次开课重复上传。</p></div>
+        <div><h2>课程资产</h2></div>
         <span class="course-result-count">共 {{filteredRows.length}} 门课程</span>
       </div>
       <div class="course-tabs">
@@ -196,7 +196,7 @@ onMounted(load)
               </div>
             </template>
           </el-table-column>
-          <template #empty><div class="course-empty"><el-icon><Collection/></el-icon><strong>暂无课程</strong><span>先建立课程内容，再上传课件并安排培训场次</span><el-button class="course-empty-action" type="primary" :icon="Plus" @click="openCreate">新建课程</el-button></div></template>
+          <template #empty><div class="course-empty"><el-icon><Collection/></el-icon><strong>暂无课程</strong><el-button class="course-empty-action" type="primary" :icon="Plus" @click="openCreate">新建课程</el-button></div></template>
         </el-table>
       </div>
 
@@ -204,7 +204,7 @@ onMounted(load)
         <div v-if="filteredRows.length===0" class="course-empty course-mobile-empty">
           <el-icon><Collection/></el-icon>
           <strong>暂无课程</strong>
-          <span>先建立课程内容，再上传课件并安排培训场次</span>
+
           <el-button class="course-empty-action" type="primary" :icon="Plus" @click="openCreate">新建课程</el-button>
         </div>
         <article v-for="row in filteredRows" :key="row.id" class="mobile-course-card">
@@ -216,7 +216,7 @@ onMounted(load)
     </section>
 
     <el-dialog v-model="editorOpen" :title="editing?'编辑课程':'新建课程'" width="min(560px, 92vw)" destroy-on-close>
-      <div class="course-dialog-intro"><span><el-icon><Collection/></el-icon></span><div><strong>建立可复用的课程资产</strong><p>课程只描述稳定内容，培训时间与参加人员在场次中安排。</p></div></div>
+      <div class="course-dialog-intro"><span><el-icon><Collection/></el-icon></span><div><strong>建立可复用的课程资产</strong></div></div>
       <el-form label-position="top">
         <el-form-item label="课程名称" required><el-input v-model="form.name" maxlength="128" show-word-limit placeholder="例如：售后服务流程基础"/></el-form-item>
         <el-form-item label="课程说明"><el-input v-model="form.description" type="textarea" :rows="4" maxlength="4000" show-word-limit placeholder="说明学习目标、适用对象和主要内容"/></el-form-item>

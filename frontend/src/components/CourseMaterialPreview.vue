@@ -66,5 +66,5 @@ onBeforeUnmount(()=>{void closeSession()})
 </template>
 
 <style scoped>
-.secure-preview{min-height:320px}.preview-pages{display:flex;flex-direction:column;gap:20px;margin-top:16px;padding:16px;background:#e9eef5;user-select:none}.preview-pages figure{margin:0;text-align:center}.preview-pages img{display:block;width:100%;height:auto;margin:auto;box-shadow:0 4px 18px rgba(15,23,42,.16);pointer-events:none}.preview-pages figcaption{margin-top:7px;color:#68758a;font-size:12px}.preview-empty{display:flex;min-height:300px;align-items:center;justify-content:center;gap:8px;color:#8995a7}.preview-empty .el-icon{font-size:26px}
+.secure-preview{min-height:320px}.preview-pages{display:flex;flex-direction:column;gap:20px;margin-top:16px;padding:16px;background:var(--app-primary-soft);user-select:none}.preview-pages figure{margin:0;text-align:center}.preview-pages img{display:block;width:100%;height:auto;margin:auto;box-shadow:0 4px 18px rgba(0,0,0,.16);pointer-events:none}.preview-pages figcaption{margin-top:7px;color:#747474;font-size:14px}.preview-empty{display:flex;min-height:300px;align-items:center;justify-content:center;gap:8px;color:#949494}.preview-empty .el-icon{font-size:30px}
 </style>

@@ -63,22 +63,22 @@ onMounted(async()=>{await Promise.all([loadOverview(),loadMasters()])})
 <template>
   <div class="evaluation-module-page" v-loading="loading">
     <header class="evaluation-page-head">
-      <div><span class="eyebrow">综合评价 · 评分任务编排</span><h1>按任务和人员范围配置评分人</h1><p>先选择评价任务，再按全员、批次或板块统一设置评分人；系统自动展开到范围内的新员工，不再要求逐人分配。</p></div>
+      <div><h1>按任务和人员范围配置评分人</h1></div>
       <div class="evaluation-head-actions"><el-date-picker v-model="month" type="month" value-format="YYYY-MM" :clearable="false"/><el-button :icon="Refresh" @click="loadOverview">刷新</el-button><el-button type="primary" :icon="Plus" @click="generate">生成本月任务</el-button></div>
     </header>
 
     <section class="evaluation-summary-grid">
-      <article class="evaluation-summary-card blue"><span class="summary-icon"><el-icon><Calendar/></el-icon></span><div><small>员工任务数</small><strong>{{totals.tasks}}</strong><span>{{month}} 已生成任务</span></div></article>
-      <article class="evaluation-summary-card violet"><span class="summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>覆盖员工</small><strong>{{totals.employees}}</strong><span>按员工去重统计</span></div></article>
-      <article class="evaluation-summary-card amber"><span class="summary-icon"><el-icon><EditPen/></el-icon></span><div><small>未分配任务</small><strong>{{totals.unassigned}}</strong><span>需要补充范围规则</span></div></article>
-      <article class="evaluation-summary-card green"><span class="summary-icon"><el-icon><Setting/></el-icon></span><div><small>范围配置</small><strong>{{totals.rules}}</strong><span>全员、批次和板块规则</span></div></article>
+      <article class="evaluation-summary-card blue"><span class="summary-icon"><el-icon><Calendar/></el-icon></span><div><small>员工任务数</small><strong>{{totals.tasks}}</strong></div></article>
+      <article class="evaluation-summary-card violet"><span class="summary-icon"><el-icon><UserFilled/></el-icon></span><div><small>覆盖员工</small><strong>{{totals.employees}}</strong></div></article>
+      <article class="evaluation-summary-card amber"><span class="summary-icon"><el-icon><EditPen/></el-icon></span><div><small>未分配任务</small><strong>{{totals.unassigned}}</strong></div></article>
+      <article class="evaluation-summary-card green"><span class="summary-icon"><el-icon><Setting/></el-icon></span><div><small>范围配置</small><strong>{{totals.rules}}</strong></div></article>
     </section>
 
     <section class="evaluation-workspace">
-      <div class="evaluation-workspace-head"><div><h2>评价任务列表</h2><p>日常只需维护下面三类任务。板块配置优先于批次配置，批次配置优先于全员默认。</p></div></div>
+      <div class="evaluation-workspace-head"><div><h2>评价任务列表</h2></div></div>
       <div class="task-type-grid">
         <article v-for="row in summaries" :key="row.component" class="task-type-card" :class="componentMeta[row.component].color">
-          <div class="task-type-head"><span><el-icon><UserFilled/></el-icon></span><div><h3>{{componentMeta[row.component].title}}</h3><p>{{componentMeta[row.component].description}}</p></div></div>
+          <div class="task-type-head"><span><el-icon><UserFilled/></el-icon></span><div><h3>{{componentMeta[row.component].title}}</h3></div></div>
           <div class="task-type-metrics"><div><small>员工 / 任务</small><strong>{{row.employeeCount}} / {{row.taskCount}}</strong></div><div><small>范围配置</small><strong>{{row.ruleCount}}</strong></div><div><small>评分人数</small><strong>{{row.reviewerCount}}</strong></div><div><small>未分配</small><strong :class="{danger:row.unassignedCount}">{{row.unassignedCount}}</strong></div></div>
           <div class="coverage-line"><span>评分人覆盖</span><strong>{{row.coveredTaskCount}} / {{row.taskCount}}</strong><el-progress :percentage="row.taskCount?Math.round(row.coveredTaskCount*100/row.taskCount):0" :show-text="false"/></div>
           <el-button type="primary" plain :icon="Setting" @click="openComponent(row)">配置评分范围与评分人</el-button>
@@ -94,7 +94,7 @@ onMounted(async()=>{await Promise.all([loadOverview(),loadMasters()])})
         <el-alert title="推荐做法" description="人员基本一致时先设置“全员默认”；某个批次或板块需要不同评分人时，再增加对应范围作为覆盖规则。" type="info" :closable="false" show-icon/>
 
         <section class="scope-editor">
-          <div class="section-heading"><div><h3>{{editingId?'编辑范围配置':'新增范围配置'}}</h3><p>一次选择一个人员范围和该范围的全部评分人。</p></div><el-button v-if="editingId" link @click="resetForm">取消编辑</el-button></div>
+          <div class="section-heading"><div><h3>{{editingId?'编辑范围配置':'新增范围配置'}}</h3></div><el-button v-if="editingId" link @click="resetForm">取消编辑</el-button></div>
           <el-form label-position="top">
             <div class="scope-form-grid">
               <el-form-item label="适用范围"><el-select v-model="form.targetType" :disabled="editingId!==null" filterable style="width:100%" @change="targetChanged"><el-option label="全员默认" value="ALL"/><el-option label="指定批次" value="BATCH"/><el-option label="指定板块" value="BUSINESS_UNIT"/></el-select></el-form-item>
@@ -108,7 +108,7 @@ onMounted(async()=>{await Promise.all([loadOverview(),loadMasters()])})
         </section>
 
         <section class="scope-list">
-          <div class="section-heading"><div><h3>当前范围配置</h3><p>板块 ＞ 批次 ＞ 全员；更具体的规则会覆盖默认规则。</p></div><strong>{{rules.length}} 条</strong></div>
+          <div class="section-heading"><div><h3>当前范围配置</h3></div><strong>{{rules.length}} 条</strong></div>
           <el-table :data="rules" empty-text="尚未配置评分范围">
             <el-table-column label="人员范围" min-width="170"><template #default="s"><strong>{{targetLabel(s.row.target_type)}}</strong><small class="cell-subtitle">{{s.row.targetName}}</small></template></el-table-column>
             <el-table-column label="评分人" min-width="210"><template #default="s">{{reviewerNames(s.row)}}</template></el-table-column>
@@ -138,5 +138,5 @@ onMounted(async()=>{await Promise.all([loadOverview(),loadMasters()])})
 </template>
 
 <style scoped>
-.task-type-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.task-type-card{padding:20px;border:1px solid #e6eaf0;border-radius:14px;background:#fff}.task-type-card.blue{border-top:3px solid #409eff}.task-type-card.violet{border-top:3px solid #8264d7}.task-type-card.green{border-top:3px solid #27a87d}.task-type-head{display:flex;gap:12px}.task-type-head>span{display:grid;flex:0 0 42px;height:42px;place-items:center;border-radius:11px;color:#3177c9;background:#eaf3ff}.task-type-head h3{margin:0;color:#26344a}.task-type-head p{min-height:36px;margin:5px 0 0;color:#8490a2;font-size:12px}.task-type-metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:18px 0}.task-type-metrics>div{padding:10px 12px;border-radius:9px;background:#f7f9fc}.task-type-metrics small,.task-type-metrics strong{display:block}.task-type-metrics small{color:#8b96a7}.task-type-metrics strong{margin-top:4px;color:#344258}.task-type-metrics strong.danger{color:#e25555}.coverage-line{display:grid;grid-template-columns:1fr auto;gap:5px 12px;margin-bottom:16px;color:#7f8b9d;font-size:12px}.coverage-line strong{color:#4a5a70}.coverage-line .el-progress{grid-column:1/-1}.task-type-card>.el-button{width:100%}.scope-drawer{padding:26px}.scope-drawer-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.scope-drawer-head span{color:#3b82d0;font-size:12px;font-weight:700}.scope-drawer-head h2{margin:5px 0;color:#263449}.scope-drawer-head p{margin:0;color:#8591a3}.scope-editor,.scope-list,.employee-task-detail{margin-top:18px;padding:20px;border:1px solid #e7ebf1;border-radius:12px}.section-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}.section-heading h3{margin:0;color:#2c394d}.section-heading p{margin:5px 0 0;color:#8995a6;font-size:12px}.scope-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px}.wide-field{grid-column:1/-1}.cell-subtitle{display:block;margin-top:4px;color:#8b96a7;font-size:11px}.employee-task-detail :deep(.el-collapse-item__header){border:0}.employee-task-detail :deep(.el-collapse-item__wrap){border:0}@media(max-width:1050px){.task-type-grid{grid-template-columns:1fr}}@media(max-width:700px){.scope-form-grid{grid-template-columns:1fr}.wide-field{grid-column:auto}.scope-drawer{padding:18px}}
+.task-type-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.task-type-card{padding:20px;border:1px solid #eaeaea;border-radius:14px;background:#fff}.task-type-card.blue{border-top:3px solid var(--app-primary)}.task-type-card.violet{border-top:3px solid var(--app-primary)}.task-type-card.green{border-top:3px solid #27a87d}.task-type-head{display:flex;gap:12px}.task-type-head>span{display:grid;flex:0 0 42px;height:42px;place-items:center;border-radius:11px;color:var(--app-primary);background:var(--app-primary-soft)}.task-type-head h3{margin:0;color:#333333}.task-type-head p{min-height:36px;margin:5px 0 0;color:#8f8f8f;font-size:14px}.task-type-metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:18px 0}.task-type-metrics>div{padding:10px 12px;border-radius:9px;background:var(--app-primary-soft)}.task-type-metrics small,.task-type-metrics strong{display:block}.task-type-metrics small{color:#959595}.task-type-metrics strong{margin-top:4px;color:#414141}.task-type-metrics strong.danger{color:#e25555}.coverage-line{display:grid;grid-template-columns:1fr auto;gap:5px 12px;margin-bottom:16px;color:#8a8a8a;font-size:14px}.coverage-line strong{color:#585858}.coverage-line .el-progress{grid-column:1/-1}.task-type-card>.el-button{width:100%}.scope-drawer{padding:26px}.scope-drawer-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.scope-drawer-head span{color:var(--app-primary);font-size:14px;font-weight:700}.scope-drawer-head h2{margin:5px 0;color:#333333}.scope-drawer-head p{margin:0;color:#909090}.scope-editor,.scope-list,.employee-task-detail{margin-top:18px;padding:20px;border:1px solid #ebebeb;border-radius:12px}.section-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}.section-heading h3{margin:0;color:#383838}.section-heading p{margin:5px 0 0;color:#949494;font-size:14px}.scope-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px}.wide-field{grid-column:1/-1}.cell-subtitle{display:block;margin-top:4px;color:#959595;font-size:14px}.employee-task-detail :deep(.el-collapse-item__header){border:0}.employee-task-detail :deep(.el-collapse-item__wrap){border:0}@media(max-width:1050px){.task-type-grid{grid-template-columns:1fr}}@media(max-width:700px){.scope-form-grid{grid-template-columns:1fr}.wide-field{grid-column:auto}.scope-drawer{padding:18px}}
 </style>

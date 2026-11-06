@@ -1,4 +1,4 @@
-import {createApp} from 'vue';import {createPinia} from 'pinia';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';import './styles.css';import App from './App.vue';import router from './router';import {useAuthStore} from '@/stores/auth';
+import {createApp} from 'vue';import {createPinia} from 'pinia';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';import './styles/theme.css';import './styles.css';import './styles/typography.css';import App from './App.vue';import router from './router';import {useAuthStore} from '@/stores/auth';
 
 const app=createApp(App),pinia=createPinia();
 app.use(pinia).use(ElementPlus);

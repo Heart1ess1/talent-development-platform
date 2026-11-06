@@ -112,9 +112,9 @@ onMounted(()=>load())
   <div class="dictionary-page">
     <header class="page-heading">
       <div>
-        <span class="eyebrow">MASTER DATA</span>
+
         <h1>字典值管理</h1>
-        <p>统一维护系统可配置选项。停用后不再出现在新数据选项中，历史记录仍会保留。</p>
+
       </div>
       <div class="summary-strip">
         <span><strong>{{types.length}}</strong> 个字典</span>
@@ -221,40 +221,40 @@ onMounted(()=>load())
 </template>
 
 <style scoped>
-.dictionary-page{min-height:100%;padding:24px 24px 48px;background:#f5f7fb;color:#172033;box-sizing:border-box}
+.dictionary-page{min-height:100%;padding:24px 24px 48px;background:var(--app-page-bg);color:#1f1f1f;box-sizing:border-box}
 .page-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:22px}
-.eyebrow{display:block;margin-bottom:7px;color:#356bd8;font-size:12px;font-weight:700;letter-spacing:.12em}
-.page-heading h1{margin:0;font-size:28px;line-height:1.25}
-.page-heading p{margin:8px 0 0;color:#64748b;font-size:14px}
-.summary-strip{display:flex;gap:22px;padding:12px 16px;border:1px solid #e6ebf2;border-radius:12px;background:#fff;color:#6b778c;font-size:13px;white-space:nowrap}
-.summary-strip strong{color:#245fc5;font-size:18px}
-.dictionary-workspace{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:570px;border:1px solid #e3e8f0;border-radius:14px;background:#fff;box-shadow:0 8px 24px rgba(37,54,85,.05);overflow:hidden}
-.type-panel{padding:18px 12px;border-right:1px solid #e8ecf2;background:#fbfcfe}
-.panel-title{padding:0 10px 10px;color:#8a96a8;font-size:12px;font-weight:700;letter-spacing:.08em}
-.type-option{display:flex;align-items:center;gap:11px;width:100%;padding:11px 12px;border:0;border-radius:10px;background:transparent;color:#4b5870;text-align:left;cursor:pointer}
-.type-option:hover{background:#f0f4fa}
-.type-option.active{background:#eaf2ff;color:#245fc5}
-.type-icon{display:grid;width:34px;height:34px;place-items:center;border-radius:9px;background:#eef2f7;font-size:17px}
-.type-option.active .type-icon{background:#d9e8ff}
+.eyebrow{display:block;margin-bottom:7px;color:var(--app-primary);font-size:14px;font-weight:700;letter-spacing:.12em}
+.page-heading h1{margin:0;font-size:34px;line-height:1.25}
+.page-heading p{margin:8px 0 0;color:#727272;font-size:16px}
+.summary-strip{display:flex;gap:22px;padding:12px 16px;border:1px solid #eaeaea;border-radius:12px;background:#fff;color:#767676;font-size:14px;white-space:nowrap}
+.summary-strip strong{color:var(--app-primary);font-size:20px}
+.dictionary-workspace{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:570px;border:1px solid #e8e8e8;border-radius:14px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.05);overflow:hidden}
+.type-panel{padding:18px 12px;border-right:1px solid #ececec;background:var(--app-page-bg)}
+.panel-title{padding:0 10px 10px;color:#959595;font-size:14px;font-weight:700;letter-spacing:.08em}
+.type-option{display:flex;align-items:center;gap:11px;width:100%;padding:11px 12px;border:0;border-radius:10px;background:transparent;color:#575757;text-align:left;cursor:pointer}
+.type-option:hover{background:var(--app-page-bg)}
+.type-option.active{background:var(--app-page-bg);color:var(--app-primary)}
+.type-icon{display:grid;width:34px;height:34px;place-items:center;border-radius:9px;background:var(--app-page-bg);font-size:20px}
+.type-option.active .type-icon{background:var(--app-page-bg)}
 .type-copy{display:flex;min-width:0;flex-direction:column;gap:3px}
-.type-copy strong{font-size:14px}
-.type-copy small{color:#929eb0;font-size:11px}
+.type-copy strong{font-size:16px}
+.type-copy small{color:#9d9d9d;font-size:14px}
 .value-panel{min-width:0;padding:24px}
 .value-head{display:flex;align-items:center;justify-content:space-between;gap:20px}
-.value-head h2{margin:0;font-size:21px}
-.value-head p{margin:7px 0 0;color:#7c899c;font-size:13px}
+.value-head h2{margin:0;font-size:22px}
+.value-head p{margin:7px 0 0;color:#888888;font-size:14px}
 .value-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:22px 0 12px}
 .value-toolbar .el-input{max-width:340px}
-.value-toolbar span{color:#8a96a8;font-size:12px}
-.value-table code{padding:2px 7px;border-radius:5px;background:#f1f4f8;color:#4b5870;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
-.field-hint{margin-top:6px;color:#909bad;font-size:12px}
+.value-toolbar span{color:#959595;font-size:14px}
+.value-table code{padding:2px 7px;border-radius:5px;background:#f4f4f4;color:#575757;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}
+.field-hint{margin-top:6px;color:#9a9a9a;font-size:14px}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:800px){
   .dictionary-page{padding:18px 12px 78px}
   .page-heading{align-items:flex-start;flex-direction:column}
   .summary-strip{width:100%;box-sizing:border-box}
   .dictionary-workspace{display:block}
-  .type-panel{display:flex;gap:8px;padding:12px;overflow-x:auto;border-right:0;border-bottom:1px solid #e8ecf2}
+  .type-panel{display:flex;gap:8px;padding:12px;overflow-x:auto;border-right:0;border-bottom:1px solid #ececec}
   .panel-title{display:none}
   .type-option{min-width:155px}
   .value-panel{padding:18px 14px}

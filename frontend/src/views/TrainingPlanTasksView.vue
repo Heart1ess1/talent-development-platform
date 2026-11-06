@@ -214,9 +214,9 @@ onMounted(async()=>{
   <div class="plan-module-page orchestration-page">
     <section class="plan-hero">
       <div>
-        <span class="eyebrow">闯关任务 · 任务编排</span>
+
         <h1>任务编排</h1>
-        <p>按照实际培养路径设计任务内容、附件与先后顺序；下发时再确定目标人员和截止时间。</p>
+
       </div>
       <div class="hero-actions">
         <el-button :icon="Back" @click="router.push('/training-plans/manage')">返回任务管理</el-button>
@@ -227,19 +227,19 @@ onMounted(async()=>{
     <section v-if="selectedPlan" class="plan-summary-grid orchestration-summary">
       <article class="plan-summary-card blue">
         <span class="summary-icon"><el-icon><Document/></el-icon></span>
-        <div><small>编排任务</small><strong>{{tasks.length}}</strong><span>按顺序组成培养路径</span></div>
+        <div><small>编排任务</small><strong>{{tasks.length}}</strong></div>
       </article>
       <article class="plan-summary-card violet">
         <span class="summary-icon"><el-icon><CircleCheck/></el-icon></span>
-        <div><small>成果要求</small><strong>{{requirementsCount}}</strong><span>{{tasks.length-requirementsCount}} 项尚未补充</span></div>
+        <div><small>成果要求</small><strong>{{requirementsCount}}</strong></div>
       </article>
       <article class="plan-summary-card amber">
         <span class="summary-icon"><el-icon><Rank/></el-icon></span>
-        <div><small>已投入使用</small><strong>{{usedTaskCount}}</strong><span>已有员工执行记录</span></div>
+        <div><small>已投入使用</small><strong>{{usedTaskCount}}</strong></div>
       </article>
       <article class="plan-summary-card green">
         <span class="summary-icon"><el-icon><VideoPlay/></el-icon></span>
-        <div><small>计划就绪状态</small><strong class="status-strong">{{readinessText}}</strong><span>{{isPlanEnabled(selectedPlan)?'当前计划已启用':'完成编排后可启用'}}</span></div>
+        <div><small>计划就绪状态</small><strong class="status-strong">{{readinessText}}</strong></div>
       </article>
     </section>
 
@@ -286,12 +286,7 @@ onMounted(async()=>{
             </div>
           </div>
 
-          <div class="workflow-hint">
-            <span><strong>1</strong>设计任务内容</span><i></i>
-            <span><strong>2</strong>调整执行顺序</span><i></i>
-            <span><strong>3</strong>启用计划</span><i></i>
-            <span><strong>4</strong>选择人员并下发</span>
-          </div>
+
 
           <div class="task-list" v-loading="loadingTasks">
             <article
@@ -336,7 +331,7 @@ onMounted(async()=>{
             <div v-if="!loadingTasks&&!tasks.length" class="task-empty">
               <span class="empty-illustration"><el-icon><Document/></el-icon></span>
               <strong>这个计划还没有培养任务</strong>
-              <p>建议从基础认知到独立实操逐项添加，并为每项任务写清成果要求。</p>
+
               <el-button type="primary" :icon="Plus" @click="openCreate">添加第一项任务</el-button>
             </div>
           </div>
@@ -345,7 +340,7 @@ onMounted(async()=>{
         <div v-else class="task-empty full-empty">
           <span class="empty-illustration"><el-icon><Collection/></el-icon></span>
           <strong>暂无可编排的培养计划</strong>
-          <p>请先创建计划框架，再返回这里设计任务路径。</p>
+
           <el-button type="primary" @click="router.push('/training-plans/manage')">前往新建计划</el-button>
         </div>
       </main>
@@ -354,7 +349,7 @@ onMounted(async()=>{
     <el-dialog v-model="editorOpen" :title="editing?'编辑计划任务':'新增计划任务'" width="min(620px, 94vw)" destroy-on-close>
       <div class="dialog-intro">
         <span class="dialog-icon"><el-icon><Document/></el-icon></span>
-        <div><strong>{{selectedPlan?.name}}</strong><p>任务中定义稳定的培养内容与配套资料；人员范围和截止时间在下发时配置。</p></div>
+        <div><strong>{{selectedPlan?.name}}</strong></div>
       </div>
       <el-form label-position="top">
         <el-form-item label="任务名称" required>
