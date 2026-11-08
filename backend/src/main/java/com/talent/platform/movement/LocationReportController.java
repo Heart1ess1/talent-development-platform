@@ -213,6 +213,7 @@ public class LocationReportController {
         left join service_station s on s.id=e.station_id
         left join sys_user tm on tm.id=e.mentor_user_id
         """ + query.sql() + """
+
         order by r.occurred_at desc,r.id desc
         limit ? offset ?
         """;

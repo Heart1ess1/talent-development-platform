@@ -56,6 +56,8 @@ async function openPlan(row:any){
   finally{detailLoading.value=false}
 }
 async function exportResults(planId?:number){
+  const exportable=planId?planResults.value.some(isPublished):results.value.some(x=>x.source_type!=='HISTORICAL'&&x.result_status==='COMPLETED')
+  if(!exportable)return ElMessage.warning('当前没有可导出的数据')
   exporting.value=true
   try{
     const blob=await api.get<any,Blob>('/exams/results/export',{params:planId?{planId}:{},responseType:'blob'})

@@ -47,7 +47,8 @@ const routes=[
     {path:'station-change-review',component:()=>import('@/views/StationChangeReviewView.vue'),meta:{permission:'master:manage',title:'调站审批'}},
     {path:'dictionaries',component:()=>import('@/views/DictionaryManagementView.vue'),meta:{permission:'master:manage',title:'字典值管理'}},
     {path:'users',component:()=>import('@/views/UsersView.vue'),meta:{permission:'user:employee:manage',title:'账号管理'}},
-    {path:'profile',component:()=>import('@/views/ProfileView.vue'),meta:{title:'账号设置'}}
+    {path:'profile',component:()=>import('@/views/ProfileView.vue'),meta:{title:'账号设置'}},
+    {path:':pathMatch(.*)*',component:()=>import('@/views/NotFoundView.vue'),meta:{title:'页面不存在'}}
   ]}
 ];
 

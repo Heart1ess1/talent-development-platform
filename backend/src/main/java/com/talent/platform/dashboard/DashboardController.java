@@ -315,8 +315,10 @@ public class DashboardController {
     var queue = new ArrayList<Map<String, Object>>();
     long leavePending = leavePending(user.id());
     long leaveOverdue = leaveOverdue(user.id());
-    queue.add(queueItem("LEAVE_REVIEW","请假审批","处理指定给你的申请",leavePending,"/leave-requests","WARNING"));
-    queue.add(queueItem("LEAVE_OVERDUE","逾期未销假","已超过预计返回时间，尚未销假",leaveOverdue,"/leave-requests","DANGER"));
+    if (user.can(Permissions.LEAVE_VIEW)) {
+      queue.add(queueItem("LEAVE_REVIEW","请假审批","处理指定给你的申请",leavePending,"/leave-requests","WARNING"));
+      queue.add(queueItem("LEAVE_OVERDUE","逾期未销假","已超过预计返回时间，尚未销假",leaveOverdue,"/leave-requests","DANGER"));
+    }
     if (user.can(Permissions.TASK_SCORE)) queue.add(queueItem("TASK_REVIEW", "评分任务成果",
         "仅处理分配给你的成果评分", pendingTaskScores(user.id()),
         "/task-scoring?status=MY_PENDING", "WARNING"));

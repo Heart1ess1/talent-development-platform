@@ -215,16 +215,17 @@ public class UserController {
     var afterSnapshot=new LinkedHashMap<String,Object>();afterSnapshot.put("roles",roles);afterSnapshot.put("primaryRole",primaryRole);
     audit.log("CHANGE_USER_ROLES","USER",id,beforeSnapshot,afterSnapshot);
   }
-  /** 按角色集合维护服务站范围；不再拥有站长/区域经理时清空两张范围表。 */
+  /** 按角色集合维护服务站范围；stationIds 为 null（未传该字段）表示不修改，显式空数组表示清空范围。 */
   private boolean saveRoleStations(Long id,Collection<String> roles,List<Long> stationIds){
     boolean stationManager=roles.contains("STATION_MANAGER"),areaManager=roles.contains("AREA_MANAGER");
     if(!stationManager&&!areaManager)return clearStationScopes(id);
-    List<Long> desired=stationIds==null?List.of():new ArrayList<>(new LinkedHashSet<>(stationIds));
-    if(desired.isEmpty()){
+    if(stationIds==null){
       if(stationManager&&!hasStationScope(id,"station_manager_scope"))throw new BusinessException(400,"站长至少需要绑定一个服务站");
       if(areaManager&&!hasStationScope(id,"area_manager_scope"))throw new BusinessException(400,"区域经理至少需要绑定一个服务站");
       return false;
     }
+    List<Long> desired=new ArrayList<>(new LinkedHashSet<>(stationIds));
+    if(desired.isEmpty())return clearStationScopes(id);
     boolean changed=false;
     if(stationManager)changed|=replaceStationScope(id,"station_manager_scope",desired);
     if(areaManager)changed|=replaceStationScope(id,"area_manager_scope",desired);

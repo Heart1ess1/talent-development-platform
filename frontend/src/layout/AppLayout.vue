@@ -137,10 +137,10 @@ async function loadTodos(){
 function onUserMenuVisible(visible:boolean){if(visible)void loadTodos()}
 async function switchTo(role:Role){
   if(switching.value||role===auth.activeRole)return
-  const confirmed=await ElMessageBox.confirm(`切换为「${formatRoleLabel(role)}」后页面会刷新，未保存的修改请先保存。`,'切换身份',{confirmButtonText:'切换并刷新',cancelButtonText:'取消',type:'warning'}).catch(()=>false)
-  if(!confirmed)return
   switching.value=true
   try{
+    const confirmed=await ElMessageBox.confirm(`切换为「${formatRoleLabel(role)}」后页面会刷新，未保存的修改请先保存。`,'切换身份',{confirmButtonText:'切换并刷新',cancelButtonText:'取消',type:'warning'}).catch(()=>false)
+    if(!confirmed)return
     await auth.switchRole(role)
     const redirect=resolveAccessRedirect(route)
     if(redirect){

@@ -65,11 +65,11 @@ async function resetStationWeights(){await ElMessageBox.confirm('确认恢复模
 
 watch(()=>route.query.tab,value=>{activeTab.value=value==='performance'?'performance':'scores'})
 watch(()=>route.query.month,value=>{if(typeof value==='string'&&/^\d{4}-\d{2}$/.test(value))month.value=value})
-watch(month,async()=>{selected.value=undefined;await loadCandidates();await loadDetail()})
-watch(classId,async()=>{selected.value=undefined;await loadCandidates();await loadDetail()})
-watch(classPositionId,async()=>{selected.value=undefined;await loadCandidates();await loadDetail()})
+watch(month,async()=>{selected.value=undefined;await loadCandidates()})
+watch(classId,async()=>{selected.value=undefined;await loadCandidates()})
+watch(classPositionId,async()=>{selected.value=undefined;await loadCandidates()})
 watch(selected,async value=>{if(value){if(Number(route.query.employeeId)!==value)await router.replace({query:{...route.query,employeeId:String(value)}});await loadDetail()}})
-onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promise.all([loadDictionaryValues('CLASS'),loadDictionaryValues('CLASS_POSITION')]);await loadCandidates();await loadDetail()})
+onMounted(async()=>{[classOptions.value,classPositionOptions.value]=await Promise.all([loadDictionaryValues('CLASS'),loadDictionaryValues('CLASS_POSITION')]);await loadCandidates()})
 </script>
 
 <template>
