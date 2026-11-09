@@ -7,7 +7,7 @@ import {useAuthStore} from '@/stores/auth'
 import {resolveAccessRedirect} from '@/router'
 import {avatarUrl,nameInitial} from '@/utils/avatar'
 import {roleLabel as formatRoleLabel,type Role} from '@/utils/role'
-import {loadRoleTodos} from '@/utils/roleTodo'
+import {clearRoleTodos,loadRoleTodos} from '@/utils/roleTodo'
 import ComplianceFooter from '@/components/ComplianceFooter.vue'
 
 const auth=useAuthStore(),route=useRoute(),router=useRouter()
@@ -142,6 +142,7 @@ async function switchTo(role:Role){
     const confirmed=await ElMessageBox.confirm(`切换为「${formatRoleLabel(role)}」后页面会刷新，未保存的修改请先保存。`,'切换身份',{confirmButtonText:'切换并刷新',cancelButtonText:'取消',type:'warning'}).catch(()=>false)
     if(!confirmed)return
     await auth.switchRole(role)
+    clearRoleTodos(auth.user?.id)
     const redirect=resolveAccessRedirect(route)
     if(redirect){
       ElMessage.warning(`已切换为「${formatRoleLabel(role)}」，当前身份无权访问原页面，已返回首页`)
@@ -153,7 +154,7 @@ async function switchTo(role:Role){
     ElMessage.error(e?.response?.data?.message||'切换身份失败，请稍后重试')
   }finally{switching.value=false}
 }
-function logout(){auth.logout();router.push('/login')}
+function logout(){const userId=auth.user?.id;clearRoleTodos(userId);auth.logout();router.push('/login')}
 function handleUserCommand(command:string){
   if(command.startsWith(ROLE_COMMAND)){void switchTo(command.slice(ROLE_COMMAND.length) as Role);return}
   if(command==='settings')router.push('/profile')

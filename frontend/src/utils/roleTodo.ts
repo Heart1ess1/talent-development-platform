@@ -33,6 +33,17 @@ function writeCache(userId:number,roles:Role[],counts:Record<string,number|null>
   try{sessionStorage.setItem(cacheKey(userId),JSON.stringify({ts:Date.now(),roles,counts}))}catch{}
 }
 
+/** 清除待办缓存：传 userId 只清该账号，不传则清掉全部账号（退出登录时用）。 */
+export function clearRoleTodos(userId?:number){
+  try{
+    if(userId!==undefined){sessionStorage.removeItem(cacheKey(userId));return}
+    for(let i=sessionStorage.length-1;i>=0;i--){
+      const key=sessionStorage.key(i);
+      if(key?.startsWith(CACHE_PREFIX))sessionStorage.removeItem(key);
+    }
+  }catch{}
+}
+
 /**
  * 逐个身份取待办数：用 /auth/switch-role 换取一次性令牌，再以该令牌读取 /dashboard，令牌用完即弃、不写 localStorage。
  * 不改后端接口的前提只能这样做；取不到的身份返回 null（界面只显示名称，不报错）。
