@@ -38,6 +38,10 @@ type UserRow=AccountPersonnel&{
   created_at?:string
   has_employee_profile?:boolean
   station_ids?:string
+  station_manager_station_ids?:string
+  area_manager_station_ids?:string
+  station_manager_station_names?:string
+  area_manager_station_names?:string
   station_names?:string
   avatar_token?:string
 }
@@ -57,7 +61,7 @@ const scopeDialog=ref(false)
 const passwordDialog=ref(false)
 const scopeUser=ref<UserRow|null>(null)
 const rolesDialog=ref(false),rolesUser=ref<UserRow|null>(null)
-const rolesForm=reactive<{roles:Role[];primaryRole:Role|null;stationIds:number[]}>({roles:[],primaryRole:null,stationIds:[]})
+const rolesForm=reactive<{roles:Role[];primaryRole:Role|null;stationManagerStationIds:number[];areaManagerStationIds:number[]}>({roles:[],primaryRole:null,stationManagerStationIds:[],areaManagerStationIds:[]})
 const formRef=ref<FormInstance>()
 const page=ref(1)
 const pageSize=ref(10)
@@ -69,6 +73,8 @@ const accountBulkSaving=ref(false)
 const accountBulkAction=ref<'enabled'|'role'|'stationIds'>('enabled')
 const accountBulkEnabled=ref<boolean|null>(null)
 const accountBulkRole=ref<Role|null>(null)
+const accountBulkRoleAction=ref<'GRANT'|'REVOKE'>('GRANT')
+const accountBulkScopeRole=ref<Role>('STATION_MANAGER')
 const accountBulkStations=ref<number[]>([])
 const accountBulkSyncEmployee=ref(false)
 
@@ -79,7 +85,7 @@ const form=reactive<{username:string;displayName:string;role:Role;stationIds:num
   role:'MENTOR',
   stationIds:[]
 })
-const scopeForm=reactive<{stationIds:number[]}>({stationIds:[]})
+const scopeForm=reactive<{role:Role;stationIds:number[]}>({role:'STATION_MANAGER',stationIds:[]})
 const passwordResult=reactive({title:'',password:'',description:''})
 
 const roleDescriptions:Partial<Record<Role,string>>={
@@ -128,6 +134,8 @@ const pagedRows=computed(()=>filteredRows.value.slice((page.value-1)*pageSize.va
 const hasFilters=computed(()=>Object.values(filters).some(Boolean))
 
 watch(filters,()=>{page.value=1})
+watch([accountBulkEnabled,accountBulkRole,accountBulkRoleAction,accountBulkScopeRole,accountBulkStations,accountBulkSyncEmployee,selectedRows],()=>{accountBulkPreview.value=null},{deep:true,flush:'sync'})
+watch(()=>scopeForm.role,role=>{if(scopeUser.value)scopeForm.stationIds=stationIds(scopeUser.value,role)})
 watch(()=>rolesForm.roles,roles=>{
   if(rolesForm.primaryRole&&!roles.includes(rolesForm.primaryRole))rolesForm.primaryRole=roles[0]??null
 })
@@ -168,6 +176,8 @@ function openAccountBulk(action:'enabled'|'role'|'stationIds'){
   accountBulkAction.value=action
   accountBulkEnabled.value=null
   accountBulkRole.value=null
+  accountBulkRoleAction.value='GRANT'
+  accountBulkScopeRole.value='STATION_MANAGER'
   accountBulkStations.value=[]
   accountBulkSyncEmployee.value=false
   accountBulkPreview.value=null
@@ -176,8 +186,8 @@ function openAccountBulk(action:'enabled'|'role'|'stationIds'){
 
 function accountBulkChanges(){
   if(accountBulkAction.value==='enabled')return {enabled:accountBulkEnabled.value}
-  if(accountBulkAction.value==='role')return {role:accountBulkRole.value,...(['STATION_MANAGER','AREA_MANAGER'].includes(accountBulkRole.value||'')?{stationIds:accountBulkStations.value}:{})}
-  return {stationIds:accountBulkStations.value}
+  if(accountBulkAction.value==='role')return {role:accountBulkRole.value,roleAction:accountBulkRoleAction.value,...(accountBulkRoleAction.value==='GRANT'&&['STATION_MANAGER','AREA_MANAGER'].includes(accountBulkRole.value||'')?{stationIds:accountBulkStations.value}:{})}
+  return {scopeRole:accountBulkScopeRole.value,stationIds:accountBulkStations.value}
 }
 
 async function previewAccountBulk(){
@@ -319,20 +329,23 @@ function openRoles(row:UserRow,addEmployee=false){
   rolesForm.roles=roles
   rolesForm.primaryRole=primaryRoleOf(row)
   if(!roles.includes(rolesForm.primaryRole))rolesForm.primaryRole=roles[0]??null
-  rolesForm.stationIds=stationIds(row)
+  rolesForm.stationManagerStationIds=stationIds(row,'STATION_MANAGER')
+  rolesForm.areaManagerStationIds=stationIds(row,'AREA_MANAGER')
   rolesDialog.value=true
 }
 async function saveRoles(){
   if(!rolesUser.value)return
   if(!rolesForm.roles.length)return ElMessage.warning('请至少选择一个角色')
   if(!rolesForm.primaryRole||!rolesForm.roles.includes(rolesForm.primaryRole))return ElMessage.warning('请选择已分配角色中的主身份')
-  if((rolesForm.roles.includes('STATION_MANAGER')||rolesForm.roles.includes('AREA_MANAGER'))&&!rolesForm.stationIds.length)return ElMessage.warning('请选择负责的服务站')
+  if(rolesForm.roles.includes('STATION_MANAGER')&&!rolesForm.stationManagerStationIds.length)return ElMessage.warning('请选择站长负责的服务站')
+  if(rolesForm.roles.includes('AREA_MANAGER')&&!rolesForm.areaManagerStationIds.length)return ElMessage.warning('请选择区域经理负责的服务站')
   saving.value=true
   try{
     await api.put(`/users/${rolesUser.value.id}/roles`,{
       roles:rolesForm.roles,
       primaryRole:rolesForm.primaryRole,
-      stationIds:rolesForm.stationIds
+      stationManagerStationIds:rolesForm.stationManagerStationIds,
+      areaManagerStationIds:rolesForm.areaManagerStationIds
     })
     rolesDialog.value=false
     ElMessage.success('角色与主身份已更新，该账号原有登录状态将失效')
@@ -379,13 +392,15 @@ async function changeUsername(row:UserRow){
   await load()
 }
 
-function stationIds(row:UserRow){
-  return String(row.station_ids||'').split(',').filter(Boolean).map(value=>Number(value))
+function stationIds(row:UserRow,role:Role){
+  const value=role==='AREA_MANAGER'?row.area_manager_station_ids:row.station_manager_station_ids
+  return String(value||'').split(',').filter(Boolean).map(value=>Number(value))
 }
 
 function openScope(row:UserRow){
   scopeUser.value=row
-  scopeForm.stationIds=stationIds(row)
+  scopeForm.role=rowRoles(row).includes('STATION_MANAGER')?'STATION_MANAGER':'AREA_MANAGER'
+  scopeForm.stationIds=stationIds(row,scopeForm.role)
   scopeDialog.value=true
 }
 
@@ -397,7 +412,7 @@ async function saveScope(){
   }
   saving.value=true
   try{
-    await api.put(`/users/${scopeUser.value.id}/stations`,{stationIds:scopeForm.stationIds})
+    await api.put(`/users/${scopeUser.value.id}/stations`,{role:scopeForm.role,stationIds:scopeForm.stationIds})
     ElMessage.success('服务站范围已更新')
     scopeDialog.value=false
     await load()
@@ -433,22 +448,21 @@ async function deleteAccount(row:UserRow){
 }
 
 function canOperate(row:UserRow){
-  return row.role==='EMPLOYEE'
-    || (['MENTOR','STATION_MANAGER','AREA_MANAGER','TRAINING_DIRECTOR','TRAINING_ADMIN'].includes(row.role)&&canOps.value)
-    || superAdmin.value
+  return rowRoles(row).every(role=>role==='EMPLOYEE'?auth.can('user:employee:manage'):['ADMIN','SUPER_ADMIN'].includes(role)?superAdmin.value:canOps.value)
 }
+function canSetScope(row:UserRow){return canOperate(row)&&rowRoles(row).some(role=>['STATION_MANAGER','AREA_MANAGER'].includes(role))}
 function canChangeRole(row:UserRow){
   return superAdmin.value&&row.id!==auth.user?.id
 }
 function canChangeUsername(row:UserRow){
-  return superAdmin.value&&row.role!=='SUPER_ADMIN'
+  return superAdmin.value&&!rowRoles(row).includes('SUPER_ADMIN')
 }
 function needsEmployeeRoleRepair(row:UserRow){
   return superAdmin.value&&row.id!==auth.user?.id&&row.has_employee_profile&&!rowRoles(row).includes('EMPLOYEE')
 }
 function hasMoreActions(row:UserRow){
   return superAdmin.value
-    || (['STATION_MANAGER','AREA_MANAGER'].includes(row.role)&&(canOps.value||superAdmin.value))
+    || canSetScope(row)
     || (canOperate(row)&&row.id!==auth.user?.id)
 }
 function initials(name:string){
@@ -529,7 +543,7 @@ onMounted(load)
         <span>已选择 <strong>{{selectedRows.length}}</strong> 个账号</span>
         <el-button size="small" text @click="selectFilteredAccounts">全选当前筛选</el-button>
         <el-button size="small" type="primary" @click="openAccountBulk('enabled')">批量启停</el-button>
-        <el-button v-if="superAdmin" size="small" @click="openAccountBulk('role')">批量设为唯一角色</el-button>
+        <el-button v-if="superAdmin" size="small" @click="openAccountBulk('role')">批量授予或撤销身份</el-button>
         <el-button v-if="canOps||superAdmin" size="small" @click="openAccountBulk('stationIds')">批量设服务站</el-button>
         <el-button size="small" text @click="clearAccountSelection">取消选择</el-button>
       </div>
@@ -586,11 +600,9 @@ onMounted(load)
 
         <el-table-column label="服务站范围" min-width="190">
           <template #default="{row}">
-            <div v-if="row.station_names" class="station-cell">
-              <el-icon><Location/></el-icon>
-              <el-tooltip :content="row.station_names" placement="top">
-                <span>{{row.station_names}}</span>
-              </el-tooltip>
+            <div v-if="row.station_manager_station_names||row.area_manager_station_names">
+              <div v-if="row.station_manager_station_names">站长：{{row.station_manager_station_names}}</div>
+              <div v-if="row.area_manager_station_names">区域经理：{{row.area_manager_station_names}}</div>
             </div>
             <span v-else class="empty-value">—</span>
           </template>
@@ -624,7 +636,7 @@ onMounted(load)
                     <el-dropdown-item v-if="superAdmin" command="displayName" :icon="EditPen">修改姓名</el-dropdown-item>
                     <el-dropdown-item v-if="canChangeUsername(row)" command="username" :icon="UserIcon">修改用户名</el-dropdown-item>
                     <el-dropdown-item
-                      v-if="['STATION_MANAGER','AREA_MANAGER'].includes(row.role)&&(canOps||superAdmin)"
+                      v-if="canSetScope(row)"
                       command="scope"
                       :icon="Location"
                     >服务站范围</el-dropdown-item>
@@ -680,8 +692,13 @@ onMounted(load)
           </el-select>
           <div class="field-help">主身份决定登录默认身份，并同步为账号列表展示的主角色。</div>
         </el-form-item>
-        <el-form-item v-if="rolesForm.roles.includes('STATION_MANAGER')||rolesForm.roles.includes('AREA_MANAGER')" label="负责服务站" required>
-          <el-select v-model="rolesForm.stationIds" class="full-width" multiple filterable collapse-tags collapse-tags-tooltip placeholder="请至少选择一个服务站">
+        <el-form-item v-if="rolesForm.roles.includes('STATION_MANAGER')" label="站长负责服务站" required>
+          <el-select v-model="rolesForm.stationManagerStationIds" class="full-width" multiple filterable placeholder="请选择站长负责的服务站">
+            <el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/>
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="rolesForm.roles.includes('AREA_MANAGER')" label="区域经理负责服务站" required>
+          <el-select v-model="rolesForm.areaManagerStationIds" class="full-width" multiple filterable placeholder="请选择区域经理负责的服务站">
             <el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/>
           </el-select>
         </el-form-item>
@@ -691,17 +708,25 @@ onMounted(load)
         <el-button type="primary" :loading="saving" @click="saveRoles">保存</el-button>
       </template>
     </el-dialog>
-    <el-dialog v-model="accountBulkOpen" class="account-dialog" :title="accountBulkAction==='enabled'?'批量启停账号':accountBulkAction==='role'?'批量设为唯一角色':'批量设置服务站范围'" width="560px" destroy-on-close>
+    <el-dialog v-model="accountBulkOpen" class="account-dialog" :title="accountBulkAction==='enabled'?'批量启停账号':accountBulkAction==='role'?'批量授予或撤销身份':'批量设置服务站范围'" width="560px" destroy-on-close>
       <div class="bulk-account-tip">已选择 {{selectedRows.length}} 个账号；执行前会重新校验权限和账号安全约束。</div>
       <el-form label-position="top">
         <el-form-item v-if="accountBulkAction==='enabled'" label="目标状态">
           <el-radio-group v-model="accountBulkEnabled"><el-radio :label="true">启用</el-radio><el-radio :label="false">停用</el-radio></el-radio-group>
         </el-form-item>
-        <el-form-item v-if="accountBulkAction==='role'" label="目标角色（将替换该账号现有全部角色）">
+        <el-form-item v-if="accountBulkAction==='role'" label="调整方式">
+          <el-radio-group v-model="accountBulkRoleAction"><el-radio label="GRANT">授予身份</el-radio><el-radio label="REVOKE">撤销身份</el-radio></el-radio-group>
+          <div class="field-help">仅调整指定身份；授予已有身份、撤销未有身份均不变。保留其他身份及其服务站范围。</div>
+          <div class="field-help">授予身份保留原主身份；撤销主身份时，按现有身份顺序选用第一个剩余身份作为登录默认身份。</div>
+        </el-form-item>
+        <el-form-item v-if="accountBulkAction==='role'" label="目标身份">
           <el-select v-model="accountBulkRole" class="full-width" filterable placeholder="请选择角色"><el-option v-for="role in changeRoles" :key="role" :label="roleLabels[role]" :value="role"/></el-select>
         </el-form-item>
-        <el-form-item v-if="accountBulkAction==='stationIds'||(accountBulkAction==='role'&&['STATION_MANAGER','AREA_MANAGER'].includes(accountBulkRole||''))" label="服务站范围">
-          <el-select v-model="accountBulkStations" class="full-width" multiple filterable collapse-tags collapse-tags-tooltip placeholder="请选择服务站"><el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/></el-select>
+        <el-form-item v-if="accountBulkAction==='stationIds'" label="调整哪个身份的范围">
+          <el-select v-model="accountBulkScopeRole" class="full-width" filterable><el-option label="站长" value="STATION_MANAGER"/><el-option label="区域经理" value="AREA_MANAGER"/></el-select>
+        </el-form-item>
+        <el-form-item v-if="accountBulkAction==='stationIds'||(accountBulkAction==='role'&&accountBulkRoleAction==='GRANT'&&['STATION_MANAGER','AREA_MANAGER'].includes(accountBulkRole||''))" :label="accountBulkAction==='role'?'新增身份的服务站范围（已有身份保持不变）':'负责服务站'">
+          <el-select v-model="accountBulkStations" class="full-width" multiple filterable placeholder="请选择服务站"><el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/></el-select>
         </el-form-item>
         <el-checkbox v-if="accountBulkAction==='enabled'" v-model="accountBulkSyncEmployee">同步关联员工人员状态</el-checkbox>
       </el-form>
@@ -744,8 +769,6 @@ onMounted(load)
             class="full-width"
             multiple
             filterable
-            collapse-tags
-            collapse-tags-tooltip
             placeholder="请选择负责的服务站"
           >
             <el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/>
@@ -765,13 +788,15 @@ onMounted(load)
         <div><strong>{{scopeUser?.display_name}}</strong><span>@{{scopeUser?.username}}</span></div>
       </div>
       <label class="dialog-field-label">负责服务站</label>
+      <el-select v-model="scopeForm.role" class="full-width" filterable style="margin-bottom:12px" aria-label="选择身份">
+        <el-option v-if="scopeUser&&rowRoles(scopeUser).includes('STATION_MANAGER')" label="站长负责范围" value="STATION_MANAGER"/>
+        <el-option v-if="scopeUser&&rowRoles(scopeUser).includes('AREA_MANAGER')" label="区域经理负责范围" value="AREA_MANAGER"/>
+      </el-select>
       <el-select
         v-model="scopeForm.stationIds"
         class="full-width"
         multiple
         filterable
-        collapse-tags
-        collapse-tags-tooltip
         placeholder="请至少选择一个服务站"
       >
         <el-option v-for="station in stations" :key="station.id" :label="station.name" :value="station.id"/>

@@ -22,7 +22,7 @@ const labels:Record<string,string>={STATION_MANAGER:'站长',AREA_MANAGER:'区�
 const role=computed(()=>tab.value==='站长管理'?'STATION_MANAGER':'AREA_MANAGER')
 const people=(level:string)=>context.value.users.filter(x=>x.role===level)
 const selectedNames=(station:number,level:string)=>context.value.scopes.filter(x=>x.station_id===station&&x.level===level).map(x=>personName(x.user_id)).join('、')||'未配置'
-const stationNames=(user:number)=>context.value.scopes.filter(x=>x.user_id===user).map(x=>x.station_name).join('、')||'未分配'
+const stationNames=(user:number,level=role.value)=>context.value.scopes.filter(x=>x.user_id===user&&x.level===level).map(x=>x.station_name).join('、')||'未分配'
 const personName=(id:number)=>{const person=context.value.users.find(x=>x.id===id);return person?`${person.display_name}（${person.username}）`:String(id)}
 const scopedIds=(station:number,level:string)=>context.value.scopes.filter(x=>x.station_id===station&&x.level===level).map(x=>x.user_id)
 const stationOptions=computed(()=>context.value.stations.map(x=>({key:x.id,label:x.name+(x.enabled?'':'（停用）')})))
@@ -36,13 +36,13 @@ watch([tab,keyword],()=>{page.value=1})
 async function load(){loading.value=true;try{const response=await api.get<any,Envelope<typeof context.value>>('/station-responsibilities');context.value=response.data}finally{loading.value=false}}
 function reset(){preview.value=null;pendingAssignments.value=[];Object.keys(transfers).forEach(key=>delete transfers[key]);Object.assign(form,{stationManagers:[],areaManagers:[],stationIds:[],replacementId:null,reason:''})}
 function editStation(station:Station){reset();editing.value='station';selectedStation.value=station;selectedPerson.value=null;form.stationManagers=scopedIds(station.id,'STATION_MANAGER');form.areaManagers=scopedIds(station.id,'AREA_MANAGER');dialog.value=true}
-function editPerson(person:Person){reset();editing.value='person';selectedPerson.value=person;selectedStation.value=null;form.stationIds=context.value.scopes.filter(x=>x.user_id===person.id).map(x=>x.station_id);dialog.value=true}
+function editPerson(person:Person){reset();editing.value='person';selectedPerson.value=person;selectedStation.value=null;form.stationIds=context.value.scopes.filter(x=>x.user_id===person.id&&x.level===person.role).map(x=>x.station_id);dialog.value=true}
 function assignments():Assignment[]{
   let result:Assignment[]=[]
   if(editing.value==='station'&&selectedStation.value)result=[{stationId:selectedStation.value.id,level:'STATION_MANAGER',userIds:form.stationManagers},{stationId:selectedStation.value.id,level:'AREA_MANAGER',userIds:form.areaManagers}]
   if(editing.value==='person'&&selectedPerson.value){
     const person=selectedPerson.value
-    const before=context.value.scopes.filter(x=>x.user_id===person.id).map(x=>x.station_id)
+    const before=context.value.scopes.filter(x=>x.user_id===person.id&&x.level===person.role).map(x=>x.station_id)
     result=[...new Set([...before,...form.stationIds])].map(stationId=>{
       let ids=scopedIds(stationId,person.role).filter(x=>x!==person.id)
       if(form.stationIds.includes(stationId))ids.push(person.id)

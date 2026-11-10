@@ -24,11 +24,9 @@ public class StationResponsibilityService {
   public Map<String,Object> context(){
     permissions.require(Permissions.USER_OPS_ROLE_MANAGE);
     return Map.of("stations",db.queryForList("select id,name,enabled from service_station order by name,id"),
-        "users",db.queryForList("select u.id,u.username,u.display_name,u.enabled,"
-            +"coalesce((select r.role_code from sys_user_role r where r.user_id=u.id and r.role_code in ('STATION_MANAGER','AREA_MANAGER') "
-            +"order by r.is_primary desc,r.assigned_at,r.role_code limit 1),u.role) role "
-            +"from sys_user u where exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code in ('STATION_MANAGER','AREA_MANAGER')) "
-            +"order by u.display_name,u.id"),
+        "users",db.queryForList("select u.id,u.username,u.display_name,u.enabled,r.role_code role "
+            +"from sys_user u join sys_user_role r on r.user_id=u.id and r.role_code in ('STATION_MANAGER','AREA_MANAGER') "
+            +"order by u.display_name,u.id,r.role_code"),
         "scopes",scopes());
   }
 
