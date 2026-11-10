@@ -297,7 +297,7 @@ public class DashboardController {
     long employeeCount = number(evaluation.get("employee_total")).longValue();
     var metrics = new LinkedHashMap<String, Object>();
     metrics.put("employee_count", employeeCount);
-    metrics.put("pending_actions", pendingActionCount(user, task, exam, evaluation, month, scope));
+    metrics.put("pending_actions", 0L);
     metrics.put("task_completion_rate", percent(task.get("approved"), task.get("assignment_total")));
     metrics.put("course_attendance_rate", percent(course.get("attended_enrollments"), course.get("finished_enrollments")));
     metrics.put("exam_completion_rate", percent(exam.get("completed_total"), exam.get("assigned_total")));
@@ -315,8 +315,10 @@ public class DashboardController {
     var queue = new ArrayList<Map<String, Object>>();
     long leavePending = leavePending(user.id());
     long leaveOverdue = leaveOverdue(user.id());
-    queue.add(queueItem("LEAVE_REVIEW","请假审批","处理指定给你的申请",leavePending,"/leave-requests","WARNING"));
-    queue.add(queueItem("LEAVE_OVERDUE","逾期未销假","已超过预计返回时间，尚未销假",leaveOverdue,"/leave-requests","DANGER"));
+    if (user.can(Permissions.LEAVE_VIEW)) {
+      queue.add(queueItem("LEAVE_REVIEW","请假审批","处理指定给你的申请",leavePending,"/leave-requests","WARNING"));
+      queue.add(queueItem("LEAVE_OVERDUE","逾期未销假","已超过预计返回时间，尚未销假",leaveOverdue,"/leave-requests","DANGER"));
+    }
     if (user.can(Permissions.TASK_SCORE)) queue.add(queueItem("TASK_REVIEW", "评分任务成果",
         "仅处理分配给你的成果评分", pendingTaskScores(user.id()),
         "/task-scoring?status=MY_PENDING", "WARNING"));
@@ -346,6 +348,7 @@ public class DashboardController {
       queue.add(queueItem("ATTENDANCE", "补齐课程签到", "核对近 30 天已结束场次的缺失签到记录", missingAttendance,
           "/courses/attendance", "NEUTRAL"));
     }
+    metrics.put("pending_actions", queue.stream().mapToLong(item -> number(item.get("count")).longValue()).sum());
     result.put("work_queue", queue);
 
     var schedule = new ArrayList<Map<String, Object>>();
@@ -445,27 +448,6 @@ public class DashboardController {
     item.put("route", route);
     item.put("tone", tone);
     return item;
-  }
-
-  private long pendingActionCount(CurrentUser user, Map<String, Object> task, Map<String, Object> exam,
-                                  Map<String, Object> evaluation, String month,
-                                  PermissionService.ScopeFilter scope) {
-    long count = 0;
-    count += leavePending(user.id()) + leaveOverdue(user.id());
-    if (user.can(Permissions.TASK_SCORE)) count += pendingTaskScores(user.id());
-    if (user.can(Permissions.EXAM_MANAGE)) {
-      count += number(exam.get("pending_review")).longValue();
-      count += scopedCount("""
-          select count(*) from exam_attempt a join employee e on e.id=a.employee_id
-          where a.status='GRADED' and a.published=false
-          """, scope);
-    }
-    if (user.can(Permissions.EVALUATION_SUBMIT)) count += pendingManualScores(user, month, scope);
-    if (user.can(Permissions.EVALUATION_MANAGE)) {
-      count += Math.max(0, number(evaluation.get("employee_total")).longValue()
-          - number(evaluation.get("published_total")).longValue());
-    }
-    return count;
   }
 
   private long leavePending(Long userId) {

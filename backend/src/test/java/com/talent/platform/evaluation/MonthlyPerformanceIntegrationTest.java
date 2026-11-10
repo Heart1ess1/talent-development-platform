@@ -43,7 +43,7 @@ class MonthlyPerformanceIntegrationTest {
   List<Long> people;
   BigDecimal d(String x){return new BigDecimal(x);}
   long insert(String sql,Object...args){var key=new GeneratedKeyHolder();db.update(c->{var s=c.prepareStatement(sql,Statement.RETURN_GENERATED_KEYS);for(int i=0;i<args.length;i++)s.setObject(i+1,args[i]);return s;},key);return key.getKey().longValue();}
-  long user(String role){return insert("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused',?,false)",tag+role+UUID.randomUUID().toString().substring(0,6),tag+role,role);}
+  long user(String role){long id=insert("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused',?,false)",tag+role+UUID.randomUUID().toString().substring(0,6),tag+role,role);db.update("insert into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,?,true,?)",id,role,id);return id;}
   void login(long id){SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(permissions.load(id),null,List.of()));}
   @BeforeEach void fixture(){
     tag="abc"+UUID.randomUUID().toString().substring(0,8);operator=user("SUPER_ADMIN");mentor=user("MENTOR");login(operator);

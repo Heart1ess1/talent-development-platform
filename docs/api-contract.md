@@ -471,18 +471,39 @@ Authorization: Bearer <token>
 | 方法 | 路径 | 权限 | 用途 | 关键入参 | 关键返回 |
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/users` | `user:employee:manage` | 查询账号 | 可选 `role`；按当前账号可管理角色返回，站点负责人含 `station_ids`、`station_names` | 账号列表 |
-| `POST` | `/api/v1/users` | 运营角色需 `user:ops-role:manage`，管理员需 `user:admin:manage` | 创建非员工账号 | `username`、`displayName`、`role=MENTOR|STATION_MANAGER|TRAINING_ADMIN|ADMIN`、`stationIds` | `id`、`temporaryPassword` |
+| `POST` | `/api/v1/users` | 运营角色需 `user:ops-role:manage`，管理员需 `user:admin:manage` | 创建非员工账号 | `username`、`displayName`、`role=MENTOR|STATION_MANAGER|AREA_MANAGER|TRAINING_ADMIN|ADMIN`、`stationIds` | `id`、`temporaryPassword` |
 | `PUT` | `/api/v1/users/{id}/enabled` | 员工账号需 `user:employee:manage`，运营角色需 `user:ops-role:manage`，管理员角色需 `user:admin:manage` | 启停账号 | `enabled` | 空 |
-| `PUT` | `/api/v1/users/{id}/role` | `user:admin:manage` | 修改非当前账号角色 | 普通账号支持 `MENTOR|TRAINING_ADMIN|ADMIN|SUPER_ADMIN`；关联员工档案的账号角色固定为 `EMPLOYEE`，仅允许将历史异常角色恢复为 `EMPLOYEE` | 空 |
+| `PUT` | `/api/v1/users/{id}/role` | `user:admin:manage` | 设为唯一角色（会撤销其他身份） | 旧接口支持 `EMPLOYEE|MENTOR|STATION_MANAGER|AREA_MANAGER|TRAINING_ADMIN|ADMIN|SUPER_ADMIN`；关联员工档案的账号使用此接口时只允许设为 `EMPLOYEE`，兼任使用 `/roles` | 空 |
 | `PUT` | `/api/v1/users/{id}/display-name` | `user:admin:manage` | 修改账号姓名 | `displayName`；关联员工档案的账号会同步更新员工姓名 | 空 |
 | `PUT` | `/api/v1/users/{id}/username` | `user:admin:manage`（仅超级管理员） | 修改非超级管理员账号的用户名 | `username`，仅支持字母、数字、点、下划线、连字符；员工账号会同步更新工号并使原登录态失效 | 空 |
 | `POST` | `/api/v1/users/{id}/reset-password` | 员工账号需 `user:employee:manage`，运营角色需 `user:ops-role:manage`，管理员角色需 `user:admin:manage` | 重置密码 | 路径 `id` | `temporaryPassword` |
-| `PUT` | `/api/v1/users/{id}/stations` | `user:ops-role:manage` | 设置站点负责人服务站范围 | `stationIds` | 空 |
+| `PUT` | `/api/v1/users/{id}/stations` | `user:ops-role:manage` | 设置指定身份的服务站范围 | `role=STATION_MANAGER|AREA_MANAGER`、`stationIds` | 空 |
 | `POST` | `/api/v1/users/bulk/preview` | 基础需 `user:employee:manage`；具体字段按目标账号角色再次校验 | 预览账号批量启停、角色或服务站范围修改 | `selection=IDS|FILTER`、`changes`、`syncLinkedEmployeeStatus` | `selectionHash`、匹配/变更/未变化数量 |
 | `POST` | `/api/v1/users/bulk/execute` | 同预览接口 | 执行账号批量修改；整批事务和安全约束校验 | 预览返回的 `selectionHash`、`expectedCount`、`requestId` | `operationId`、执行数量 |
 
 站点负责人必须至少绑定一个服务站。账号创建和重置密码返回临时密码，用户后续需要修改密码。
 账号批量接口不提供批量重置密码；启停、角色和服务站范围修改均为整批事务，任一目标违反现有安全规则时整批拒绝。
+
+### 单账号多身份与批量授予、撤销
+
+- `POST /api/v1/auth/switch-role`：请求 `{role}`，只能切换到账号已拥有且配置完整的身份；返回当前身份的令牌、用户、`activeRole` 和 `availableRoles`。
+- `PUT /api/v1/users/{id}/roles`：请求完整 `roles`、`primaryRole`；站长范围使用 `stationManagerStationIds`，区域经理范围使用 `areaManagerStationIds`，二者独立保存，与“站长与区域经理管理”共用对应的范围表；任一入口保存后，另一入口重新加载即可读到相同结果。省略某一范围表示保留，撤销某身份仅清除该身份的范围。保留范围身份时不接受空数组；需要解除职责时应撤销身份。旧 `stationIds` 仅兼容只有一种范围身份的请求，两种身份同时存在时必须分别传入。
+- `PUT /api/v1/users/{id}/role` 是旧的“设为唯一角色”接口，会撤销其他身份；新页面及批量操作不调用它。
+- 密码重置、账号启停和范围维护按目标账号的**全部身份**校验管理权限。只要拥有 `ADMIN` 或 `SUPER_ADMIN`（包括副身份），普通管理员就无权重置密码或启停。普通管理员的账号列表也不返回此类账号。
+- `PUT /api/v1/users/{id}/stations`：请求 `{role: STATION_MANAGER|AREA_MANAGER, stationIds: [...]}`，只修改指定身份范围；双范围身份账号必须明确 `role`，不能用一组范围覆盖另一组。
+
+批量接口的 `changes` 支持：
+
+```json
+{"roleAction":"GRANT","role":"TRAINING_ADMIN"}
+{"roleAction":"REVOKE","role":"STATION_MANAGER"}
+{"roleAction":"GRANT","role":"STATION_MANAGER","stationIds":[1]}
+{"scopeRole":"AREA_MANAGER","stationIds":[1,2,3]}
+```
+
+授予已有身份（无论主副）和撤销未有身份都计入 `unchanged`，不改变主身份、范围、账号版本或登录状态。授予新身份保留原主身份；撤销主身份时，按现有身份顺序选择第一个剩余身份作为登录默认身份，不按权限高低排序。撤销后不得没有身份，关联员工档案必须保留 `EMPLOYEE`，不得更改当前账号身份或移除最后一个启用超管。撤销身份有未结请假责任或评价评分职责时先转交；其他身份的请假责任不阻止撤销。角色调整与账号启停分开执行；旧的单独 `{role: ...}` 批量请求返回 400。
+
+预览和执行都重新校验完整身份集合、权限、职责及匹配版本；批量执行在同一事务中按账号 ID 加锁，任一目标不满足约束则整批回滚。切换身份不会合并不同身份的权限或人员范围。
 
 ## 文件与审计
 
@@ -527,7 +548,7 @@ Authorization: Bearer <token>
 
 ### 账号管理与人员台账关联
 
-`GET /api/v1/users` 通过 `employee.user_id = sys_user.id` 读取人员台账，增加 `employee_id`、`employee_no`、`employee_name`、`batch_id/batch_name`、`business_unit_id/business_unit_name`、`class_id/class_name` 字段。未关联档案的账号保留在列表中，人员字段为空；原有账号角色可见范围与操作权限保持不变。
+`GET /api/v1/users` 通过 `employee.user_id = sys_user.id` 读取人员台账，增加 `employee_id`、`employee_no`、`employee_name`、`batch_id/batch_name`、`business_unit_id/business_unit_name`、`class_id/class_name` 字段。未关联档案的账号保留在列表中，人员字段为空；可见范围与操作权限按完整身份集合校验，管理员身份即使不是主身份也受到保护。
 
 账号管理页面支持姓名、工号、用户名、人员归属及服务站关键词搜索，支持角色、启停状态、批次、板块、班级和台账关联状态组合筛选。筛选在完整的授权账号列表上执行后再分页，重置清空全部条件，启停操作后保留条件并重新加载数据。启停仅控制账号登录状态，不修改人员档案在职状态。
 

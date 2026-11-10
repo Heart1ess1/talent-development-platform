@@ -225,8 +225,9 @@ public class TaskArchiveService {
 
   private void authorize(Job job) {
     var user = SecurityUtils.current();
-    if (!job.owner.id().equals(user.id()) || job.owner.securityVersion() != user.securityVersion()
-        || !job.owner.role().equals(user.role()) || !job.owner.dataScope().equals(user.dataScope()))
+    // 归属只认用户与安全版本；角色/数据范围不再参与比对（切换身份不应让本人失去自己的打包任务），
+    // 但下方 employeeFilter 会按当前生效身份复核人员范围，身份收窄时仍会被拦截。
+    if (!job.owner.id().equals(user.id()) || job.owner.securityVersion() != user.securityVersion())
       throw new AccessDeniedException("无权访问该打包任务");
     requireTaskAccess(job.taskId);
     var scope = permissions.employeeFilter("e");

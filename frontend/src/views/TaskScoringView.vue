@@ -6,6 +6,7 @@ import {ElMessage,ElMessageBox} from 'element-plus'
 import {ArrowLeft,Document,Download,Refresh,Search,UserFilled} from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
+import {clearRoleTodos} from '@/utils/roleTodo'
 import TaskAttachmentsPanel from '@/components/TaskAttachmentsPanel.vue'
 import TaskReviewerScopeEditor from '@/components/TaskReviewerScopeEditor.vue'
 import {filterTaskScoringEmployees,sortTaskScoringEmployees,taskScoringFilterOptions,type TaskScoreSortOrder,type TaskScoringEmployeeFilters} from './taskScoringFilters'
@@ -73,7 +74,7 @@ async function submitScore(){
   if(scoreForm.decision==='RETURN'&&!scoreForm.comment.trim())return ElMessage.warning('退回时必须填写意见')
   await ElMessageBox.confirm('评分提交后不能修改，确认提交本次评分？','确认评分',{type:'warning'})
   scoring.value=true
-  try{await api.post(`/task-scoring/submissions/${submission.value.id}/reviews`,scoreForm);ElMessage.success(scoreForm.decision==='RETURN'?'成果已退回':'评分已提交');submissionDialog.value=false;await Promise.all([openTask({id:selectedTask.value.id}),load()])}
+  try{await api.post(`/task-scoring/submissions/${submission.value.id}/reviews`,scoreForm);ElMessage.success(scoreForm.decision==='RETURN'?'成果已退回':'评分已提交');clearRoleTodos(auth.user?.id);submissionDialog.value=false;await Promise.all([openTask({id:selectedTask.value.id}),load()])}
   finally{scoring.value=false}
 }
 async function resetScore(){

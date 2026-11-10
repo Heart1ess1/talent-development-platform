@@ -49,7 +49,7 @@ class LeaveIntegrationTest {
   long employeeUser,employee,station,otherStation,stationManager,areaManager,director,admin,otherArea;
   String tag;
   LocalDate day(){return LocalDate.now(ZoneId.of("Asia/Shanghai"));}
-  long user(String suffix,String role){String username=tag+suffix;db.update("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused',?,false)",username,username,role);return db.queryForObject("select id from sys_user where username=?",Long.class,username);}
+  long user(String suffix,String role){String username=tag+suffix;db.update("insert into sys_user(username,display_name,password_hash,role,must_change_password) values(?,?,'unused',?,false)",username,username,role);long id=db.queryForObject("select id from sys_user where username=?",Long.class,username);db.update("insert into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,?,true,?)",id,role,id);return id;}
   void login(long id){RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(permissions.load(id),null,List.of()));}
   @BeforeEach void fixture(){
     tag="leave-"+UUID.randomUUID().toString().substring(0,8);
@@ -385,8 +385,10 @@ class LeaveIntegrationTest {
 
   @Test void bulkRoleChangeMovesScopeToCorrectTableAndExcludesNewScoringRoles(){
     long superAdmin=user("-super","SUPER_ADMIN");login(superAdmin);
+    db.update("insert into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?, 'MENTOR',false,?)",stationManager,superAdmin);
     var selection=new UserController.BulkSelection("IDS",List.of(stationManager),Map.of(),List.of());
-    accounts.bulkExecute(new UserController.BulkRequest(selection,Map.of("role","AREA_MANAGER","stationIds",List.of(station)),false,null,null,UUID.randomUUID().toString()));
+    accounts.bulkExecute(new UserController.BulkRequest(selection,Map.of("roleAction","REVOKE","role","STATION_MANAGER"),false,null,null,UUID.randomUUID().toString()));
+    accounts.bulkExecute(new UserController.BulkRequest(selection,Map.of("roleAction","GRANT","role","AREA_MANAGER","stationIds",List.of(station)),false,null,null,UUID.randomUUID().toString()));
     assertThat(count("select count(*) from station_manager_scope where user_id=?",stationManager)).isZero();
     assertThat(count("select count(*) from area_manager_scope where user_id=? and station_id=?",stationManager,station)).isEqualTo(1);
     assertThat(scoring.reviewerOptions()).noneMatch(x->List.of("AREA_MANAGER","TRAINING_DIRECTOR").contains(x.get("role")));

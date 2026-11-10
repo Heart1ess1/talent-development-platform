@@ -18,7 +18,7 @@ export interface AccountFilters {
   classId:number|string
   linked:string
 }
-type Account=AccountPersonnel&{username:string;display_name:string;role:string;enabled:boolean;station_names?:string;has_employee_profile?:boolean}
+type Account=AccountPersonnel&{username:string;display_name:string;role:string;roles?:string[];enabled:boolean;station_names?:string;has_employee_profile?:boolean}
 
 export function filterAccounts<T extends Account>(rows:T[],filters:AccountFilters):T[]{
   const keyword=filters.keyword.trim().toLowerCase()
@@ -26,7 +26,8 @@ export function filterAccounts<T extends Account>(rows:T[],filters:AccountFilter
     const matchesKeyword=!keyword||[row.username,row.display_name,row.employee_name,row.employee_no,
       row.batch_name,row.business_unit_name,row.class_name,row.station_names]
       .some(value=>String(value??'').toLowerCase().includes(keyword))
-    return matchesKeyword&&(!filters.role||row.role===filters.role)
+    const matchesRole=!filters.role||(row.roles?.length?row.roles.includes(filters.role):row.role===filters.role)
+    return matchesKeyword&&matchesRole
       &&(!filters.enabled||(filters.enabled==='enabled'?Boolean(row.enabled):!row.enabled))
       &&(!filters.batchId||String(row.batch_id)===String(filters.batchId))
       &&(!filters.businessUnitId||String(row.business_unit_id)===String(filters.businessUnitId))

@@ -19,3 +19,6 @@ INSERT IGNORE INTO station_manager_scope(user_id,station_id)
 SELECT u.id,s.id FROM sys_user u JOIN service_station s ON s.name='请假验收站A' WHERE u.username='leave_station';
 INSERT IGNORE INTO area_manager_scope(user_id,station_id)
 SELECT u.id,s.id FROM sys_user u JOIN service_station s ON s.name='请假验收站A' WHERE u.username='leave_area';
+INSERT IGNORE INTO sys_user_role(user_id,role_code,is_primary,assigned_by)
+SELECT u.id,u.role,true,u.id FROM sys_user u
+WHERE u.username IN ('leave_employee','leave_station','leave_area','leave_director');

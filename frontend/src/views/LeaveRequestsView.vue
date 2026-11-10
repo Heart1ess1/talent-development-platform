@@ -4,6 +4,7 @@ import {ElMessage,ElMessageBox} from 'element-plus'
 import {Download,Plus,Refresh,Search} from '@element-plus/icons-vue'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
+import {clearRoleTodos} from '@/utils/roleTodo'
 import {useRoute} from 'vue-router'
 
 type Row=Record<string,any>
@@ -95,7 +96,7 @@ async function submit(){
     const body={...form,startAt:iso(form.startAt),endAt:iso(form.endAt),noticeAcknowledged:true,requestKey:requestKey.value,expectedVersion:expectedVersion.value}
     await api.post(changing.value?`/leave-requests/${changing.value}/changes`:'/leave-requests',body)
     noticeOpen.value=false;formOpen.value=false;ack.value=false;draftAvailable.value=false
-    ElMessage.success('请假申请已提交');await load()
+    ElMessage.success('请假申请已提交');clearRoleTodos(auth.user?.id);await load()
   }finally{busy.value=false}
 }
 async function openDetail(row:Row){
@@ -109,7 +110,7 @@ async function review(row:Row,action:'APPROVE'|'REJECT'){
     comment=response.value
   }else await ElMessageBox.confirm('确认同意这份请假申请？','审批确认',{type:'warning',confirmButtonText:'确认同意',cancelButtonText:'取消'})
   await api.post(`/leave-requests/${row.request_id}/versions/${row.version_no}/review`,{action,comment})
-  ElMessage.success('审批已完成');await load()
+  ElMessage.success('审批已完成');clearRoleTodos(auth.user?.id);await load()
 }
 async function withdraw(row:Row){await ElMessageBox.confirm('确认撤回待审批申请？','撤回确认',{confirmButtonText:'确认撤回',cancelButtonText:'取消'});await api.post(`/leave-requests/${row.request_id}/versions/${row.version_no}/withdraw`);ElMessage.success('已撤回');await load()}
 async function cancel(row:Row){await ElMessageBox.confirm('确认取消尚未开始的请假？','取消确认',{confirmButtonText:'确认取消',cancelButtonText:'返回'});await api.post(`/leave-requests/${row.request_id}/cancel`,null,{params:{version:row.current_version}});ElMessage.success('已取消');await load()}
@@ -117,7 +118,7 @@ function openReturn(row:Row){detail.value=row;Object.assign(returnForm,{actualRe
 async function submitReturn(){
   if(!returnForm.actualReturnAt||!returnForm.actualReturnLocation.trim())return ElMessage.warning('请填写实际返回时间和地点')
   busy.value=true
-  try{await api.post(`/leave-requests/${detail.value.request_id}/return`,{...returnForm,actualReturnAt:iso(returnForm.actualReturnAt),expectedVersion:detail.value.current_version});returnOpen.value=false;ElMessage.success('销假已完成');await load()}finally{busy.value=false}
+  try{await api.post(`/leave-requests/${detail.value.request_id}/return`,{...returnForm,actualReturnAt:iso(returnForm.actualReturnAt),expectedVersion:detail.value.current_version});returnOpen.value=false;ElMessage.success('销假已完成');clearRoleTodos(auth.user?.id);await load()}finally{busy.value=false}
 }
 async function openTransfer(row:Row){const response=await api.get<any,Envelope<Row[]>>(`/leave-requests/${row.request_id}/versions/${row.version_no}/approvers`);transferPeople.value=response.data.filter(x=>x.id!==row.approver_user_id);transferRow.value=row;Object.assign(transferForm,{approverUserId:null,reason:''});transferOpen.value=true}
 async function submitTransfer(){if(!transferRow.value||!transferForm.approverUserId||!transferForm.reason.trim())return ElMessage.warning('请选择接收人并填写转交原因');busy.value=true;try{await api.post(`/leave-requests/${transferRow.value.request_id}/versions/${transferRow.value.version_no}/transfer`,transferForm);transferOpen.value=false;ElMessage.success('责任已转交');await load()}finally{busy.value=false}}

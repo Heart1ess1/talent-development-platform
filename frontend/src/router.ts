@@ -1,4 +1,4 @@
-import {createRouter,createWebHistory} from 'vue-router';
+import {createRouter,createWebHistory,type RouteLocationRaw,type RouteMeta} from 'vue-router';
 import {useAuthStore} from '@/stores/auth';
 import {pageTitle} from '@/utils/pageTitle';
 
@@ -10,7 +10,7 @@ const routes=[
     {path:'employees',redirect:'/employee-directory'},
     {path:'employee-directory',component:()=>import('@/views/EmployeeDirectoryView.vue'),meta:{permission:'employee:read',title:'人员台账'}},
     {path:'location-reports',component:()=>import('@/views/LocationReportsView.vue'),meta:{permission:'employee:read',title:'人员流动'}},
-    {path:'leave-requests',component:()=>import('@/views/LeaveRequestsView.vue'),meta:{title:'请假管理'}},
+    {path:'leave-requests',component:()=>import('@/views/LeaveRequestsView.vue'),meta:{permission:'leave:view',allowedRoles:['EMPLOYEE'],title:'请假管理'}},
     {path:'station-responsibilities',component:()=>import('@/views/StationResponsibilitiesView.vue'),meta:{permission:'user:ops-role:manage',title:'站长与区域经理管理'}},
     {path:'courses',redirect:()=>useAuthStore().user?.role==='EMPLOYEE'?'/courses/my':'/courses/manage'},
     {path:'courses/manage',component:()=>import('@/views/CourseCatalogView.vue'),meta:{permission:'course:manage',title:'课程库'}},
@@ -47,26 +47,35 @@ const routes=[
     {path:'station-change-review',component:()=>import('@/views/StationChangeReviewView.vue'),meta:{permission:'master:manage',title:'调站审批'}},
     {path:'dictionaries',component:()=>import('@/views/DictionaryManagementView.vue'),meta:{permission:'master:manage',title:'字典值管理'}},
     {path:'users',component:()=>import('@/views/UsersView.vue'),meta:{permission:'user:employee:manage',title:'账号管理'}},
-    {path:'profile',component:()=>import('@/views/ProfileView.vue'),meta:{title:'账号设置'}}
+    {path:'profile',component:()=>import('@/views/ProfileView.vue'),meta:{title:'账号设置'}},
+    {path:':pathMatch(.*)*',component:()=>import('@/views/NotFoundView.vue'),meta:{title:'页面不存在'}}
   ]}
 ];
 
 const router=createRouter({history:createWebHistory(),routes});
-router.beforeEach(to=>{
-  const a=useAuthStore();
+/**
+ * 按当前生效身份判断某条路由是否可访问；可访问返回 null，否则返回应跳转的目标。
+ * 路由守卫与“切换身份后重新校验当前页面”共用这一份规则，避免两处判断漂移。
+ * meta.allowedRoles 用于没有对应权限、但属于自助场景的角色（如 EMPLOYEE 访问请假页）。
+ */
+export function resolveAccessRedirect(to:{path:string;meta:RouteMeta},a=useAuthStore()):RouteLocationRaw|null{
   if(to.path!='/login'&&!a.user)return '/login';
   if(to.path==='/login'&&a.user)return '/dashboard';
   if(a.user?.mustChangePassword&&to.path!='/profile')return '/profile';
-  if(['AREA_MANAGER','TRAINING_DIRECTOR'].includes(a.user?.role||'')&&!['/dashboard','/employee-directory','/location-reports','/leave-requests','/profile'].includes(to.path))return '/dashboard';
-  if(a.user?.role==='EMPLOYEE'&&to.path==='/employee-directory')return '/profile';
-  if(a.user?.role==='EMPLOYEE'&&to.path.startsWith('/evaluation/')&&to.path!=='/evaluation/results')return '/evaluation/results';
-  if(a.user?.role==='EMPLOYEE'&&['/courses/manage','/courses/sessions','/courses/materials'].includes(to.path))return '/courses/learning';
-  if(a.user?.role!=='EMPLOYEE'&&['/courses/my','/courses/learning'].includes(to.path))return a.can('course:manage')?'/courses/manage':'/courses/attendance';
-  if(a.user?.role==='EMPLOYEE'&&to.path==='/exams/results')return {path:'/exams/my',query:{section:'results'}};
-  if(a.user?.role!=='EMPLOYEE'&&to.path==='/exams/my')return a.can('exam:manage')?'/exams/plans':'/exams/results';
+  const role=a.user?.role;
+  if(['AREA_MANAGER','TRAINING_DIRECTOR'].includes(role||'')&&!['/dashboard','/employee-directory','/location-reports','/leave-requests','/profile'].includes(to.path))return '/dashboard';
+  if(role==='EMPLOYEE'&&to.path==='/employee-directory')return '/profile';
+  if(role==='EMPLOYEE'&&to.path.startsWith('/evaluation/')&&to.path!=='/evaluation/results')return '/evaluation/results';
+  if(role==='EMPLOYEE'&&['/courses/manage','/courses/sessions','/courses/materials'].includes(to.path))return '/courses/learning';
+  if(role!=='EMPLOYEE'&&['/courses/my','/courses/learning'].includes(to.path))return a.can('course:manage')?'/courses/manage':'/courses/attendance';
+  if(role==='EMPLOYEE'&&to.path==='/exams/results')return {path:'/exams/my',query:{section:'results'}};
+  if(role!=='EMPLOYEE'&&to.path==='/exams/my')return a.can('exam:manage')?'/exams/plans':'/exams/results';
   const permission=to.meta.permission as string|undefined;
-  if(permission&&!a.can(permission))return '/dashboard';
-});
+  const allowedRoles=(to.meta.allowedRoles as string[]|undefined)||[];
+  if(permission&&!a.can(permission)&&!allowedRoles.includes(role||''))return '/dashboard';
+  return null;
+}
+router.beforeEach(to=>resolveAccessRedirect(to)??undefined);
 router.afterEach(to=>{
   const role=useAuthStore().user?.role;
   document.title=pageTitle(to.path,role,typeof to.meta.title==='string'?to.meta.title:undefined);

@@ -83,7 +83,10 @@ public class TaskReviewerScopeService {
     for (var row : rows) {
       Long scopeId = number(row.get("id"));
       var reviewers = db.queryForList("""
-          select u.id,u.username,u.display_name,u.role,u.enabled,m.assigned_at
+          select u.id,u.username,u.display_name,u.enabled,m.assigned_at,
+            coalesce((select ur.role_code from sys_user_role ur
+              where ur.user_id=u.id and ur.role_code in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN')
+              order by ur.is_primary desc,ur.assigned_at,ur.role_code limit 1),u.role) role
           from task_reviewer_scope_member m join sys_user u on u.id=m.reviewer_user_id
           where m.scope_id=? order by u.display_name,u.id
           """, scopeId);
@@ -275,7 +278,8 @@ public class TaskReviewerScopeService {
     if (ids.isEmpty()) return ids;
     String marks = String.join(",", Collections.nCopies(ids.size(), "?"));
     Integer count = db.queryForObject(
-        "select count(*) from sys_user where enabled=true and role in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN') and id in (" + marks + ")",
+        "select count(*) from sys_user u where u.enabled=true and u.id in (" + marks + ")"
+            + " and exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code in ('MENTOR','STATION_MANAGER','TRAINING_ADMIN','ADMIN','SUPER_ADMIN'))",
         Integer.class, ids.toArray());
     if (count == null || count != ids.size()) throw new BusinessException(400, "评分人中包含无评分权限、已停用或不存在的账号");
     ids.sort(Long::compareTo);

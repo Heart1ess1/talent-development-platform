@@ -7,6 +7,9 @@ import {useAuthStore} from '@/stores/auth'
 import ComplianceFooter from '@/components/ComplianceFooter.vue'
 import talentGrowthImage from '@/assets/login/talent-growth-v2.webp'
 
+/** 令牌失效被拦截器跳回登录页时，用一次性提示说明原因；提示保留到登录成功，避免页面二次跳转把它冲掉。 */
+const authNotice=ref(sessionStorage.getItem('authNotice')||'')
+
 const rememberedUsername=localStorage.getItem('rememberedUsername')||''
 const formRef=ref<FormInstance>()
 const form=reactive({username:rememberedUsername,password:''})
@@ -33,6 +36,8 @@ async function submit(){
   try{
     const username=form.username.trim()
     await auth.login(username,form.password)
+    sessionStorage.removeItem('authNotice')
+    authNotice.value=''
     if(rememberUsername.value)localStorage.setItem('rememberedUsername',username)
     else localStorage.removeItem('rememberedUsername')
     await router.push(auth.user?.mustChangePassword?'/profile':'/dashboard')
@@ -85,6 +90,7 @@ async function submit(){
             <h2 id="login-title">欢迎登录</h2>
           </header>
 
+          <el-alert v-if="authNotice" class="login-error" :title="authNotice" type="warning" show-icon :closable="false"/>
           <el-alert v-if="error" class="login-error" :title="error" type="error" show-icon :closable="false"/>
 
           <el-form ref="formRef" :model="form" :rules="rules" label-position="top" hide-required-asterisk @submit.prevent="submit">

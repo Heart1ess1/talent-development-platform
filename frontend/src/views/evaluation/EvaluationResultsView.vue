@@ -8,6 +8,7 @@ import {useAuthStore} from '@/stores/auth'
 import {componentLabels,scoreText,type ComponentCode} from '@/evaluation/model'
 import {performanceGradeText} from '@/evaluation/performance'
 import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData'
+import {clearRoleTodos} from '@/utils/roleTodo'
 import '@/styles/evaluation-center.css'
 
 const auth=useAuthStore(),router=useRouter()
@@ -23,7 +24,7 @@ function snapshot(row:any){return row.summary_type==='MONTH'?row.component_snaps
 async function loadEmployees(){if(isEmployee.value){const profile=(await api.get<any,Envelope<any>>('/profile/employee')).data;employees.value=[profile]}else employees.value=(await api.get<any,Envelope<any>>('/employees',{params:{size:200}})).data.records;if(!selected.value&&employees.value.length)selected.value=employees.value[0].id}
 async function load(){if(!selected.value)return;loading.value=true;try{summaries.value=(await api.get<any,Envelope<any[]>>('/evaluation/summaries',{params:{employeeId:selected.value}})).data}finally{loading.value=false}}
 function openPerformance(row:any){router.push({path:'/evaluation/monthly',query:{tab:'performance',month:row.period_key,batchId:String(row.performance_batch_id||''),employeeId:String(selected.value)}})}
-async function publish(row:any){let waiverReason:string|undefined,overrideScore:number|undefined;if(row.revision_group_id){router.push('/evaluation/revisions');return}if(row.missing_items){if(!isAdmin.value)return ElMessage.warning('存在缺失项，仅管理员可以核定发布');waiverReason=(await ElMessageBox.prompt('说明为何允许缺项发布','缺项豁免原因')).value;overrideScore=Number((await ElMessageBox.prompt('请输入最终核定综合分（0-100）','人工核定总分',{inputPattern:/^(100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/,inputErrorMessage:'请输入0至100'})).value)}await api.post(`/evaluation/summaries/${row.id}/publish`,{waiverReason,overrideScore});ElMessage.success('评价结果已发布并锁定');await load()}
+async function publish(row:any){let waiverReason:string|undefined,overrideScore:number|undefined;if(row.revision_group_id){router.push('/evaluation/revisions');return}if(row.missing_items){if(!isAdmin.value)return ElMessage.warning('存在缺失项，仅管理员可以核定发布');waiverReason=(await ElMessageBox.prompt('说明为何允许缺项发布','缺项豁免原因')).value;overrideScore=Number((await ElMessageBox.prompt('请输入最终核定综合分（0-100）','人工核定总分',{inputPattern:/^(100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/,inputErrorMessage:'请输入0至100'})).value)}await api.post(`/evaluation/summaries/${row.id}/publish`,{waiverReason,overrideScore});ElMessage.success('评价结果已发布并锁定');clearRoleTodos(auth.user?.id);await load()}
 async function reopen(row:any){const reason=(await ElMessageBox.prompt('请说明重开原因；系统将保留旧版本','重开月度结果')).value;await api.post(`/evaluation/summaries/${row.id}/reopen`,{reason});ElMessage.success('已创建新的月度草稿版本');await load()}
 watch(selected,load);watch([classId,classPositionId],()=>{if(!filteredEmployees.value.some(employee=>employee.id===selected.value))selected.value=filteredEmployees.value[0]?.id});onMounted(async()=>{if(!isEmployee.value)[classOptions.value,classPositionOptions.value]=await Promise.all([loadDictionaryValues('CLASS'),loadDictionaryValues('CLASS_POSITION')]);await loadEmployees();await load()})
 </script>

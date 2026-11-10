@@ -8,6 +8,7 @@ import ScheduleDialog from '@/components/ScheduleDialog.vue'
 import {api,type Envelope} from '@/api'
 import {useAuthStore} from '@/stores/auth'
 import {loadDictionaryValues,type DictionaryOption} from '@/utils/masterData'
+import {clearRoleTodos} from '@/utils/roleTodo'
 import {dateTimeParts,resultStatusLabels,scoreMonth} from './examUi'
 import '@/styles/exam-center.css'
 
@@ -49,13 +50,15 @@ async function load(){
 }
 async function openReview(row:any){reviewVisible.value=true;reviewLoading.value=true;try{reviewAttempt.value=(await api.get<any,Envelope<any>>(`/exams/attempts/${row.id}`)).data;for(const question of reviewAttempt.value.questions.filter((x:any)=>x.question_type==='SHORT'))grades[question.id]={score:Number(question.answer_score??0),comment:question.reviewer_comment||''}}finally{reviewLoading.value=false}}
 function answerText(value:any){if(value===null||value===undefined)return '未作答';if(typeof value==='string')return value;return Array.isArray(value)?value.join('、'):JSON.stringify(value)}
-async function gradeQuestion(question:any){const grade=grades[question.id];await api.put(`/exams/attempts/${reviewAttempt.value.id}/questions/${question.id}/grade`,grade);ElMessage.success('本题评分已保存');const refreshed=(await api.get<any,Envelope<any>>(`/exams/attempts/${reviewAttempt.value.id}`)).data;reviewAttempt.value=refreshed;await load();if(refreshed.status==='GRADED')ElMessage.success('该答卷已完成阅卷，将在整场考试结束后自动下发')}
+async function gradeQuestion(question:any){const grade=grades[question.id];await api.put(`/exams/attempts/${reviewAttempt.value.id}/questions/${question.id}/grade`,grade);ElMessage.success('本题评分已保存');clearRoleTodos(auth.user?.id);const refreshed=(await api.get<any,Envelope<any>>(`/exams/attempts/${reviewAttempt.value.id}`)).data;reviewAttempt.value=refreshed;await load();if(refreshed.status==='GRADED')ElMessage.success('该答卷已完成阅卷，将在整场考试结束后自动下发')}
 async function openPlan(row:any){
   selectedPlan.value=row;detailKeyword.value='';detailClassId.value=null;detailStatus.value='';detailVisible.value=true;detailLoading.value=true
   try{planResults.value=(await api.get<any,Envelope<any[]>>(`/exams/results/manage/plans/${row.id}`)).data}
   finally{detailLoading.value=false}
 }
 async function exportResults(planId?:number){
+  const exportable=planId?planResults.value.some(isPublished):results.value.some(x=>x.source_type!=='HISTORICAL'&&x.result_status==='COMPLETED')
+  if(!exportable)return ElMessage.warning('当前没有可导出的数据')
   exporting.value=true
   try{
     const blob=await api.get<any,Blob>('/exams/results/export',{params:planId?{planId}:{},responseType:'blob'})
