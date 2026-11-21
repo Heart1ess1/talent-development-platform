@@ -12,9 +12,12 @@ import {clearRoleTodos} from '@/utils/roleTodo'
 import {dateTimeParts,resultStatusLabels,scoreMonth} from './examUi'
 import '@/styles/exam-center.css'
 
+type ExamResult={employee_id:number;employee_name:string;source_type?:string;[key:string]:any}
+type EmployeeResultGroup={employeeId:number;employeeName:string;results:ExamResult[]}
+
 const scheduleDialog=ref<InstanceType<typeof ScheduleDialog>>()
 const auth=useAuthStore(),route=useRoute(),router=useRouter(),canManage=computed(()=>auth.can('exam:manage'))
-const plans=ref<any[]>([]),results=ref<any[]>([]),planResults=ref<any[]>([])
+const plans=ref<any[]>([]),results=ref<ExamResult[]>([]),planResults=ref<any[]>([])
 const reviewQueue=ref<any[]>([]),reviewVisible=ref(false),reviewLoading=ref(false),reviewAttempt=ref<any>(),grades=reactive<Record<number,{score:number;comment:string}>>({})
 const keyword=ref(''),phase=ref(''),detailKeyword=ref(''),detailStatus=ref('')
 const detailClassId=ref<number|null>(null),classOptions=ref<DictionaryOption[]>([])
@@ -22,6 +25,16 @@ const detailClassPositionId=ref<number|null>(null),classPositionOptions=ref<Dict
 const detailVisible=ref(false),detailLoading=ref(false),exporting=ref(false),selectedPlan=ref<any>(null)
 const pendingReviews=computed(()=>reviewQueue.value.filter(x=>x.status==='PENDING_REVIEW'))
 const historicalResults=computed(()=>results.value.filter(x=>x.source_type==='HISTORICAL'))
+const isMentorResults=computed(()=>!canManage.value&&auth.user?.dataScope==='MENTORED')
+const employeeResultGroups=computed<EmployeeResultGroup[]>(()=>{
+  const groups=new Map<number,EmployeeResultGroup>()
+  for(const result of results.value){
+    const employeeId=Number(result.employee_id)
+    if(!groups.has(employeeId))groups.set(employeeId,{employeeId,employeeName:result.employee_name||'未命名学徒',results:[]})
+    groups.get(employeeId)!.results.push(result)
+  }
+  return [...groups.values()]
+})
 
 const filteredPlans=computed(()=>plans.value.filter(row=>{
   const matchesKeyword=!keyword.value||`${row.name} ${row.paper_name}`.toLowerCase().includes(keyword.value.trim().toLowerCase())
@@ -140,8 +153,26 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
     </template>
 
     <el-card v-else>
-      <template #header>已发布成绩</template>
-      <el-table :data="results" empty-text="暂无已发布成绩">
+      <template #header>
+        <div class="results-card-head"><span>已发布成绩</span><small v-if="isMentorResults">按学徒分组，点击左侧箭头查看成绩明细</small></div>
+      </template>
+      <el-table v-if="isMentorResults" :data="employeeResultGroups" row-key="employeeId" empty-text="暂无已发布成绩" class="mentor-result-groups">
+        <el-table-column type="expand">
+          <template #default="{row}">
+            <div class="apprentice-result-detail">
+              <el-table :data="row.results" empty-text="暂无已发布成绩">
+                <el-table-column prop="exam_name" label="考试" min-width="220"><template #default="s"><span>{{s.row.exam_name}}</span><el-tag v-if="s.row.source_type==='HISTORICAL'" size="small" type="warning" effect="plain" class="history-tag">历史导入</el-tag></template></el-table-column>
+                <el-table-column prop="total_score" label="成绩" min-width="100"><template #default="{row:result}">{{scoreText(result.total_score)}}</template></el-table-column>
+                <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="resultStatus(s.row).type" effect="plain">{{resultStatus(s.row).label}}</el-tag></template></el-table-column>
+                <el-table-column label="计分月份" min-width="110"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column>
+              </el-table>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="employeeName" label="学徒" min-width="160"><template #default="{row}"><span class="apprentice-name">{{row.employeeName}}</span></template></el-table-column>
+        <el-table-column label="成绩条数" width="120" align="center"><template #default="{row}"><el-tag type="info" effect="plain">{{row.results.length}} 条</el-tag></template></el-table-column>
+      </el-table>
+      <el-table v-else :data="results" empty-text="暂无已发布成绩">
         <el-table-column prop="exam_name" label="考试"><template #default="s"><span>{{s.row.exam_name}}</span><el-tag v-if="s.row.source_type==='HISTORICAL'" size="small" type="warning" effect="plain" class="history-tag">历史导入</el-tag></template></el-table-column><el-table-column prop="total_score" label="成绩"><template #default="{row}">{{scoreText(row.total_score)}}</template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="resultStatus(s.row).type" effect="plain">{{resultStatus(s.row).label}}</el-tag></template></el-table-column>
         <el-table-column label="计分月份"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column>
@@ -205,4 +236,5 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
 <style scoped>
 .page-head p{margin:6px 0 0}.overview-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}.overview-item{padding:18px 20px;background:#fff;border:1px solid #e7e7e7;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.04)}.overview-item span{display:block;color:#868686;font-size:14px;margin-bottom:7px}.overview-item strong{font-size:30px;color:#2f2f2f}.overview-item.success{border-left:3px solid #67c23a}.overview-item.warning{border-left:3px solid #e6a23c}.card-head,.detail-toolbar,.drawer-title{display:flex;align-items:center;justify-content:space-between;gap:16px}.card-title{font-weight:600}.header-tip{color:#959595;font-size:14px;margin-left:12px}.filters{display:flex;gap:10px}.filters .el-input{width:190px}.filters .el-select{width:130px}.summary-table :deep(.el-table__row){cursor:pointer}.summary-table :deep(.el-table__row:hover) .row-arrow{color:var(--app-primary);transform:translateX(2px)}.exam-name{font-weight:600;color:#373737}.sub-text{color:#959595;font-size:14px;margin-top:4px}.time-range{display:flex;flex-direction:column;gap:4px;font-size:14px;color:#646464;white-space:nowrap}.row-arrow{color:#b0b0b0;transition:.2s}.drawer-title{width:100%}.drawer-title h3{font-size:22px;margin:0;color:#2f2f2f}.drawer-title p{font-size:14px;color:#868686;margin:7px 0 0}.detail-overview{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}.detail-overview>div{background:var(--app-primary-soft);border-radius:6px;padding:14px 18px}.detail-overview span{display:block;color:#868686;font-size:14px}.detail-overview strong{display:block;font-size:22px;margin-top:5px;color:#2f2f2f}.detail-overview .green{color:#4d9f2f}.detail-overview .orange{color:#d88a1d}.detail-overview .red{color:#e34d59}.detail-toolbar{margin-bottom:14px}.datetime-cell{display:inline-flex;flex-direction:column;line-height:1.35;white-space:nowrap}.datetime-cell span:last-child{color:#626262}@media(max-width:900px){.overview-grid{grid-template-columns:repeat(2,1fr)}.card-head,.detail-toolbar,.drawer-title{align-items:flex-start;flex-direction:column}.detail-overview{grid-template-columns:repeat(2,1fr)}.filters{width:100%}.filters .el-input{flex:1}}
 .review-workspace{border-left:3px solid #e6a23c}.publish-workspace{border-left:3px solid #67c23a}.subjective-question{margin-top:16px;padding:18px;border:1px solid #e9e9e9;border-radius:9px;background:var(--app-primary-soft)}.question-title{display:flex;align-items:flex-start;gap:10px}.question-title>span{display:flex;width:25px;height:25px;flex:none;align-items:center;justify-content:center;border-radius:50%;color:#fff;background:var(--app-primary);font-size:14px}.question-title strong,.question-title small{display:block}.question-title small{margin-top:5px;color:#959595}.answer-box{margin:14px 0;padding:13px;border-radius:7px;background:#f4f4f4}.answer-box span{color:#959595;font-size:14px}.answer-box p{margin:6px 0 0;line-height:1.65;white-space:pre-wrap}.grade-form{display:grid;grid-template-columns:130px 1fr auto;gap:10px}.grade-form .el-input-number{width:100%}@media(max-width:700px){.grade-form{grid-template-columns:1fr}}
+.results-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.results-card-head small{color:var(--el-text-color-secondary);font-size:13px}.apprentice-name{font-weight:600}.mentor-result-groups :deep(.el-table__expanded-cell){padding:0!important}.apprentice-result-detail{padding:12px 16px 12px 48px;background:var(--el-fill-color-light)}@media(max-width:700px){.results-card-head{align-items:flex-start;flex-direction:column;gap:4px}.apprentice-result-detail{padding:8px}}
 </style>
