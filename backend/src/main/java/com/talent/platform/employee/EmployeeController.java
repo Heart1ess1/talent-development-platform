@@ -186,7 +186,8 @@ public class EmployeeController {
     db.update("""
         insert into sys_user(username,password_hash,display_name,role,enabled,must_change_password)
         values(?,?,?,'EMPLOYEE',?,true)
-        """, request.employeeNo(), encoder.encode(UUID.randomUUID().toString()), request.name(),
+        """, availableUsername(request.employeeNo(), null),
+        encoder.encode(UUID.randomUUID().toString()), request.name(),
         "ACTIVE".equals(normalizedStatus(request.status(), "ACTIVE")));
     Long userId = db.queryForObject("select last_insert_id()", Long.class);
     db.update("insert ignore into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,'EMPLOYEE',true,?)",
@@ -241,7 +242,7 @@ public class EmployeeController {
         update sys_user
         set username=?,display_name=?,version=version+1,security_version=security_version+1
         where id=?
-        """, request.employeeNo(), request.name(), userId);
+        """, availableUsername(request.employeeNo(), userId), request.name(), userId);
     // 仅当账号的唯一角色是 EMPLOYEE 时才联动停用/启用；多角色账号（如员工+导师）只调整员工档案，不锁账号。
     // 兼容尚未写入 sys_user_role 的历史账号：没有任何角色行时仍按 sys_user.role 判断。
     db.update("""
@@ -587,6 +588,29 @@ public class EmployeeController {
 
   private Long number(Object value) {
     return value == null ? null : ((Number) value).longValue();
+  }
+
+  private String availableUsername(String employeeNo, Long currentUserId) {
+    String base = employeeNo.trim();
+    if (db.queryForList(
+        "select username from sys_user where username=?", String.class, base).isEmpty()) {
+      return base;
+    }
+    if (currentUserId != null) {
+      String current = db.queryForObject(
+          "select username from sys_user where id=?", String.class, currentUserId);
+      if (base.equals(current) || (current != null && current.startsWith(base + "-"))) {
+        return current;
+      }
+    }
+    while (true) {
+      String candidate = base.substring(0, Math.min(base.length(), 55)) + "-"
+          + UUID.randomUUID().toString().substring(0, 8);
+      if (db.queryForList(
+          "select username from sys_user where username=?", String.class, candidate).isEmpty()) {
+        return candidate;
+      }
+    }
   }
 
   private String normalizedStatus(String requested, String fallback) {

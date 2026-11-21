@@ -159,7 +159,7 @@ public class EmployeeDirectoryController {
             + URLEncoder.encode("人员台账.xlsx", StandardCharsets.UTF_8));
     audit.log("EXPORT_EMPLOYEES", "EMPLOYEE", null, null, Map.of("count", output.size()));
     EasyExcel.write(response.getOutputStream(), EmployeeDirectoryExportRow.class)
-        .registerWriteHandler(new EmployeeExcelSheetHandler(24))
+        .registerWriteHandler(new EmployeeExcelSheetHandler(27))
         .sheet("人员台账")
         .doWrite(output);
   }
@@ -241,7 +241,10 @@ public class EmployeeDirectoryController {
     output.setBusinessUnitName(string(row, "business_unit_name"));
     output.setStationName(string(row, "station_name"));
     output.setTechnicalMentorName(string(row, "technical_mentor_name"));
+    output.setMentorPhone(string(row, "mentor_phone"));
     output.setSkillMentorName(string(row, "skill_mentor_name"));
+    output.setSkillMentorPhone(string(row, "skill_mentor_phone"));
+    output.setTrainingCycleName(string(row, "training_cycle_name"));
     output.setIdCard(string(row, "id_card"));
     output.setSchool(string(row, "school"));
     output.setMajor(string(row, "major"));
