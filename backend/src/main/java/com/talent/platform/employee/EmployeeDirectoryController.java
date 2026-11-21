@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class EmployeeDirectoryController {
   private static final String SELECT = """
       select e.id,e.employee_no,e.name,e.gender,e.batch_id,e.class_id,e.class_position_id,e.business_unit_id,e.station_id,
-             e.mentor_user_id,e.skill_mentor_user_id,e.school,e.major,e.education,
+             e.mentor_user_id,e.skill_mentor_user_id,e.mentor_phone,e.skill_mentor_phone,e.training_cycle_id,e.school,e.major,e.education,
              e.birth_date,e.native_place,e.residence,e.phone,e.email,e.onboard_date,
              e.status,e.political_status,e.hobbies,e.speciality,e.id_card,e.notes,
              u.avatar_token,
@@ -34,6 +34,7 @@ public class EmployeeDirectoryController {
              bu.name business_unit_name,s.name station_name,
              tm.display_name technical_mentor_name,tm.display_name mentor_name,
              sm.display_name skill_mentor_name,
+             tc.label training_cycle_name,
              (select count(*) from station_change_request scr
               where scr.employee_id=e.id and scr.status='APPROVED') station_change_count,
              (select max(coalesce(scr.reviewed_at,scr.updated_at)) from station_change_request scr
@@ -49,6 +50,7 @@ public class EmployeeDirectoryController {
        left join service_station s on s.id=e.station_id
        left join sys_user tm on tm.id=e.mentor_user_id
        left join sys_user sm on sm.id=e.skill_mentor_user_id
+       left join dictionary_item tc on tc.id=e.training_cycle_id and tc.type_code='TRAINING_CYCLE'
       """;
 
   private final JdbcTemplate db;

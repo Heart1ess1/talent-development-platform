@@ -81,10 +81,13 @@ public class EmployeeController {
       Long batchId,
       Long classId,
       Long classPositionId,
+      Long trainingCycleId,
       Long businessUnitId,
       Long stationId,
       Long mentorUserId,
       Long skillMentorUserId,
+      String mentorPhone,
+      String skillMentorPhone,
       String school,
       String major,
       String education,
@@ -190,15 +193,15 @@ public class EmployeeController {
         userId, SecurityUtils.current().id());
     db.update("""
         insert into employee(
-          user_id,employee_no,name,gender,batch_id,class_id,class_position_id,business_unit_id,station_id,
-          mentor_user_id,skill_mentor_user_id,school,major,education,birth_date,
+          user_id,employee_no,name,gender,batch_id,class_id,class_position_id,training_cycle_id,business_unit_id,station_id,
+          mentor_user_id,skill_mentor_user_id,mentor_phone,skill_mentor_phone,school,major,education,birth_date,
           native_place,residence,phone,email,onboard_date,political_status,
           hobbies,speciality,id_card,notes,status
-        ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         userId, request.employeeNo(), request.name(), request.gender(), request.batchId(),
-        request.classId(), request.classPositionId(), request.businessUnitId(), request.stationId(), request.mentorUserId(),
-        request.skillMentorUserId(), request.school(), request.major(), request.education(),
+        request.classId(), request.classPositionId(), request.trainingCycleId(), request.businessUnitId(), request.stationId(), request.mentorUserId(),
+        request.skillMentorUserId(), request.mentorPhone(), request.skillMentorPhone(), request.school(), request.major(), request.education(),
         request.birthDate(), request.nativePlace(), request.residence(), request.phone(),
         request.email(), request.onboardDate(), request.politicalStatus(), request.hobbies(),
         request.speciality(), request.idCard(), request.notes(),
@@ -221,15 +224,15 @@ public class EmployeeController {
     String previousStatus = String.valueOf(before.get("status"));
     db.update("""
         update employee
-        set employee_no=?,name=?,gender=?,batch_id=?,class_id=?,class_position_id=?,business_unit_id=?,station_id=?,
-            mentor_user_id=?,skill_mentor_user_id=?,school=?,major=?,education=?,
+        set employee_no=?,name=?,gender=?,batch_id=?,class_id=?,class_position_id=?,training_cycle_id=?,business_unit_id=?,station_id=?,
+            mentor_user_id=?,skill_mentor_user_id=?,mentor_phone=?,skill_mentor_phone=?,school=?,major=?,education=?,
             birth_date=?,native_place=?,residence=?,phone=?,email=?,onboard_date=?,
             political_status=?,hobbies=?,speciality=?,id_card=?,notes=?,status=?,version=version+1
         where id=?
         """,
         request.employeeNo(), request.name(), request.gender(), request.batchId(), request.classId(),
-        request.classPositionId(), request.businessUnitId(), request.stationId(), request.mentorUserId(), request.skillMentorUserId(),
-        request.school(), request.major(), request.education(), request.birthDate(),
+        request.classPositionId(), request.trainingCycleId(), request.businessUnitId(), request.stationId(), request.mentorUserId(), request.skillMentorUserId(),
+        request.mentorPhone(), request.skillMentorPhone(), request.school(), request.major(), request.education(), request.birthDate(),
         request.nativePlace(), request.residence(), request.phone(), request.email(),
         request.onboardDate(), request.politicalStatus(), request.hobbies(),
         request.speciality(), request.idCard(), request.notes(),
@@ -357,6 +360,7 @@ public class EmployeeController {
     requireEnabledMaster("talent_batch", "批次", request.batchId());
     requireEnabledDictionary("CLASS", "班级", request.classId());
     requireEnabledDictionary("CLASS_POSITION", "班级职务", request.classPositionId());
+    requireEnabledDictionary("TRAINING_CYCLE", "培养周期", request.trainingCycleId());
     requireEnabledMaster("business_unit", "所属板块", request.businessUnitId());
     requireEnabledMaster("service_station", "服务站点", request.stationId());
     if (request.mentorUserId() != null) requireMentor(request.mentorUserId());

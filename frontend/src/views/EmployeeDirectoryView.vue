@@ -119,6 +119,7 @@ const educationOptions=ref<DictionaryOption[]>([])
 const politicalStatusOptions=ref<DictionaryOption[]>([])
 const classOptions=ref<DictionaryOption[]>([])
 const classPositionOptions=ref<DictionaryOption[]>([])
+const trainingCycleOptions=ref<DictionaryOption[]>([])
 const genderOptions=['男','女'] as const
 
 const isNarrow=ref(false)
@@ -144,10 +145,13 @@ const emptyEmployeeForm=()=>({
   batchId:null as number|null,
   classId:null as number|null,
   classPositionId:null as number|null,
+  trainingCycleId:null as number|null,
   businessUnitId:null as number|null,
   stationId:null as number|null,
   mentorUserId:null as number|null,
   skillMentorUserId:null as number|null,
+  mentorPhone:'',
+  skillMentorPhone:'',
   school:'',
   major:'',
   education:'',
@@ -260,7 +264,8 @@ async function loadMasters(){
     educationValues,
     politicalStatusValues,
     classValues,
-    classPositionValues
+    classPositionValues,
+    trainingCycleValues
   ]=await Promise.all([
     api.get<any,Envelope<any[]>>('/batches'),
     loadEnabledBusinessUnits(),
@@ -269,7 +274,8 @@ async function loadMasters(){
     loadDictionaryValues('EDUCATION'),
     loadDictionaryValues('POLITICAL_STATUS'),
     loadDictionaryValues('CLASS'),
-    loadDictionaryValues('CLASS_POSITION')
+    loadDictionaryValues('CLASS_POSITION'),
+    loadDictionaryValues('TRAINING_CYCLE')
   ])
   batches.value=batchResponse.data
   businessUnits.value=unitOptions
@@ -279,6 +285,7 @@ async function loadMasters(){
   politicalStatusOptions.value=politicalStatusValues
   classOptions.value=classValues
   classPositionOptions.value=classPositionValues
+  trainingCycleOptions.value=trainingCycleValues
 }
 
 async function loadPending(){
@@ -365,10 +372,13 @@ function fillEmployeeForm(row:DirectoryRow){
     batchId:row.batch_id??null,
     classId:row.class_id??null,
     classPositionId:row.class_position_id??null,
+    trainingCycleId:row.training_cycle_id??null,
     businessUnitId:row.business_unit_id??null,
     stationId:row.station_id??null,
     mentorUserId:row.mentor_user_id??null,
     skillMentorUserId:row.skill_mentor_user_id??null,
+    mentorPhone:row.mentor_phone||'',
+    skillMentorPhone:row.skill_mentor_phone||'',
     school:row.school||'',
     major:row.major||'',
     education:row.education||'',
@@ -1123,14 +1133,17 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
                 </el-button>
               </dd>
             </div>
+            <div><dt>培养周期</dt><dd>{{display(selectedEmployee.training_cycle_name)}}</dd></div>
             <div>
               <dt>指导老师（技术）</dt>
               <dd>{{display(selectedEmployee.technical_mentor_name)}}</dd>
             </div>
+            <div><dt>技术老师联系方式</dt><dd>{{display(selectedEmployee.mentor_phone)}}</dd></div>
             <div>
               <dt>指导老师（技能）</dt>
               <dd>{{display(selectedEmployee.skill_mentor_name)}}</dd>
             </div>
+            <div><dt>技能老师联系方式</dt><dd>{{display(selectedEmployee.skill_mentor_phone)}}</dd></div>
             <div><dt>入职日期</dt><dd>{{formatDate(selectedEmployee.onboard_date)}}</dd></div>
           </dl>
         </section>
@@ -1256,12 +1269,28 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
                 />
               </el-select>
             </el-form-item>
+            <el-form-item label="技术老师联系方式">
+              <el-input v-model="employeeForm.mentorPhone" clearable placeholder="请输入技术指导老师联系方式"/>
+            </el-form-item>
             <el-form-item label="指导老师（技能）">
               <el-select v-model="employeeForm.skillMentorUserId" clearable filterable>
                 <el-option
                   v-for="item in mentors"
                   :key="item.id"
                   :label="item.display_name"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="技能老师联系方式">
+              <el-input v-model="employeeForm.skillMentorPhone" clearable placeholder="请输入技能指导老师联系方式"/>
+            </el-form-item>
+            <el-form-item label="培养周期">
+              <el-select v-model="employeeForm.trainingCycleId" clearable filterable placeholder="请选择培养周期">
+                <el-option
+                  v-for="item in trainingCycleOptions"
+                  :key="item.id"
+                  :label="item.label"
                   :value="item.id"
                 />
               </el-select>
