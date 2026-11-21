@@ -944,7 +944,6 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             <template v-else-if="column.key==='gender'">{{display(row.gender)}}</template>
             <template v-else-if="column.key==='batch'">{{display(row.batch_name)}}</template>
             <template v-else-if="column.key==='class'">{{display(row.class_name)}}</template>
-            <template v-else-if="column.key==='classPosition'">{{display(row.class_position_name)}}</template>
             <template v-else-if="column.key==='businessUnit'">{{display(row.business_unit_name)}}</template>
             <template v-else-if="column.key==='station'">
               <el-button v-if="canViewHistory" link type="primary" :icon="MapLocation" class="station-button" @click.stop="showStationHistory(row)">{{row.station_name||'未分配'}}<span v-if="Number(row.station_change_count)" class="change-count">{{row.station_change_count}} 次</span></el-button>
