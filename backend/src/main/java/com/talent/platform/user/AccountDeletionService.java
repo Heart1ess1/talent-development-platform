@@ -91,7 +91,7 @@ public class AccountDeletionService {
           "该员工仍有待审批的调站申请，请先处理");
     }
     try {
-      if(employeeId!=null)clearEmployee(employeeId,String.valueOf(employee.get("employee_no")));
+      if(employeeId!=null)clearEmployee(employeeId,(String)employee.get("employee_no"),(String)employee.get("name"));
       if(userId!=null) {
         db.update("delete from course_material_view_session where user_id=?",userId);
         db.update("delete from leave_submission_key where user_id=?",userId);
@@ -135,7 +135,7 @@ public class AccountDeletionService {
         new Object[]{id,id},"该账号仍被其他员工的考试评分历史引用，请先处理");
   }
 
-  private void clearEmployee(long id,String employeeNo) {
+  private void clearEmployee(long id,String employeeNo,String employeeName) {
     db.update("delete from score_adjustment where employee_id=?",id);
     db.update("delete f from stored_file f join task_submission s on s.id=f.submission_id join task_assignment a on a.id=s.assignment_id where a.employee_id=?",id);
     db.update("delete s from task_submission s join task_assignment a on a.id=s.assignment_id where a.employee_id=?",id);
@@ -152,8 +152,17 @@ public class AccountDeletionService {
         "legacy_evaluation","attendance","course_enrollment","course_material_view_session","employee_location_report",
         "station_change_request","leave_draft"))
       db.update("delete from "+table+" where employee_id=?",id);
-    db.update("delete from defense_result where employee_id=? or employee_no=?",id,employeeNo);
-    db.update("delete from history_import_row where employee_id=? or employee_no=?",id,employeeNo);
+    db.update("""
+        delete from defense_result
+        where employee_id=? or (employee_id is null and employee_no=?
+          and cast(trim(employee_name) as binary)=cast(? as binary))
+        """,id,employeeNo,employeeName.trim());
+    db.update("""
+        delete from history_import_row
+        where employee_id=? or (employee_id is null
+          and trim(json_value(raw_json,'$.employeeNo'))=?
+          and cast(trim(json_value(raw_json,'$.employeeName')) as binary)=cast(? as binary))
+        """,id,employeeNo,employeeName.trim());
     for(String table:List.of("leave_reminder","leave_action","leave_request_version"))
       db.update("delete d from "+table+" d join leave_request r on r.id=d.request_id where r.employee_id=?",id);
     db.update("delete k from leave_submission_key k join leave_request r on r.id=k.request_id where r.employee_id=?",id);

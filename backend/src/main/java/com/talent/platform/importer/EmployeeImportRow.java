@@ -68,60 +68,72 @@ public class EmployeeImportRow {
     @ColumnWidth(20)
     private String technicalMentor;
 
-    @ExcelProperty(value = "指导老师（技能）", order = 10)
+    @ExcelProperty(value = "技术老师联系方式", order = 10)
+    @ColumnWidth(22)
+    private String mentorPhone;
+
+    @ExcelProperty(value = "指导老师（技能）", order = 11)
     @ColumnWidth(20)
     private String skillMentor;
 
-    @ExcelProperty(value = "身份证号码", order = 11)
+    @ExcelProperty(value = "技能老师联系方式", order = 12)
+    @ColumnWidth(22)
+    private String skillMentorPhone;
+
+    @ExcelProperty(value = "培养周期", order = 13)
+    @ColumnWidth(14)
+    private String trainingCycleName;
+
+    @ExcelProperty(value = "身份证号码", order = 14)
     @ColumnWidth(22)
     private String idCard;
 
-    @ExcelProperty(value = "毕业学校", order = 12)
+    @ExcelProperty(value = "毕业学校", order = 15)
     @ColumnWidth(20)
     private String school;
 
-    @ExcelProperty(value = "所学专业", order = 13)
+    @ExcelProperty(value = "所学专业", order = 16)
     private String major;
 
-    @ExcelProperty(value = "学历", order = 14)
+    @ExcelProperty(value = "学历", order = 17)
     @ColumnWidth(10)
     private String education;
 
-    @ExcelProperty(value = "出生日期", order = 15)
+    @ExcelProperty(value = "出生日期", order = 18)
     @ColumnWidth(14)
     private String birthDate;
 
-    @ExcelProperty(value = "籍贯", order = 16)
+    @ExcelProperty(value = "籍贯", order = 19)
     private String nativePlace;
 
-    @ExcelProperty(value = "政治面貌", order = 17)
+    @ExcelProperty(value = "政治面貌", order = 20)
     @ColumnWidth(12)
     private String politicalStatus;
 
-    @ExcelProperty(value = "住址（公司）", order = 18)
+    @ExcelProperty(value = "住址（公司）", order = 21)
     @ColumnWidth(24)
     private String residence;
 
-    @ExcelProperty(value = "兴趣爱好", order = 19)
+    @ExcelProperty(value = "兴趣爱好", order = 22)
     @ColumnWidth(20)
     private String hobbies;
 
-    @ExcelProperty(value = "特长", order = 20)
+    @ExcelProperty(value = "特长", order = 23)
     @ColumnWidth(20)
     private String speciality;
 
-    @ExcelProperty(value = "私人邮箱", order = 21)
+    @ExcelProperty(value = "私人邮箱", order = 24)
     @ColumnWidth(26)
     private String email;
 
-    @ExcelProperty(value = "联系方式", order = 22)
+    @ExcelProperty(value = "联系方式", order = 25)
     private String phone;
 
-    @ExcelProperty(value = "入职日期", order = 23)
+    @ExcelProperty(value = "入职日期", order = 26)
     @ColumnWidth(14)
     private String onboardDate;
 
-    @ExcelProperty(value = "状态", order = 24)
+    @ExcelProperty(value = "状态", order = 27)
     @ColumnWidth(10)
     private String status;
 }

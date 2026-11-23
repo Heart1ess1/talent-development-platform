@@ -93,7 +93,7 @@ Authorization: Bearer <token>
 | `DELETE` | `/api/v1/storage/upload-tickets/{ticketId}` | 登录且票据创建人 | 幂等废弃本人尚未消费的 OSS 上传票据；对象清理失败时立即使票据过期并由定时任务重试 | 空 |
 
 上传票据有效期 15 分钟，绑定创建人、用途和业务对象，只能消费一次。浏览器必须按票据返回的 `method`、`uploadUrl`、`headers` 和 `formFields` 直接上传；OSS POST Policy 会强制精确文件大小、类型和禁止覆盖。完成接口校验临时对象后复制为从未对客户端签名的正式对象，再删除临时对象。完整签名字段不应写入日志或持久化。
-| `GET` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 查询本人工作信息和可维护个人资料 | 无 | 员工个人资料，包含只读批次、所属板块、服务站点、技术/技能导师、入职日期和状态 |
+| `GET` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 查询本人工作信息和可维护个人资料 | 无 | 员工个人资料，包含只读批次、所属板块、服务站点、技术/技能导师及联系方式、培养周期、入职日期和状态 |
 | `PUT` | `/api/v1/profile/employee` | `EMPLOYEE` 本人 | 维护本人非工作安排类个人资料 | `phone`、`email`、`birthDate`、`nativePlace`、`residence`、`school`、`major`、`education` | 空 |
 
 `CurrentUser` 关键字段：`id`、`username`、`displayName`、`role`、`mustChangePassword`、`securityVersion`、`permissions`、`dataScope`、`avatarToken`。
@@ -168,7 +168,9 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/employee-directory/summary` | `employee:read`，按数据范围过滤 | 人员工作台管理概览 | 除 `status`、分页外的目录筛选参数 | 权限范围内人员总数、在职/停用人数、已分配站点人数和双导师完整人数 |
 | `GET` | `/api/v1/employee-directory/export` | `employee:export`，按数据范围过滤 | 导出人员目录 Excel | 同目录筛选参数 | Excel 文件 |
 | `GET` | `/api/v1/imports/employees/template` | `employee:write` | 下载员工导入模板 | 无 | Excel 文件 |
-| `POST` | `/api/v1/imports/employees` | `employee:write` | 导入员工 | `multipart/form-data` 字段 `file` | `imported`、`errors` |
+| `POST` | `/api/v1/imports/employees` | `employee:write` | 导入员工 | `multipart/form-data` 字段 `file` | `imported`、`inserted`、`updated`、`unchanged`、`errors`、`createdAccounts` |
+
+人员导入要求工号全系统唯一。工号和姓名同时匹配才更新既有档案，未登记工号按新增处理。同工号异名或文件内重复工号会返回 Excel 行号并拒绝整批写入。新增人员的空白状态默认为在职。更新时，缺少的列和留空的状态保留原值，其他空白单元格清空对应字段。`createdAccounts` 返回新增人员的 `employeeNo`、`name`、`username`。
 
 导入员工采用整批校验；如存在错误，返回 `imported=0` 和行级错误，不写入任何员工。模板列顺序为工号、姓名、性别、批次、班级、班级职务、所属板块等字段；性别仅允许“男”或“女”，班级职务必须匹配已启用的 `CLASS_POSITION` 字典值。
 
@@ -249,6 +251,8 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/attendance/summary` | 登录，按数据范围过滤 | 查询签到统计 | 无 | 总数、今日、自助和补录数量 |
 | `GET` | `/api/v1/imports/attendance/template` | `attendance:manage` | 下载签到导入模板 | 无 | Excel 文件 |
 | `POST` | `/api/v1/imports/attendance` | `attendance:manage` | 导入签到记录 | `multipart/form-data` 字段 `file` | `imported`、`errors` |
+
+签到导入要求场次 ID 和员工工号。员工姓名可选，填写时须与台账一致。工号无法唯一定位人员或姓名不符时，整批不写入并返回行错误。
 
 场次结束时间必须晚于开始时间，签到结束时间必须晚于签到开始时间。员工签到要求当前时间在签到窗口内、本人已被安排到该场次，且同一场次不可重复签到。人工补录会自动补齐场次人员安排并保留补录来源。已产生签到历史的场次和人员安排不可删除。
 
@@ -441,7 +445,7 @@ Authorization: Bearer <token>
 | `GET` | `/api/v1/exams/results/manage` | `exam:manage` | 查询管理端已评分答卷 | 无 | 答卷、考生、考试、分数、发布状态和违规次数 |
 | `GET` | `/api/v1/exams/results/manage/plans` | `exam:manage` | 查询各考试计划成绩汇总 | 无 | 应考、完成、缺考、未完成、已发布数量和发布状态 |
 | `GET` | `/api/v1/exams/results/manage/plans/{planId}` | `exam:manage` | 查询指定计划的人员成绩明细 | 路径 `planId` | 每名应考人员的参与状态、答卷、成绩和发布状态 |
-| `GET` | `/api/v1/exams/results` | 登录，按数据范围过滤 | 查询已发布考试结果与已结束考试的缺考记录 | 可选 `employeeId` | 结果列表，包含 `result_status=COMPLETED|ABSENT`；缺考记录的 `total_score=0` |
+| `GET` | `/api/v1/exams/results` | 登录，按数据范围过滤 | 查询已发布考试结果与已结束考试的缺考记录 | 可选 `employeeId` | 结果列表包含 `employee_no`、`exam_date`、`result_status=COMPLETED\|ABSENT`。缺考记录的 `total_score=0` |
 | `GET` | `/api/v1/exams/results/export` | `exam:manage`，按数据范围过滤 | 导出已发布成绩 | 可选 `planId`、`month=yyyy-MM`、`major` | Excel 文件 |
 
 题库新增、编辑和 Excel 导入仅允许 `SINGLE`、`MULTIPLE`、`TRUE_FALSE` 三类客观题；历史 `SHORT` 数据只保留答卷展示和人工阅卷兼容，不再提供新增入口。试卷总分必须等于 100 分。员工交卷后立即评分，管理员端可即时查看，员工端结果查询只返回 `published=true` 的成绩。`ExamScheduler` 约每 5 秒处理到期答卷，并每分钟将 `ends_at<=now()` 的已评分成绩统一标记为已发布。`dynamicAssembly=true` 时必须同时使用随机组卷；员工开始考试时，系统按员工档案 `major` 匹配题目 `tags`，无标签题作为公共题，每次答卷保存实际抽取题目。
@@ -464,7 +468,7 @@ Authorization: Bearer <token>
 | `POST` | `/api/v1/history-imports/{id}/revoke` | `history:import` 且管理员角色 | 撤销已发布批次 | 路径 `id` | 空 |
 | `POST` | `/api/v1/history-imports/{id}/revision` | `history:import` | 从已发布批次创建可编辑修订草稿 | 路径 `id` | 新批次 ID、校验统计 |
 
-历史导入记录使用独立数据表，不创建在线考试答卷、题目答案或监考事件。考试模板只有“历史成绩”页签，空成绩按缺考处理；综合评价模板只有“历史评价”页签，每行代表一个员工期间的评分项。发布后的考试成绩会合并到成绩查询、成绩导出和员工培养画像；历史评价会生成只读的 `score_summary` 快照。重复文件按 `type + SHA-256` 幂等，已发布记录通过修订批次形成新版本，不再使用来源系统字段。
+历史导入记录使用独立数据表，不创建在线考试答卷、题目答案或监考事件。考试模板只有“历史成绩”页签，工号和姓名均必填且须与员工台账匹配，发布前会重新核对，空成绩按缺考处理。综合评价模板只有“历史评价”页签，每行代表一个员工期间的评分项。发布后的考试成绩会合并到成绩查询、成绩导出和员工培养画像；历史评价会生成只读的 `score_summary` 快照。重复文件按 `type + SHA-256` 幂等，已发布记录通过修订批次形成新版本，不再使用来源系统字段。
 
 ## 账号管理
 

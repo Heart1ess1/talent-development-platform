@@ -81,10 +81,13 @@ public class EmployeeController {
       Long batchId,
       Long classId,
       Long classPositionId,
+      Long trainingCycleId,
       Long businessUnitId,
       Long stationId,
       Long mentorUserId,
       Long skillMentorUserId,
+      String mentorPhone,
+      String skillMentorPhone,
       String school,
       String major,
       String education,
@@ -183,22 +186,23 @@ public class EmployeeController {
     db.update("""
         insert into sys_user(username,password_hash,display_name,role,enabled,must_change_password)
         values(?,?,?,'EMPLOYEE',?,true)
-        """, request.employeeNo(), encoder.encode(UUID.randomUUID().toString()), request.name(),
+        """, availableUsername(request.employeeNo()),
+        encoder.encode(UUID.randomUUID().toString()), request.name(),
         "ACTIVE".equals(normalizedStatus(request.status(), "ACTIVE")));
     Long userId = db.queryForObject("select last_insert_id()", Long.class);
     db.update("insert ignore into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,'EMPLOYEE',true,?)",
         userId, SecurityUtils.current().id());
     db.update("""
         insert into employee(
-          user_id,employee_no,name,gender,batch_id,class_id,class_position_id,business_unit_id,station_id,
-          mentor_user_id,skill_mentor_user_id,school,major,education,birth_date,
+          user_id,employee_no,name,gender,batch_id,class_id,class_position_id,training_cycle_id,business_unit_id,station_id,
+          mentor_user_id,skill_mentor_user_id,mentor_phone,skill_mentor_phone,school,major,education,birth_date,
           native_place,residence,phone,email,onboard_date,political_status,
           hobbies,speciality,id_card,notes,status
-        ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         userId, request.employeeNo(), request.name(), request.gender(), request.batchId(),
-        request.classId(), request.classPositionId(), request.businessUnitId(), request.stationId(), request.mentorUserId(),
-        request.skillMentorUserId(), request.school(), request.major(), request.education(),
+        request.classId(), request.classPositionId(), request.trainingCycleId(), request.businessUnitId(), request.stationId(), request.mentorUserId(),
+        request.skillMentorUserId(), request.mentorPhone(), request.skillMentorPhone(), request.school(), request.major(), request.education(),
         request.birthDate(), request.nativePlace(), request.residence(), request.phone(),
         request.email(), request.onboardDate(), request.politicalStatus(), request.hobbies(),
         request.speciality(), request.idCard(), request.notes(),
@@ -216,39 +220,48 @@ public class EmployeeController {
     permissions.require(Permissions.EMPLOYEE_UPDATE);
     validateReferences(request);
     var before = db.queryForMap("select * from employee where id=? for update", id);
-    Long userId = ((Number) before.get("user_id")).longValue();
+    Long userId = number(before.get("user_id"));
     Long previousStationId = number(before.get("station_id"));
     String previousStatus = String.valueOf(before.get("status"));
+    String status = normalizedStatus(request.status(), previousStatus);
     db.update("""
         update employee
-        set employee_no=?,name=?,gender=?,batch_id=?,class_id=?,class_position_id=?,business_unit_id=?,station_id=?,
-            mentor_user_id=?,skill_mentor_user_id=?,school=?,major=?,education=?,
+        set employee_no=?,name=?,gender=?,batch_id=?,class_id=?,class_position_id=?,training_cycle_id=?,business_unit_id=?,station_id=?,
+            mentor_user_id=?,skill_mentor_user_id=?,mentor_phone=?,skill_mentor_phone=?,school=?,major=?,education=?,
             birth_date=?,native_place=?,residence=?,phone=?,email=?,onboard_date=?,
             political_status=?,hobbies=?,speciality=?,id_card=?,notes=?,status=?,version=version+1
         where id=?
         """,
         request.employeeNo(), request.name(), request.gender(), request.batchId(), request.classId(),
-        request.classPositionId(), request.businessUnitId(), request.stationId(), request.mentorUserId(), request.skillMentorUserId(),
-        request.school(), request.major(), request.education(), request.birthDate(),
+        request.classPositionId(), request.trainingCycleId(), request.businessUnitId(), request.stationId(), request.mentorUserId(), request.skillMentorUserId(),
+        request.mentorPhone(), request.skillMentorPhone(), request.school(), request.major(), request.education(), request.birthDate(),
         request.nativePlace(), request.residence(), request.phone(), request.email(),
         request.onboardDate(), request.politicalStatus(), request.hobbies(),
         request.speciality(), request.idCard(), request.notes(),
-        normalizedStatus(request.status(), previousStatus), id);
-    db.update("""
-        update sys_user
-        set username=?,display_name=?,version=version+1,security_version=security_version+1
-        where id=?
-        """, request.employeeNo(), request.name(), userId);
+        status, id);
+    if (userId != null && !Objects.equals(before.get("employee_no"), request.employeeNo())) {
+      db.update("""
+          update sys_user
+          set username=?,display_name=?,version=version+1,security_version=security_version+1
+          where id=?
+          """, availableUsername(request.employeeNo()), request.name(), userId);
+    } else if (userId != null && !Objects.equals(before.get("name"), request.name())) {
+      db.update("""
+          update sys_user
+          set display_name=?,version=version+1,security_version=security_version+1
+          where id=?
+          """, request.name(), userId);
+    }
     // 仅当账号的唯一角色是 EMPLOYEE 时才联动停用/启用；多角色账号（如员工+导师）只调整员工档案，不锁账号。
     // 兼容尚未写入 sys_user_role 的历史账号：没有任何角色行时仍按 sys_user.role 判断。
-    db.update("""
+    if (userId != null && !previousStatus.equals(status)) db.update("""
         update sys_user u
         set enabled=?,security_version=security_version+1
         where u.id=?
           and ((u.role='EMPLOYEE' and not exists(select 1 from sys_user_role r where r.user_id=u.id))
                or (exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code='EMPLOYEE')
                    and (select count(*) from sys_user_role r where r.user_id=u.id)=1))
-        """, "ACTIVE".equals(normalizedStatus(request.status(), previousStatus)), userId);
+        """, "ACTIVE".equals(status), userId);
     if (!Objects.equals(previousStationId, request.stationId())) {
       var currentUser = SecurityUtils.current();
       db.update("""
@@ -357,6 +370,7 @@ public class EmployeeController {
     requireEnabledMaster("talent_batch", "批次", request.batchId());
     requireEnabledDictionary("CLASS", "班级", request.classId());
     requireEnabledDictionary("CLASS_POSITION", "班级职务", request.classPositionId());
+    requireEnabledDictionary("TRAINING_CYCLE", "培养周期", request.trainingCycleId());
     requireEnabledMaster("business_unit", "所属板块", request.businessUnitId());
     requireEnabledMaster("service_station", "服务站点", request.stationId());
     if (request.mentorUserId() != null) requireMentor(request.mentorUserId());
@@ -583,6 +597,22 @@ public class EmployeeController {
 
   private Long number(Object value) {
     return value == null ? null : ((Number) value).longValue();
+  }
+
+  private String availableUsername(String employeeNo) {
+    String base = employeeNo.trim();
+    if (db.queryForList(
+        "select username from sys_user where username=?", String.class, base).isEmpty()) {
+      return base;
+    }
+    while (true) {
+      String candidate = base.substring(0, Math.min(base.length(), 55)) + "-"
+          + UUID.randomUUID().toString().substring(0, 8);
+      if (db.queryForList(
+          "select username from sys_user where username=?", String.class, candidate).isEmpty()) {
+        return candidate;
+      }
+    }
   }
 
   private String normalizedStatus(String requested, String fallback) {

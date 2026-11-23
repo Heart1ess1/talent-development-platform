@@ -71,6 +71,17 @@ const summary=reactive<DirectorySummary>({
 const loading=ref(false)
 const exporting=ref(false)
 const importing=ref(false)
+const importOpen=ref(false)
+const importFile=ref<File|null>(null)
+type EmployeeImportResult={
+  inserted:number
+  updated:number
+  unchanged:number
+  errors:{row:number;field:string;message:string}[]
+  createdAccounts?:{employeeNo:string;name:string;username:string}[]
+}
+const importResult=ref<EmployeeImportResult|null>(null)
+const importUploadRef=ref<any>()
 const saving=ref(false)
 const pendingCount=ref(0)
 const selectedRows=ref<DirectoryRow[]>([])
@@ -119,6 +130,7 @@ const educationOptions=ref<DictionaryOption[]>([])
 const politicalStatusOptions=ref<DictionaryOption[]>([])
 const classOptions=ref<DictionaryOption[]>([])
 const classPositionOptions=ref<DictionaryOption[]>([])
+const trainingCycleOptions=ref<DictionaryOption[]>([])
 const genderOptions=['男','女'] as const
 
 const isNarrow=ref(false)
@@ -144,10 +156,13 @@ const emptyEmployeeForm=()=>({
   batchId:null as number|null,
   classId:null as number|null,
   classPositionId:null as number|null,
+  trainingCycleId:null as number|null,
   businessUnitId:null as number|null,
   stationId:null as number|null,
   mentorUserId:null as number|null,
   skillMentorUserId:null as number|null,
+  mentorPhone:'',
+  skillMentorPhone:'',
   school:'',
   major:'',
   education:'',
@@ -260,7 +275,8 @@ async function loadMasters(){
     educationValues,
     politicalStatusValues,
     classValues,
-    classPositionValues
+    classPositionValues,
+    trainingCycleValues
   ]=await Promise.all([
     api.get<any,Envelope<any[]>>('/batches'),
     loadEnabledBusinessUnits(),
@@ -269,7 +285,8 @@ async function loadMasters(){
     loadDictionaryValues('EDUCATION'),
     loadDictionaryValues('POLITICAL_STATUS'),
     loadDictionaryValues('CLASS'),
-    loadDictionaryValues('CLASS_POSITION')
+    loadDictionaryValues('CLASS_POSITION'),
+    loadDictionaryValues('TRAINING_CYCLE')
   ])
   batches.value=batchResponse.data
   businessUnits.value=unitOptions
@@ -279,6 +296,7 @@ async function loadMasters(){
   politicalStatusOptions.value=politicalStatusValues
   classOptions.value=classValues
   classPositionOptions.value=classPositionValues
+  trainingCycleOptions.value=trainingCycleValues
 }
 
 async function loadPending(){
@@ -365,10 +383,13 @@ function fillEmployeeForm(row:DirectoryRow){
     batchId:row.batch_id??null,
     classId:row.class_id??null,
     classPositionId:row.class_position_id??null,
+    trainingCycleId:row.training_cycle_id??null,
     businessUnitId:row.business_unit_id??null,
     stationId:row.station_id??null,
     mentorUserId:row.mentor_user_id??null,
     skillMentorUserId:row.skill_mentor_user_id??null,
+    mentorPhone:row.mentor_phone||'',
+    skillMentorPhone:row.skill_mentor_phone||'',
     school:row.school||'',
     major:row.major||'',
     education:row.education||'',
@@ -579,24 +600,42 @@ async function downloadTemplate(){
     '/imports/employees/template',
     {responseType:'blob'}
   )
-  download(blob,'新员工导入模板.xlsx')
+  download(blob,'人员批量导入模板.xlsx')
 }
 
-async function upload(options:any){
+function openImport(){
+  resetImport()
+  importOpen.value=true
+}
+
+function resetImport(){
+  importFile.value=null
+  importResult.value=null
+  importUploadRef.value?.clearFiles()
+}
+
+function importFileChanged(file:any){
+  importFile.value=file.raw||null
+  importResult.value=null
+}
+
+function importFileRemoved(){
+  importFile.value=null
+  importResult.value=null
+}
+
+async function upload(){
+  if(!importFile.value)return ElMessage.warning('请先选择要导入的 Excel 文件')
   importing.value=true
   try{
     const formData=new FormData()
-    formData.append('file',options.file)
-    const response=await api.post<any,Envelope<any>>('/imports/employees',formData)
-    const result=response.data
-    if(result.errors.length){
-      const first=result.errors[0]
-      ElMessage.error(`第 ${first.row} 行 ${first.field}：${first.message}`)
+    formData.append('file',importFile.value)
+    const response=await api.post<any,Envelope<EmployeeImportResult>>('/imports/employees',formData)
+    importResult.value=response.data
+    if(response.data.errors.length){
+      ElMessage.error('导入未执行，请根据错误明细修改文件')
     }else{
-      ElMessage.success({
-        message:`已导入 ${result.imported} 人；在职账号已启用，初始密码为身份证后六位（x按大写X输入）`,
-        duration:6000
-      })
+      ElMessage.success(`新增 ${response.data.inserted} 人，更新 ${response.data.updated} 人，未变化 ${response.data.unchanged} 人`)
       await load()
     }
   }finally{
@@ -704,8 +743,11 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
         <el-badge v-if="canMaster" :value="pendingCount" :hidden="!pendingCount">
           <el-button :icon="Clock" @click="router.push('/station-change-review')">调站审批</el-button>
         </el-badge>
+        <el-button v-if="canWrite" :icon="UploadFilled" @click="openImport">
+          批量导入人员
+        </el-button>
         <el-popover
-          v-if="canWrite||canMaster"
+          v-if="canMaster"
           v-model:visible="dataToolsOpen"
           trigger="click"
           placement="bottom-end"
@@ -715,17 +757,6 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             <el-button :icon="Setting">数据工具</el-button>
           </template>
           <div class="data-tools">
-            <el-button v-if="canWrite" text :icon="Download" @click="downloadTemplate">
-              下载导入模板
-            </el-button>
-            <el-upload
-              v-if="canWrite"
-              :show-file-list="false"
-              :http-request="upload"
-              accept=".xlsx"
-            >
-              <el-button text :icon="UploadFilled" :loading="importing">导入 Excel</el-button>
-            </el-upload>
             <template v-if="canMaster">
               <el-divider/>
               <el-button text :icon="Plus" @click="addMaster('batches')">新增批次</el-button>
@@ -944,7 +975,6 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             <template v-else-if="column.key==='gender'">{{display(row.gender)}}</template>
             <template v-else-if="column.key==='batch'">{{display(row.batch_name)}}</template>
             <template v-else-if="column.key==='class'">{{display(row.class_name)}}</template>
-            <template v-else-if="column.key==='classPosition'">{{display(row.class_position_name)}}</template>
             <template v-else-if="column.key==='businessUnit'">{{display(row.business_unit_name)}}</template>
             <template v-else-if="column.key==='station'">
               <el-button v-if="canViewHistory" link type="primary" :icon="MapLocation" class="station-button" @click.stop="showStationHistory(row)">{{row.station_name||'未分配'}}<span v-if="Number(row.station_change_count)" class="change-count">{{row.station_change_count}} 次</span></el-button>
@@ -1124,14 +1154,17 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
                 </el-button>
               </dd>
             </div>
+            <div><dt>培养周期</dt><dd>{{display(selectedEmployee.training_cycle_name)}}</dd></div>
             <div>
               <dt>指导老师（技术）</dt>
               <dd>{{display(selectedEmployee.technical_mentor_name)}}</dd>
             </div>
+            <div><dt>技术老师联系方式</dt><dd>{{display(selectedEmployee.mentor_phone)}}</dd></div>
             <div>
               <dt>指导老师（技能）</dt>
               <dd>{{display(selectedEmployee.skill_mentor_name)}}</dd>
             </div>
+            <div><dt>技能老师联系方式</dt><dd>{{display(selectedEmployee.skill_mentor_phone)}}</dd></div>
             <div><dt>入职日期</dt><dd>{{formatDate(selectedEmployee.onboard_date)}}</dd></div>
           </dl>
         </section>
@@ -1257,12 +1290,28 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
                 />
               </el-select>
             </el-form-item>
+            <el-form-item label="技术老师联系方式">
+              <el-input v-model="employeeForm.mentorPhone" clearable placeholder="请输入技术指导老师联系方式"/>
+            </el-form-item>
             <el-form-item label="指导老师（技能）">
               <el-select v-model="employeeForm.skillMentorUserId" clearable filterable>
                 <el-option
                   v-for="item in mentors"
                   :key="item.id"
                   :label="item.display_name"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="技能老师联系方式">
+              <el-input v-model="employeeForm.skillMentorPhone" clearable placeholder="请输入技能指导老师联系方式"/>
+            </el-form-item>
+            <el-form-item label="培养周期">
+              <el-select v-model="employeeForm.trainingCycleId" clearable filterable placeholder="请选择培养周期">
+                <el-option
+                  v-for="item in trainingCycleOptions"
+                  :key="item.id"
+                  :label="item.label"
                   :value="item.id"
                 />
               </el-select>
@@ -1371,6 +1420,93 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
         </div>
       </template>
     </el-drawer>
+
+    <el-dialog
+      v-model="importOpen"
+      title="批量导入人员"
+      width="640px"
+      class="employee-import-dialog"
+      destroy-on-close
+      @closed="resetImport"
+    >
+      <div class="import-steps">
+        <section>
+          <span class="import-step-number">1</span>
+          <div>
+            <strong>下载并填写导入模板</strong>
+            <p>新工号新增人员。工号和姓名均匹配才更新，资料一致则跳过。同工号异名或文件内重复工号会报错。</p>
+          </div>
+          <el-button :icon="Download" @click="downloadTemplate">下载导入模板</el-button>
+        </section>
+        <section>
+          <span class="import-step-number">2</span>
+          <div>
+            <strong>选择填写完成的 Excel 文件</strong>
+            <p>仅支持 .xlsx，请保留模板表头。更新时，缺少的列和留空的状态保留原值，其他空白单元格会清空对应字段。</p>
+          </div>
+        </section>
+      </div>
+      <el-upload
+        ref="importUploadRef"
+        drag
+        :auto-upload="false"
+        :limit="1"
+        :disabled="importing"
+        :on-change="importFileChanged"
+        :on-remove="importFileRemoved"
+        accept=".xlsx"
+      >
+        <el-icon class="el-icon--upload"><UploadFilled/></el-icon>
+        <div class="el-upload__text">将文件拖到此处，或 <em>点击选择</em></div>
+        <template #tip>
+          <div class="el-upload__tip">存在校验错误时整批不导入，请根据错误明细修改后重新选择。</div>
+        </template>
+      </el-upload>
+
+      <template v-if="importResult">
+        <template v-if="!importResult.errors.length">
+          <el-alert
+            class="import-result-alert"
+            type="success"
+            :closable="false"
+            :title="`导入完成：新增 ${importResult.inserted} 人，更新 ${importResult.updated} 人，未变化 ${importResult.unchanged} 人`"
+            :description="importResult.inserted?'新增在职账号已启用，初始密码为身份证后六位（x 按大写 X 输入）。':'更新人员的登录密码保持原值。'"
+            show-icon
+          />
+          <el-table v-if="importResult.createdAccounts?.length" :data="importResult.createdAccounts" class="import-error-table" size="small" max-height="240">
+            <el-table-column prop="employeeNo" label="工号" min-width="110"/>
+            <el-table-column prop="name" label="姓名" min-width="100"/>
+            <el-table-column prop="username" label="实际登录名" min-width="150" show-overflow-tooltip/>
+          </el-table>
+        </template>
+        <template v-else>
+          <el-alert
+            class="import-result-alert"
+            type="error"
+            :closable="false"
+            :title="`发现 ${importResult.errors.length} 处错误，本次未导入任何数据`"
+            show-icon
+          />
+          <el-table :data="importResult.errors" class="import-error-table" size="small" max-height="240">
+            <el-table-column prop="row" label="Excel 行号" width="100"/>
+            <el-table-column prop="field" label="字段" width="140"/>
+            <el-table-column prop="message" label="错误原因" min-width="220"/>
+          </el-table>
+        </template>
+      </template>
+
+      <template #footer>
+        <el-button @click="importOpen=false">关闭</el-button>
+        <el-button
+          type="primary"
+          :loading="importing"
+          :disabled="!importFile||!!importResult"
+          @click="upload"
+        >
+          开始导入
+        </el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="historyOpen"
@@ -1508,8 +1644,15 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
 .header-actions .el-button{height:38px;border-radius:9px;margin:0}
 .data-tools{display:flex;flex-direction:column;align-items:stretch}
 .data-tools .el-button{justify-content:flex-start;margin:0;width:100%}
-.data-tools :deep(.el-upload){width:100%}
 .data-tools .el-divider{margin:8px 0}
+.import-steps{display:grid;gap:14px;margin-bottom:18px}
+.import-steps section{display:flex;align-items:flex-start;gap:12px}
+.import-steps section>div{flex:1;min-width:0}
+.import-steps strong{display:block;margin-bottom:4px;color:#303133}
+.import-steps p{margin:0;color:#737373;font-size:14px;line-height:1.6}
+.import-step-number{display:grid;width:24px;height:24px;flex:0 0 auto;place-items:center;border-radius:50%;background:var(--app-page-bg);color:var(--app-primary);font-weight:700}
+.import-result-alert{margin-top:18px}
+.import-error-table{margin-top:12px;width:100%}
 .directory-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
 .directory-summary-card{display:flex;min-width:0;align-items:center;gap:13px;padding:17px 18px;border:1px solid #ebebeb;border-radius:12px;background:#fff;box-shadow:0 4px 15px rgba(0,0,0,.025)}
 .summary-visual{display:grid;width:42px;height:42px;flex:0 0 auto;place-items:center;border-radius:11px}.summary-visual .el-icon{font-size:22px}
@@ -1644,7 +1787,9 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
   .current-station{align-items:flex-start;flex-wrap:wrap}
   .current-station span:last-child{width:100%;margin-left:0}
   :deep(.employee-drawer){max-width:100%}
-  :deep(.station-history-dialog){width:calc(100% - 24px)!important;margin-top:5vh}
+  :deep(.station-history-dialog),:deep(.employee-import-dialog){width:calc(100% - 24px)!important;margin-top:5vh}
+  .import-steps section{flex-wrap:wrap}
+  .import-steps section .el-button{margin-left:36px}
   :deep(.el-popover.el-popper){max-width:calc(100vw - 24px)}
 }
 </style>

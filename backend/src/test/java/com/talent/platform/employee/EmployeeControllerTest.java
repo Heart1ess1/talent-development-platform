@@ -39,6 +39,8 @@ class EmployeeControllerTest {
     when(db.queryForObject(anyString(), eq(Integer.class), any(Object[].class))).thenReturn(1);
     when(db.queryForMap(anyString(), any(Object[].class))).thenReturn(Map.of(
         "user_id", 7L,
+        "employee_no", "employee",
+        "name", "新员工",
         "station_id", 10L,
         "status", "ACTIVE"));
     var currentUser = new CurrentUser(
@@ -57,10 +59,13 @@ class EmployeeControllerTest {
         1L,
         5L,
         6L,
+        null,
         2L,
         20L,
         3L,
         4L,
+        "13911112222",
+        "13933334444",
         "学校",
         "专业",
         "本科",
@@ -86,6 +91,7 @@ class EmployeeControllerTest {
         assertThat(value)
             .contains("insert into station_change_request")
             .contains("reviewed_at"));
+    assertThat(sql.getAllValues()).noneMatch(value -> value.contains("update sys_user"));
   }
 
   @Test
