@@ -189,7 +189,6 @@ class EmployeeSpreadsheetTest {
     row.setName("在职员工");
     row.setBatch("2026届");
     row.setIdCard("11010120020101000x");
-    row.setStatus("在职");
     var bytes = new ByteArrayOutputStream();
     EasyExcel.write(bytes, EmployeeImportRow.class)
         .sheet("人员导入")
@@ -331,11 +330,31 @@ class EmployeeSpreadsheetTest {
     var result = controller.employees(file);
 
     assertThat(result.data().imported()).isEqualTo(1);
-    var arguments = ArgumentCaptor.forClass(Object[].class);
-    verify(db).update(contains("insert into employee"), arguments.capture());
-    assertThat(arguments.getValue()[3]).isNull();
-    assertThat(arguments.getValue()[5]).isNull();
-    assertThat(arguments.getValue()[6]).isNull();
+    var sql = ArgumentCaptor.forClass(String.class);
+    verify(db, org.mockito.Mockito.atLeastOnce()).update(sql.capture(), any(Object[].class));
+    assertThat(sql.getAllValues()).filteredOn(statement -> statement.startsWith("insert into employee"))
+        .singleElement().asString().doesNotContain("gender", "class_position_id");
+  }
+
+  @Test
+  void importPreservesMissingColumnsAndClearsPresentBlankFields() throws Exception {
+    var db = mock(JdbcTemplate.class);
+    when(db.queryForList(contains("select * from employee"), any(Object[].class))).thenReturn(List.of(
+        Map.of("id", 41L, "version", 3, "name", "旧模板员工", "training_cycle_id", 7L, "phone", "13800000000")));
+    when(db.update(contains("update employee set phone=?"), any(Object[].class))).thenReturn(1);
+    var controller = new ImportController(db, mock(PasswordEncoder.class),
+        mock(PermissionService.class), mock(AuditService.class));
+    var bytes = new ByteArrayOutputStream();
+    EasyExcel.write(bytes).head(List.of(List.of("工号"), List.of("姓名"), List.of("联系方式")))
+        .sheet("人员导入").doWrite(List.of(List.of("20260005", "旧模板员工", "")));
+    var file = new MockMultipartFile("file", "旧版人员导入模板.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes.toByteArray());
+
+    var result = controller.employees(file);
+
+    assertThat(result.data().updated()).isEqualTo(1);
+    verify(db).update("update employee set phone=?,version=version+1 where id=? and version=?",
+        (Object) null, 41L, 3);
   }
 
   @Test
@@ -343,13 +362,16 @@ class EmployeeSpreadsheetTest {
     var db = mock(JdbcTemplate.class);
     var changed = new HashMap<String, Object>();
     changed.put("id", 41L);
+    changed.put("name", "更新员工");
     changed.put("user_id", 51L);
+    changed.put("version", 3);
     changed.put("batch_id", 1L);
     changed.put("id_card", "11010120020101000X");
     changed.put("phone", "13800000000");
-    changed.put("status", "ACTIVE");
+    changed.put("status", "INACTIVE");
     var identical = new HashMap<String, Object>();
     identical.put("id", 42L);
+    identical.put("name", "未变化员工");
     identical.put("user_id", 52L);
     identical.put("batch_id", 1L);
     identical.put("id_card", "110101200201010004");
@@ -359,6 +381,7 @@ class EmployeeSpreadsheetTest {
         .thenReturn(List.of(changed), List.of(identical));
     when(db.queryForList(contains("from talent_batch"), eq(Long.class), any(Object[].class)))
         .thenReturn(List.of(1L));
+    when(db.update(contains("update employee set phone=?"), any(Object[].class))).thenReturn(1);
     var controller = new ImportController(
         db, mock(PasswordEncoder.class), mock(PermissionService.class), mock(AuditService.class));
     var first = new EmployeeImportRow();
@@ -367,7 +390,6 @@ class EmployeeSpreadsheetTest {
     first.setBatch("2026届");
     first.setIdCard("11010120020101000X");
     first.setPhone("13900000000");
-    first.setStatus("在职");
     var second = new EmployeeImportRow();
     second.setEmployeeNo("20260011");
     second.setName("未变化员工");
@@ -383,21 +405,19 @@ class EmployeeSpreadsheetTest {
     assertThat(result.data().unchanged()).isEqualTo(1);
     var arguments = ArgumentCaptor.forClass(Object[].class);
     verify(db).update(contains("update employee set phone=?"), arguments.capture());
-    assertThat(arguments.getValue()).containsExactly("13900000000", 41L);
+    assertThat(arguments.getValue()).containsExactly("13900000000", 41L, 3);
+    verify(db, org.mockito.Mockito.never()).update(contains("update sys_user"), any(Object[].class));
   }
 
   @Test
-  void importAllowsSameEmployeeNoForDifferentNames() throws Exception {
+  void importRejectsRepeatedEmployeeNoForDifferentNames() throws Exception {
     var db = mock(JdbcTemplate.class);
     when(db.queryForList(contains("select * from employee"), any(Object[].class)))
         .thenReturn(List.of());
     when(db.queryForList(contains("from talent_batch"), eq(Long.class), any(Object[].class)))
         .thenReturn(List.of(1L));
-    when(db.queryForObject("select last_insert_id()", Long.class)).thenReturn(10L, 11L);
-    var encoder = mock(PasswordEncoder.class);
-    when(encoder.encode(anyString())).thenReturn("hash");
     var controller = new ImportController(
-        db, encoder, mock(PermissionService.class), mock(AuditService.class));
+        db, mock(PasswordEncoder.class), mock(PermissionService.class), mock(AuditService.class));
     var first = new EmployeeImportRow();
     first.setEmployeeNo("20260012");
     first.setName("甲员工");
@@ -411,10 +431,43 @@ class EmployeeSpreadsheetTest {
 
     var result = controller.employees(employeeFile(first, second));
 
-    assertThat(result.data().inserted()).isEqualTo(2);
-    assertThat(result.data().updated()).isZero();
-    verify(db, org.mockito.Mockito.times(2))
-        .update(contains("insert into employee"), any(Object[].class));
+    assertThat(result.data().imported()).isZero();
+    assertThat(result.data().errors()).singleElement().satisfies(error -> {
+      assertThat(error.row()).isEqualTo(3);
+      assertThat(error.field()).isEqualTo("工号");
+      assertThat(error.message()).contains("重复");
+    });
+    verify(db, org.mockito.Mockito.never()).update(anyString(), any(Object[].class));
+  }
+
+  @Test
+  void importRejectsWholeFileWhenEmployeeNameDoesNotMatch() throws Exception {
+    var db = mock(JdbcTemplate.class);
+    when(db.queryForList(contains("select * from employee"), eq("20260012")))
+        .thenReturn(List.of(Map.of("id", 10L, "name", "甲员工")));
+    when(db.queryForList(contains("from talent_batch"), eq(Long.class), any(Object[].class)))
+        .thenReturn(List.of(1L));
+    var controller = new ImportController(
+        db, mock(PasswordEncoder.class), mock(PermissionService.class), mock(AuditService.class));
+    var valid = new EmployeeImportRow();
+    valid.setEmployeeNo("20260014");
+    valid.setName("新增员工");
+    valid.setBatch("2026届");
+    valid.setIdCard("110101200201010004");
+    var conflict = new EmployeeImportRow();
+    conflict.setEmployeeNo("20260012");
+    conflict.setName("乙员工");
+
+    var result = controller.employees(employeeFileWithBlankRow(valid, conflict));
+
+    assertThat(result.data().imported()).isZero();
+    assertThat(result.data().createdAccounts()).isEmpty();
+    assertThat(result.data().errors()).singleElement().satisfies(error -> {
+      assertThat(error.row()).isEqualTo(4);
+      assertThat(error.field()).isEqualTo("姓名");
+      assertThat(error.message()).contains("不一致");
+    });
+    verify(db, org.mockito.Mockito.never()).update(anyString(), any(Object[].class));
   }
 
   @Test
@@ -445,6 +498,8 @@ class EmployeeSpreadsheetTest {
     assertThat(String.valueOf(arguments.getValue()[0]))
         .startsWith("20260013-")
         .isNotEqualTo("20260013");
+    assertThat(result.data().createdAccounts()).containsExactly(
+        new ImportController.CreatedAccount("20260013", "同名工号员工", (String) arguments.getValue()[0]));
   }
 
   private MockMultipartFile employeeFile(EmployeeImportRow... rows) {
@@ -457,6 +512,17 @@ class EmployeeSpreadsheetTest {
         "人员批量导入模板.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         bytes.toByteArray());
+  }
+
+  private MockMultipartFile employeeFileWithBlankRow(EmployeeImportRow first, EmployeeImportRow second)
+      throws Exception {
+    var file = employeeFile(first, second);
+    var bytes = new ByteArrayOutputStream();
+    try (var workbook = WorkbookFactory.create(file.getInputStream())) {
+      workbook.getSheetAt(0).shiftRows(2, 2, 1);
+      workbook.write(bytes);
+    }
+    return new MockMultipartFile("file", file.getOriginalFilename(), file.getContentType(), bytes.toByteArray());
   }
 
   private List<String> headers(org.apache.poi.ss.usermodel.Row row) {

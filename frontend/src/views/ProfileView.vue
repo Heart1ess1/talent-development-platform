@@ -20,7 +20,7 @@ const form=reactive({oldPassword:'',newPassword:'',confirm:''})
 const loading=ref(false),profileLoading=ref(false),avatarUploading=ref(false)
 const profile=reactive<any>({
   employeeNo:'',name:'',gender:'',batchName:'',className:'',classPositionName:'',businessUnitName:'',stationId:null,stationName:'',
-  technicalMentorName:'',skillMentorName:'',mentorPhone:'',skillMentorPhone:'',
+  technicalMentorName:'',skillMentorName:'',mentorPhone:'',skillMentorPhone:'',trainingCycleName:'',
   onboardDate:null,status:'',phone:'',email:'',birthDate:null,nativePlace:'',
   residence:'',school:'',major:'',education:''
 })
@@ -37,7 +37,7 @@ async function loadProfile(){
     stationId:r.data.station_id??null,stationName:r.data.station_name||'',
     technicalMentorName:r.data.technical_mentor_name||'',
     skillMentorName:r.data.skill_mentor_name||'',
-    mentorPhone:r.data.mentor_phone||'',skillMentorPhone:r.data.skill_mentor_phone||'',
+    mentorPhone:r.data.mentor_phone||'',skillMentorPhone:r.data.skill_mentor_phone||'',trainingCycleName:r.data.training_cycle_name||'',
     onboardDate:r.data.onboard_date,status:r.data.status||'',
     phone:r.data.phone||'',email:r.data.email||'',birthDate:r.data.birth_date,
     nativePlace:r.data.native_place||'',residence:r.data.residence||'',
@@ -212,6 +212,7 @@ onMounted(async()=>{
             <el-descriptions-item label="批次">{{profile.batchName||'-'}}</el-descriptions-item>
             <el-descriptions-item label="班级">{{profile.className||'-'}}</el-descriptions-item>
             <el-descriptions-item label="班级职务">{{profile.classPositionName||'-'}}</el-descriptions-item>
+            <el-descriptions-item label="培养周期">{{profile.trainingCycleName||'-'}}</el-descriptions-item>
             <el-descriptions-item label="所属板块">{{profile.businessUnitName||'-'}}</el-descriptions-item>
             <el-descriptions-item label="服务站点">{{profile.stationName||'-'}}</el-descriptions-item>
             <el-descriptions-item label="指导老师（技术）">{{profile.technicalMentorName||'-'}}</el-descriptions-item>

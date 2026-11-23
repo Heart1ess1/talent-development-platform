@@ -305,7 +305,48 @@ public class ExamController {
   @GetMapping("/results/manage") public ApiResponse<List<Map<String,Object>>> managedResults(){permissions.require(Permissions.EXAM_MANAGE);var f=permissions.employeeFilter("e");String online="select a.id,a.attempt_no,a.total_score,a.submitted_at,a.published,a.proctor_mode,e.id employee_id,e.name employee_name,p.name exam_name,coalesce((select ea2.score_month from exam_assignment ea2 where ea2.plan_id=p.id and ea2.employee_id=e.id),p.score_month) score_month,(select count(*) from exam_proctor_event x where x.attempt_id=a.id and (x.event_type='HIDDEN' or (a.proctor_mode='FULLSCREEN_STRICT' and x.event_type in ('BLUR','EXIT_FULLSCREEN')))) event_count,'ONLINE' source_type,false read_only from exam_attempt a join employee e on e.id=a.employee_id join exam_plan p on p.id=a.plan_id where a.status='GRADED'"+f.sql();String history="select r.id,r.attempt_no,r.score total_score,r.taken_at submitted_at,true published,null proctor_mode,e.id employee_id,e.name employee_name,x.name exam_name,x.score_month,0 event_count,'HISTORICAL' source_type,true read_only from legacy_exam_result r join legacy_exam x on x.id=r.exam_id join employee e on e.id=r.employee_id join history_import_batch b on b.id=r.batch_id where r.active=true and b.status='PUBLISHED'"+f.sql();var args=new ArrayList<Object>();args.addAll(f.args());args.addAll(f.args());return ApiResponse.ok(db.queryForList("select * from ("+online+" union all "+history+") x order by submitted_at desc",args.toArray()));}
   @GetMapping("/results/manage/plans") public ApiResponse<List<Map<String,Object>>> managedResultPlans(){permissions.require(Permissions.EXAM_MANAGE);String base="select p.id,p.name,ep.name paper_name,p.starts_at,p.ends_at,p.status,p.score_month,(select count(*) from exam_assignment ea where ea.plan_id=p.id) assigned_count,(select count(distinct a.employee_id) from exam_attempt a where a.plan_id=p.id) participant_count,(select count(*) from exam_assignment ea where ea.plan_id=p.id and exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id and a.status='GRADED')) completed_count,(select count(*) from exam_assignment ea where ea.plan_id=p.id and p.ends_at<now() and not exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id)) absent_count,(select count(*) from exam_assignment ea where ea.plan_id=p.id and exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=ea.employee_id and a.status='GRADED' and a.published=true)) published_count,case when p.ends_at<now() then 'ENDED' when p.starts_at>now() then 'UPCOMING' else 'OPEN' end plan_phase from exam_plan p join exam_paper ep on ep.id=p.paper_id where p.status='PUBLISHED'";String sql="select x.*,(x.assigned_count-x.completed_count-x.absent_count) incomplete_count,case when x.completed_count=0 then 'NOT_READY' when x.published_count=0 then 'UNPUBLISHED' when x.published_count<x.completed_count then 'PARTIAL' else 'PUBLISHED' end publication_status from ("+base+") x order by x.starts_at desc";return ApiResponse.ok(db.queryForList(sql));}
   @GetMapping("/results/manage/plans/{planId}") public ApiResponse<List<Map<String,Object>>> managedPlanResults(@PathVariable Long planId){permissions.require(Permissions.EXAM_MANAGE);Integer exists=db.queryForObject("select count(*) from exam_plan where id=?",Integer.class,planId);if(exists==0)throw new BusinessException(404,"考试计划不存在");String sql="select e.id employee_id,e.employee_no,e.name employee_name,e.class_id,cls.label class_name,e.class_position_id,cp.label class_position_name,a.id,a.attempt_no,a.status attempt_status,a.proctor_mode,a.started_at,a.submitted_at,a.total_score,a.published,(select count(*) from exam_proctor_event x where x.attempt_id=a.id and (x.event_type='HIDDEN' or (a.proctor_mode='FULLSCREEN_STRICT' and x.event_type in ('BLUR','EXIT_FULLSCREEN')))) event_count,case when a.status='GRADED' then 'COMPLETED' when coalesce(ea.window_ends_at,p.ends_at)<now() and a.id is null then 'ABSENT' when a.status='IN_PROGRESS' then 'IN_PROGRESS' when a.id is null then 'NOT_STARTED' else 'INCOMPLETE' end participation_status from exam_assignment ea join employee e on e.id=ea.employee_id left join dictionary_item cls on cls.id=e.class_id and cls.type_code='CLASS' left join dictionary_item cp on cp.id=e.class_position_id and cp.type_code='CLASS_POSITION' join exam_plan p on p.id=ea.plan_id left join exam_attempt a on a.id=(select aa.id from exam_attempt aa where aa.plan_id=ea.plan_id and aa.employee_id=ea.employee_id order by (aa.status='GRADED') desc,aa.attempt_no desc limit 1) where ea.plan_id=? order by e.employee_no,e.id";return ApiResponse.ok(db.queryForList(sql,planId));}
-  @GetMapping("/results") public ApiResponse<List<Map<String,Object>>> results(@RequestParam(required=false)Long employeeId){if(employeeId!=null)permissions.requireEmployee(employeeId);var f=permissions.employeeFilter("e");String employeeWhere=employeeId==null?"":" and e.id=?";String published="select a.id,a.attempt_no,a.total_score,a.submitted_at,e.id employee_id,e.name employee_name,p.name exam_name,coalesce((select ea2.score_month from exam_assignment ea2 where ea2.plan_id=p.id and ea2.employee_id=e.id),p.score_month) score_month,'COMPLETED' result_status,'ONLINE' source_type,false read_only from exam_attempt a join employee e on e.id=a.employee_id join exam_plan p on p.id=a.plan_id where a.published=true"+f.sql()+employeeWhere;String absent="select null id,0 attempt_no,cast(0 as decimal(5,2)) total_score,null submitted_at,e.id employee_id,e.name employee_name,p.name exam_name,coalesce((select ea2.score_month from exam_assignment ea2 where ea2.plan_id=p.id and ea2.employee_id=e.id),p.score_month) score_month,'ABSENT' result_status,'ONLINE' source_type,false read_only from exam_assignment ea join employee e on e.id=ea.employee_id join exam_plan p on p.id=ea.plan_id where p.status='PUBLISHED' and coalesce(ea.window_ends_at,p.ends_at)<now() and not exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=e.id)"+f.sql()+employeeWhere;String historical="select r.id,r.attempt_no,case when r.result_status='COMPLETED' then r.score else 0 end total_score,r.taken_at submitted_at,e.id employee_id,e.name employee_name,x.name exam_name,x.score_month,r.result_status,'HISTORICAL' source_type,true read_only from legacy_exam_result r join legacy_exam x on x.id=r.exam_id join employee e on e.id=r.employee_id join history_import_batch b on b.id=r.batch_id where r.active=true and b.status='PUBLISHED'"+f.sql()+employeeWhere;var args=new ArrayList<Object>();args.addAll(f.args());if(employeeId!=null)args.add(employeeId);args.addAll(f.args());if(employeeId!=null)args.add(employeeId);args.addAll(f.args());if(employeeId!=null)args.add(employeeId);return ApiResponse.ok(db.queryForList("select * from ("+published+" union all "+absent+" union all "+historical+") exam_result order by score_month desc,exam_name",args.toArray()));}
+  @GetMapping("/results")
+  public ApiResponse<List<Map<String,Object>>> results(@RequestParam(required=false) Long employeeId) {
+    if (employeeId != null) permissions.requireEmployee(employeeId);
+    var scope = permissions.employeeFilter("e");
+    String filter = scope.sql() + (employeeId == null ? "" : " and e.id=?");
+    String published = """
+        select a.id,a.attempt_no,a.total_score,a.submitted_at,e.id employee_id,e.name employee_name,
+               e.employee_no,p.name exam_name,date(a.started_at) exam_date,
+               coalesce(ea.score_month,p.score_month) score_month,
+               'COMPLETED' result_status,'ONLINE' source_type,false read_only
+        from exam_attempt a join employee e on e.id=a.employee_id
+        join exam_plan p on p.id=a.plan_id
+        left join exam_assignment ea on ea.plan_id=p.id and ea.employee_id=e.id
+        where a.published=true
+        """ + filter;
+    String absent = """
+        select null id,0 attempt_no,cast(0 as decimal(5,2)) total_score,null submitted_at,
+               e.id employee_id,e.name employee_name,e.employee_no,p.name exam_name,
+               date(coalesce(ea.window_starts_at,p.starts_at)) exam_date,
+               coalesce(ea.score_month,p.score_month) score_month,
+               'ABSENT' result_status,'ONLINE' source_type,false read_only
+        from exam_assignment ea join employee e on e.id=ea.employee_id
+        join exam_plan p on p.id=ea.plan_id
+        where p.status='PUBLISHED' and coalesce(ea.window_ends_at,p.ends_at)<now()
+          and not exists(select 1 from exam_attempt a where a.plan_id=p.id and a.employee_id=e.id)
+        """ + filter;
+    String historical = """
+        select r.id,r.attempt_no,case when r.result_status='COMPLETED' then r.score else 0 end total_score,
+               r.taken_at submitted_at,e.id employee_id,e.name employee_name,e.employee_no,x.name exam_name,
+               x.exam_date,x.score_month,r.result_status,'HISTORICAL' source_type,true read_only
+        from legacy_exam_result r join legacy_exam x on x.id=r.exam_id
+        join employee e on e.id=r.employee_id join history_import_batch b on b.id=r.batch_id
+        where r.active=true and b.status='PUBLISHED'
+        """ + filter;
+    var filters = new ArrayList<Object>(scope.args());
+    if (employeeId != null) filters.add(employeeId);
+    var args = new ArrayList<Object>();
+    for (int i = 0; i < 3; i++) args.addAll(filters);
+    return ApiResponse.ok(db.queryForList(
+        "select * from (" + String.join(" union all ", published, absent, historical)
+            + ") exam_result order by score_month desc,exam_name", args.toArray()));
+  }
 
   @GetMapping("/results/export")
   public void exportResults(@RequestParam(required=false) Long planId,

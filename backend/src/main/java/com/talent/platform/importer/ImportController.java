@@ -1,6 +1,8 @@
 package com.talent.platform.importer;
 
 import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.context.AnalysisContext;
+import com.alibaba.excel.event.AnalysisEventListener;
 import com.talent.platform.common.*;
 import com.talent.platform.employee.EmployeeExcelSheetHandler;
 import com.talent.platform.security.*;
@@ -35,8 +37,11 @@ public class ImportController {
 
     public record RowError(int row, String field, String message) {}
     public record ImportResult(int imported, List<RowError> errors) {}
+    public record CreatedAccount(String employeeNo, String name, String username) {}
     public record EmployeeImportResult(
-            int imported, int inserted, int updated, int unchanged, List<RowError> errors) {}
+            int imported, int inserted, int updated, int unchanged, List<RowError> errors,
+            List<CreatedAccount> createdAccounts) {}
+    private record EmployeeSheetRow(int line, EmployeeImportRow data) {}
 
     @GetMapping("/employees/template")
     public void template(HttpServletResponse response) throws Exception {
@@ -89,18 +94,32 @@ public class ImportController {
     @Transactional
     public ApiResponse<EmployeeImportResult> employees(@RequestParam MultipartFile file) throws Exception {
         permissions.require(Permissions.EMPLOYEE_WRITE);
-        List<EmployeeImportRow> rows = EasyExcel.read(file.getInputStream())
-                .head(EmployeeImportRow.class)
-                .headRowNumber(1)
-                .sheet().doReadSync();
-
         var errors = new ArrayList<RowError>();
+        var rows = new ArrayList<EmployeeSheetRow>();
+        var headers = new HashSet<String>();
+        EasyExcel.read(file.getInputStream(), EmployeeImportRow.class,
+                new AnalysisEventListener<EmployeeImportRow>() {
+                    @Override
+                    public void invokeHeadMap(Map<Integer, String> headerMap, AnalysisContext context) {
+                        headerMap.values().stream().map(ImportController.this::text).forEach(headers::add);
+                    }
+
+                    @Override
+                    public void invoke(EmployeeImportRow row, AnalysisContext context) {
+                        rows.add(new EmployeeSheetRow(context.readRowHolder().getRowIndex() + 1, row));
+                    }
+
+                    @Override
+                    public void doAfterAllAnalysed(AnalysisContext context) {}
+                }).sheet().doRead();
+        if (rows.isEmpty()) errors.add(new RowError(2, "人员数据", "未读取到人员数据"));
+
         var seen = new HashSet<String>();
         var existingRows = new ArrayList<Map<String, Object>>();
 
-        for (int i = 0; i < rows.size(); i++) {
-            var r = rows.get(i);
-            int line = i + 2;
+        for (var row : rows) {
+            var r = row.data();
+            int line = row.line();
             String employeeNo = text(r.getEmployeeNo());
             String name = text(r.getName());
             r.setEmployeeNo(employeeNo);
@@ -109,13 +128,16 @@ public class ImportController {
             if (name == null) errors.add(new RowError(line, "姓名", "不能为空"));
 
             Map<String, Object> existing = null;
-            if (employeeNo != null && name != null) {
-                String identity = (employeeNo + "\0" + name).toLowerCase(Locale.ROOT);
-                if (!seen.add(identity))
-                    errors.add(new RowError(line, "工号+姓名", "导入文件中重复"));
+            if (employeeNo != null) {
+                if (!seen.add(employeeNo.toLowerCase(Locale.ROOT)))
+                    errors.add(new RowError(line, "工号", "导入文件中重复，每个工号只能填写一行"));
                 var found = db.queryForList(
-                        "select * from employee where employee_no=? and name=?", employeeNo, name);
-                if (!found.isEmpty()) existing = found.get(0);
+                        "select * from employee where employee_no=?", employeeNo);
+                if (!found.isEmpty()) {
+                    existing = found.get(0);
+                    if (name != null && !name.equals(text((String) existing.get("name"))))
+                        errors.add(new RowError(line, "姓名", "与该工号的人员档案不一致，请核对工号和姓名"));
+                }
             }
             existingRows.add(existing);
 
@@ -145,23 +167,23 @@ public class ImportController {
             validateMentor(r.getSkillMentor(), line, "指导老师（技能）", errors);
             tryDate(r.getBirthDate(), line, "出生日期", errors);
             tryDate(r.getOnboardDate(), line, "入职日期", errors);
-            if (normalizeStatus(r.getStatus()) == null)
+            if (text(r.getStatus()) != null && normalizeStatus(r.getStatus()) == null)
                 errors.add(new RowError(line, "状态", "仅支持“在职”或“停用”"));
         }
 
         if (!errors.isEmpty())
-            return ApiResponse.ok(new EmployeeImportResult(0, 0, 0, 0, errors));
+            return ApiResponse.ok(new EmployeeImportResult(0, 0, 0, 0, errors, List.of()));
 
-        int inserted = 0;
+        var createdAccounts = new ArrayList<CreatedAccount>();
         int updated = 0;
         int unchanged = 0;
         for (int i = 0; i < rows.size(); i++) {
-            var r = rows.get(i);
-            var values = employeeValues(r);
+            var r = rows.get(i).data();
+            var values = employeeValues(r, headers);
             var existing = existingRows.get(i);
             if (existing == null) {
-                insertEmployee(r, values);
-                inserted++;
+                values.putIfAbsent("status", "ACTIVE");
+                createdAccounts.add(insertEmployee(r, values));
                 continue;
             }
 
@@ -177,30 +199,35 @@ public class ImportController {
 
             var args = new ArrayList<>(changed.values());
             args.add(existing.get("id"));
+            args.add(existing.get("version"));
             String assignments = changed.keySet().stream()
                     .map(column -> column + "=?")
                     .reduce((a, b) -> a + "," + b).orElseThrow();
-            db.update("update employee set " + assignments
-                    + ",version=version+1 where id=?", args.toArray());
+            int affected = db.update("update employee set " + assignments
+                    + ",version=version+1 where id=? and version=?", args.toArray());
+            if (affected == 0)
+                throw new BusinessException(409, "工号 " + r.getEmployeeNo() + " 的人员档案已变化，请重新核对后导入");
             if (changed.containsKey("status") && existing.get("user_id") instanceof Number userId) {
                 syncEmployeeAccount(userId.longValue(), "ACTIVE".equals(changed.get("status")));
             }
             updated++;
         }
 
+        int inserted = createdAccounts.size();
         audit.log("IMPORT_EMPLOYEES", "EMPLOYEE", null, null,
                 Map.of("inserted", inserted, "updated", updated, "unchanged", unchanged));
         return ApiResponse.ok(new EmployeeImportResult(
-                inserted + updated, inserted, updated, unchanged, List.of()));
+                inserted + updated, inserted, updated, unchanged, List.of(), createdAccounts));
     }
 
-    private void insertEmployee(EmployeeImportRow r, Map<String, Object> values) {
+    private CreatedAccount insertEmployee(EmployeeImportRow r, Map<String, Object> values) {
         String status = (String) values.get("status");
         String initialPassword = EmployeeInitialPassword.fromIdCard(r.getIdCard().trim());
+        String username = availableUsername(r.getEmployeeNo());
         db.update("""
             insert into sys_user(username, password_hash, display_name, role, enabled, must_change_password)
             values(?,?,?,'EMPLOYEE',?,true)
-            """, availableUsername(r.getEmployeeNo()), encoder.encode(initialPassword), r.getName(),
+            """, username, encoder.encode(initialPassword), r.getName(),
                 "ACTIVE".equals(status));
         Long uid = db.queryForObject("select last_insert_id()", Long.class);
         db.update("insert ignore into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,'EMPLOYEE',true,?)",
@@ -215,35 +242,38 @@ public class ImportController {
         db.update("insert into employee(user_id,employee_no,name,"
                 + String.join(",", values.keySet()) + ") values(?,?,?," + marks + ")",
                 args.toArray());
+        return new CreatedAccount(r.getEmployeeNo(), r.getName(), username);
     }
 
-    private Map<String, Object> employeeValues(EmployeeImportRow r) {
+    private Map<String, Object> employeeValues(EmployeeImportRow r, Set<String> headers) {
         var values = new LinkedHashMap<String, Object>();
-        values.put("gender", normalizeGender(r.getGender()));
-        values.put("batch_id", id("talent_batch", r.getBatch()));
-        values.put("class_id", dictionaryItemId("CLASS", r.getClassName()));
-        values.put("class_position_id", dictionaryItemId("CLASS_POSITION", r.getClassPositionName()));
-        values.put("business_unit_id", id("business_unit", r.getBusinessUnit()));
-        values.put("station_id", id("service_station", r.getStation()));
-        values.put("mentor_user_id", mentorId(r.getTechnicalMentor()));
-        values.put("mentor_phone", text(r.getMentorPhone()));
-        values.put("skill_mentor_user_id", mentorId(r.getSkillMentor()));
-        values.put("skill_mentor_phone", text(r.getSkillMentorPhone()));
-        values.put("training_cycle_id", dictionaryItemId("TRAINING_CYCLE", r.getTrainingCycleName()));
-        values.put("school", text(r.getSchool()));
-        values.put("major", text(r.getMajor()));
-        values.put("education", text(r.getEducation()));
-        values.put("birth_date", date(r.getBirthDate()));
-        values.put("native_place", text(r.getNativePlace()));
-        values.put("political_status", text(r.getPoliticalStatus()));
-        values.put("residence", text(r.getResidence()));
-        values.put("hobbies", text(r.getHobbies()));
-        values.put("speciality", text(r.getSpeciality()));
-        values.put("email", text(r.getEmail()));
-        values.put("id_card", text(r.getIdCard()));
-        values.put("phone", text(r.getPhone()));
-        values.put("onboard_date", date(r.getOnboardDate()));
-        values.put("status", normalizeStatus(r.getStatus()));
+        if (headers.contains("性别")) values.put("gender", normalizeGender(r.getGender()));
+        if (headers.contains("批次")) values.put("batch_id", id("talent_batch", r.getBatch()));
+        if (headers.contains("班级")) values.put("class_id", dictionaryItemId("CLASS", r.getClassName()));
+        if (headers.contains("班级职务"))
+            values.put("class_position_id", dictionaryItemId("CLASS_POSITION", r.getClassPositionName()));
+        if (headers.contains("所属板块")) values.put("business_unit_id", id("business_unit", r.getBusinessUnit()));
+        if (headers.contains("服务站点")) values.put("station_id", id("service_station", r.getStation()));
+        if (headers.contains("指导老师（技术）")) values.put("mentor_user_id", mentorId(r.getTechnicalMentor()));
+        if (headers.contains("技术老师联系方式")) values.put("mentor_phone", text(r.getMentorPhone()));
+        if (headers.contains("指导老师（技能）")) values.put("skill_mentor_user_id", mentorId(r.getSkillMentor()));
+        if (headers.contains("技能老师联系方式")) values.put("skill_mentor_phone", text(r.getSkillMentorPhone()));
+        if (headers.contains("培养周期"))
+            values.put("training_cycle_id", dictionaryItemId("TRAINING_CYCLE", r.getTrainingCycleName()));
+        if (headers.contains("毕业学校")) values.put("school", text(r.getSchool()));
+        if (headers.contains("所学专业")) values.put("major", text(r.getMajor()));
+        if (headers.contains("学历")) values.put("education", text(r.getEducation()));
+        if (headers.contains("出生日期")) values.put("birth_date", date(r.getBirthDate()));
+        if (headers.contains("籍贯")) values.put("native_place", text(r.getNativePlace()));
+        if (headers.contains("政治面貌")) values.put("political_status", text(r.getPoliticalStatus()));
+        if (headers.contains("住址（公司）")) values.put("residence", text(r.getResidence()));
+        if (headers.contains("兴趣爱好")) values.put("hobbies", text(r.getHobbies()));
+        if (headers.contains("特长")) values.put("speciality", text(r.getSpeciality()));
+        if (headers.contains("私人邮箱")) values.put("email", text(r.getEmail()));
+        if (headers.contains("身份证号码")) values.put("id_card", text(r.getIdCard()));
+        if (headers.contains("联系方式")) values.put("phone", text(r.getPhone()));
+        if (headers.contains("入职日期")) values.put("onboard_date", date(r.getOnboardDate()));
+        if (text(r.getStatus()) != null) values.put("status", normalizeStatus(r.getStatus()));
         return values;
     }
 
@@ -300,6 +330,7 @@ public class ImportController {
         sample.setSessionId(1L);
         sample.setEmployeeNo("20260001");
         sample.setRemark("补录");
+        sample.setEmployeeName("张三");
         EasyExcel.write(response.getOutputStream(), AttendanceImportRow.class)
                 .sheet("签到记录").doWrite(List.of(sample));
     }
@@ -324,9 +355,18 @@ public class ImportController {
                 errors.add(new RowError(line, "员工工号", "不能为空"));
             } else {
                 var found = db.queryForList(
-                        "select id from employee where employee_no=?", Long.class, row.getEmployeeNo());
+                        "select id,name from employee where employee_no=? for share", row.getEmployeeNo().trim());
                 if (found.isEmpty()) errors.add(new RowError(line, "员工工号", "不存在"));
-                else employeeId = found.get(0);
+                else if (found.size() != 1) errors.add(new RowError(line, "员工工号", "对应多名员工，无法确定归属"));
+                else {
+                    var employee = found.get(0);
+                    String name = row.getEmployeeName();
+                    if (name != null && !name.isBlank() && !name.trim().equals(((String) employee.get("name")).trim())) {
+                        errors.add(new RowError(line, "员工姓名", "与员工台账不一致"));
+                    } else {
+                        employeeId = ((Number) employee.get("id")).longValue();
+                    }
+                }
             }
             employeeIds.add(employeeId);
         }
@@ -393,8 +433,8 @@ public class ImportController {
     private List<EmployeeImportInstructionRow> employeeImportInstructions() {
         return List.of(
                 instruction("序号", "否", "仅用于阅读排序，不参与系统校验。", "1"),
-                instruction("工号", "是", "与姓名共同作为唯一识别项；建议按文本填写，避免前导零丢失。", "20260001"),
-                instruction("姓名", "是", "工号+姓名相同则按文件覆盖更新（留空字段会清空），任一不同则新增人员。", "张三"),
+                instruction("工号", "是", "工号全系统唯一；同一文件中每个工号只能填写一行。按文本填写以保留前导零。", "20260001"),
+                instruction("姓名", "是", "工号和姓名都匹配才更新；新工号新增；已有工号的姓名不一致时整批拒绝。姓名更正请编辑档案。旧模板缺少的列保留原值。", "张三"),
                 instruction("性别", "否", "仅填写“男”或“女”；该选项固定，不在字典值管理中维护。", "男"),
                 instruction("批次", "新增必填", "必须与系统中已启用的培养批次名称完全一致；更新时留空会清空批次。", "2026届"),
                 instruction("班级", "否", "必须与字典管理中已启用的班级名称完全一致；留空表示暂不分配班级。", "2026届1班"),
@@ -419,7 +459,7 @@ public class ImportController {
                 instruction("私人邮箱", "否", "填写员工常用私人邮箱。", "example@example.com"),
                 instruction("联系方式", "否", "建议按文本填写，避免号码格式变化。", "13800000000"),
                 instruction("入职日期", "否", "格式必须为 yyyy-MM-dd。", "2026-07-01"),
-                instruction("状态", "否", "仅填写“在职”或“停用”；留空时默认为“在职”。", "在职"));
+                instruction("状态", "否", "仅填写“在职”或“停用”；留空时新增默认为在职，更新保留原状态。", "在职"));
     }
 
     private EmployeeImportInstructionRow instruction(
@@ -428,7 +468,6 @@ public class ImportController {
     }
 
     private String normalizeStatus(String value) {
-        if (value == null || value.isBlank()) return "ACTIVE";
         return switch (value.trim().toUpperCase(Locale.ROOT)) {
             case "在职", "ACTIVE" -> "ACTIVE";
             case "停用", "INACTIVE" -> "INACTIVE";

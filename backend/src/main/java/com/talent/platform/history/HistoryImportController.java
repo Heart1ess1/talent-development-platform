@@ -107,17 +107,105 @@ public class HistoryImportController {
   private void validateBatch(Long id){
     String kind=db.queryForObject("select import_type from history_import_batch where id=?",String.class,id);var rows=db.queryForList("select * from history_import_row where batch_id=? order by id",id);Map<String,Map<String,Object>> evals=new HashMap<>();Map<String,List<Map<String,Object>>> cs=new HashMap<>();
     for(var r:rows){Map<String,Object>d=jsonMap(String.valueOf(r.get("raw_json")));if("EVALUATION".equals(r.get("row_type"))){evals.put(key(d),d);}else if("EVALUATION_COMPONENT".equals(r.get("row_type"))){cs.computeIfAbsent(key(d),x->new ArrayList<>()).add(d);}}
-    int errors=0,warnings=0,valid=0;Set<String> seen=new HashSet<>();
-    for(var r:rows){Map<String,Object>d=jsonMap(String.valueOf(r.get("raw_json")));List<String>es=new ArrayList<>(),ws=new ArrayList<>();String type=String.valueOf(r.get("row_type"));String dup=switch(type){case"EXAM_RESULT"->"RESULT|"+text(d.get("employeeNo"));case"EVALUATION"->"EVAL|"+key(d);case"EVALUATION_COMPONENT"->"COMP|"+key(d)+"|"+text(d.get("componentCode"))+"|"+text(d.get("sourceKey"))+"|"+text(d.get("evaluatorName"));default->type+"|"+r.get("id");};if(!seen.add(dup))es.add("文件内存在重复记录");
-      if("EXAM".equals(kind)&&"EXAM_RESULT".equals(type))validateExamResult(d,es,ws);else if("EVALUATION".equals(kind)&&"EVALUATION".equals(type)){validateEvaluation(d,es);var list=cs.getOrDefault(key(d),List.of());if(list.isEmpty())es.add("评价记录至少需要一条评分明细");else{BigDecimal total=list.stream().map(x->decimalNullable(x,"weightedScore")).filter(Objects::nonNull).reduce(BigDecimal.ZERO,BigDecimal::add);BigDecimal f=decimalNullable(d,"finalScore");if(f!=null&&total.subtract(f).abs().compareTo(new BigDecimal("0.02"))>0)es.add("评分明细加权合计与最终分数不一致");}}else if("EVALUATION".equals(kind)&&"EVALUATION_COMPONENT".equals(type))validateComponent(d,evals,es);else es.add("导入行类型与批次类型不一致");
-      String state=es.isEmpty()?(ws.isEmpty()?"VALID":"WARNING"):"ERROR";if(!es.isEmpty())errors++;else{valid++;if(!ws.isEmpty())warnings++;}String no=text(d.get("employeeNo"));db.update("update history_import_row set normalized_json=?,employee_no=?,employee_id=?,state=?,error_message=?,warning_message=? where id=?",toJson(d),blank(no,null),findEmployee(no),state,join(es),join(ws),r.get("id"));}
-    db.update("update history_import_batch set row_count=?,valid_count=?,error_count=?,warning_count=? where id=?",rows.size(),valid,errors,warnings,id);
+    int errors=0;
+    Set<String> seen=new HashSet<>();
+    for (var row : rows) {
+      Map<String,Object> data=jsonMap(String.valueOf(row.get("raw_json")));
+      List<String> rowErrors=new ArrayList<>();
+      String type=String.valueOf(row.get("row_type"));
+      String employeeNo=text(data.get("employeeNo"));
+      String duplicateKey=switch(type) {
+        case "EXAM_RESULT" -> "RESULT|"+employeeNo;
+        case "EVALUATION" -> "EVAL|"+key(data);
+        case "EVALUATION_COMPONENT" -> "COMP|"+key(data)+"|"+text(data.get("componentCode"))
+            +"|"+text(data.get("sourceKey"))+"|"+text(data.get("evaluatorName"));
+        default -> type+"|"+row.get("id");
+      };
+      if (!seen.add(duplicateKey)) rowErrors.add("文件内存在重复记录");
+      Long employeeId=null;
+      if ("EXAM".equals(kind)&&"EXAM_RESULT".equals(type)) {
+        employeeId=validateExamResult(data,rowErrors);
+      } else if ("EVALUATION".equals(kind)&&"EVALUATION".equals(type)) {
+        employeeId=findEmployee(employeeNo);
+        validateEvaluation(data,employeeId,rowErrors);
+        var components=cs.getOrDefault(key(data),List.of());
+        if (components.isEmpty()) {
+          rowErrors.add("评价记录至少需要一条评分明细");
+        } else {
+          BigDecimal total=components.stream().map(x->decimalNullable(x,"weightedScore"))
+              .filter(Objects::nonNull).reduce(BigDecimal.ZERO,BigDecimal::add);
+          BigDecimal finalScore=decimalNullable(data,"finalScore");
+          if (finalScore!=null&&total.subtract(finalScore).abs().compareTo(new BigDecimal("0.02"))>0)
+            rowErrors.add("评分明细加权合计与最终分数不一致");
+        }
+      } else if ("EVALUATION".equals(kind)&&"EVALUATION_COMPONENT".equals(type)) {
+        employeeId=findEmployee(employeeNo);
+        validateComponent(data,evals,rowErrors);
+      } else {
+        rowErrors.add("导入行类型与批次类型不一致");
+      }
+      if (!rowErrors.isEmpty()) errors++;
+      db.update("""
+          update history_import_row set normalized_json=?,employee_no=?,employee_id=?,state=?,
+            error_message=?,warning_message=null where id=?
+          """,toJson(data),blank(employeeNo,null),employeeId,rowErrors.isEmpty()?"VALID":"ERROR",join(rowErrors),row.get("id"));
+    }
+    db.update("update history_import_batch set row_count=?,valid_count=?,error_count=?,warning_count=0 where id=?",
+        rows.size(),rows.size()-errors,errors,id);
   }
-  private void validateExamResult(Map<String,Object>d,List<String>es,List<String>ws){req(d,"employeeNo","工号",es);Long eid=findEmployee(text(d.get("employeeNo")));if(eid==null)es.add("工号不存在");else if(!text(d.get("employeeName")).isBlank()&&!Objects.equals(employeeName(eid),text(d.get("employeeName"))))ws.add("姓名与员工档案不一致");String s=text(d.get("score"));if(s.isBlank()){d.put("resultStatus","ABSENT");d.put("score",null);}else{BigDecimal n=decimal(d,"score",es);if(n!=null&&(n.signum()<0||n.compareTo(BigDecimal.valueOf(100))>0))es.add("成绩必须在0至100之间");d.put("resultStatus","COMPLETED");}}
-  private void validateEvaluation(Map<String,Object>d,List<String>es){req(d,"employeeNo","工号",es);req(d,"summaryType","评价类型",es);req(d,"periodKey","期间",es);if(!"MONTH".equals(text(d.get("summaryType"))))es.add("季度评价已停止导入");String p=text(d.get("periodKey"));if("MONTH".equals(text(d.get("summaryType")))&&!p.matches("20\\d{2}-[01]\\d"))es.add("月度期间格式应为 yyyy-MM");BigDecimal f=decimal(d,"finalScore",es);if(f!=null&&(f.signum()<0||f.compareTo(BigDecimal.valueOf(100))>0))es.add("最终分数必须在0至100之间");if(findEmployee(text(d.get("employeeNo")))==null)es.add("工号不存在");}
+  private Long validateExamResult(Map<String,Object> data,List<String> errors) {
+    req(data,"employeeNo","工号",errors);
+    req(data,"employeeName","姓名",errors);
+    Long employeeId=null;
+    String employeeNo=text(data.get("employeeNo"));
+    String name=text(data.get("employeeName"));
+    if (!employeeNo.isBlank()&&!name.isBlank()) {
+      var matches=db.queryForList("select id,name from employee where employee_no=? for share",employeeNo);
+      if (matches.isEmpty()) errors.add("工号不存在");
+      else if (matches.size()!=1) errors.add("工号对应多名员工，无法确定归属");
+      else if (!name.equals(text(matches.get(0).get("name")))) errors.add("姓名与员工档案不一致");
+      else employeeId=nullableLong(matches.get(0).get("id"));
+    }
+    if (text(data.get("score")).isBlank()) {
+      data.put("resultStatus","ABSENT");
+      data.put("score",null);
+    } else {
+      BigDecimal score=decimal(data,"score",errors);
+      if (score!=null&&(score.signum()<0||score.compareTo(BigDecimal.valueOf(100))>0))
+        errors.add("成绩必须在0至100之间");
+      data.put("resultStatus","COMPLETED");
+    }
+    return employeeId;
+  }
+  private void validateEvaluation(Map<String,Object>d,Long employeeId,List<String>es){req(d,"employeeNo","工号",es);req(d,"summaryType","评价类型",es);req(d,"periodKey","期间",es);if(!"MONTH".equals(text(d.get("summaryType"))))es.add("季度评价已停止导入");String p=text(d.get("periodKey"));if("MONTH".equals(text(d.get("summaryType")))&&!p.matches("20\\d{2}-[01]\\d"))es.add("月度期间格式应为 yyyy-MM");BigDecimal f=decimal(d,"finalScore",es);if(f!=null&&(f.signum()<0||f.compareTo(BigDecimal.valueOf(100))>0))es.add("最终分数必须在0至100之间");if(employeeId==null)es.add("工号不存在或无法确定归属");}
   private void validateComponent(Map<String,Object>d,Map<String,Map<String,Object>>evals,List<String>es){if(!evals.containsKey(key(d)))es.add("找不到对应的历史评价");if(!COMPONENTS.contains(text(d.get("componentCode"))))es.add("评分项编码不合法");BigDecimal raw=decimal(d,"rawScore",es),max=decimal(d,"maxScore",es),w=decimal(d,"weight",es),weighted=decimal(d,"weightedScore",es);if(raw!=null&&max!=null&&(max.signum()<=0||raw.compareTo(max)>0))es.add("原始分不能超过满分");if(w!=null&&(w.signum()<0||w.compareTo(BigDecimal.valueOf(100))>0))es.add("权重必须在0至100之间");if(raw!=null&&max!=null&&w!=null&&weighted!=null&&raw.multiply(w).divide(max,2,java.math.RoundingMode.HALF_UP).subtract(weighted).abs().compareTo(new BigDecimal("0.02"))>0)es.add("加权分与原始分、满分、权重不一致");}
 
-  private void publishExams(Long id,Map<String,Object>b){deactivateRevision(b);String key=text(b.get("generated_exam_key"));Integer v=db.queryForObject("select coalesce(max(version),0)+1 from legacy_exam where external_exam_key=?",Integer.class,key);db.update("insert into legacy_exam(batch_id,external_exam_key,name,exam_date,score_month,max_score,remark,version) values(?,?,?,?,?,?,?,?)",id,key,text(b.get("exam_name")),date(b.get("exam_date")),date(b.get("score_month")),BigDecimal.valueOf(100),blank(text(b.get("remark")),null),v);Long exam=lastId();for(var r:db.queryForList("select raw_json,employee_id from history_import_row where batch_id=? and row_type='EXAM_RESULT' and state in ('VALID','WARNING')",id)){Map<String,Object>d=jsonMap(String.valueOf(r.get("raw_json")));Long eid=((Number)r.get("employee_id")).longValue();db.update("insert into legacy_exam_result(exam_id,batch_id,employee_id,employee_no_snapshot,employee_name_snapshot,result_status,score,objective_score,subjective_score,attempt_no,taken_at,remark) values(?,?,?,?,?,?,?,?,?,?,?,?)",exam,id,eid,text(d.get("employeeNo")),employeeName(eid),text(d.get("resultStatus")),decimalNullable(d,"score"),decimalNullable(d,"score"),null,1,null,blank(text(b.get("remark")),null));}}
+  private void publishExams(Long id,Map<String,Object> batch) {
+    deactivateRevision(batch);
+    String key=text(batch.get("generated_exam_key"));
+    Integer version=db.queryForObject("select coalesce(max(version),0)+1 from legacy_exam where external_exam_key=?",Integer.class,key);
+    String remark=blank(text(batch.get("remark")),null);
+    db.update("""
+        insert into legacy_exam(batch_id,external_exam_key,name,exam_date,score_month,max_score,remark,version)
+        values(?,?,?,?,?,?,?,?)
+        """,id,key,text(batch.get("exam_name")),date(batch.get("exam_date")),date(batch.get("score_month")),
+        BigDecimal.valueOf(100),remark,version);
+    Long examId=lastId();
+    var rows=db.queryForList("""
+        select normalized_json,employee_id from history_import_row
+        where batch_id=? and row_type='EXAM_RESULT' and state='VALID'
+        """,id);
+    for (var row : rows) {
+      Map<String,Object> data=jsonMap(String.valueOf(row.get("normalized_json")));
+      BigDecimal score=decimalNullable(data,"score");
+      db.update("""
+          insert into legacy_exam_result(exam_id,batch_id,employee_id,employee_no_snapshot,employee_name_snapshot,
+            result_status,score,objective_score,subjective_score,attempt_no,taken_at,remark)
+          values(?,?,?,?,?,?,?,?,null,1,null,?)
+          """,examId,id,row.get("employee_id"),text(data.get("employeeNo")),text(data.get("employeeName")),
+          text(data.get("resultStatus")),score,score,remark);
+    }
+  }
   private void publishEvaluations(Long id,Map<String,Object>b)throws Exception{deactivateRevision(b);for(var r:db.queryForList("select raw_json,employee_id from history_import_row where batch_id=? and row_type='EVALUATION' and state in ('VALID','WARNING')",id)){Map<String,Object>d=jsonMap(String.valueOf(r.get("raw_json")));Long eid=((Number)r.get("employee_id")).longValue();String type=text(d.get("summaryType")),period=text(d.get("periodKey"));db.queryForMap("select id from employee where id=? for update",eid);if("MONTH".equals(type))performance.requireIndividualPublication(eid,java.time.YearMonth.parse(period));db.update("update legacy_evaluation set active=false where employee_id=? and summary_type=? and period_key=? and active=true",eid,type,period);db.update("update score_summary set status='SUPERSEDED' where employee_id=? and summary_type=? and period_key=? and status='PUBLISHED'",eid,type,period);db.update("insert into legacy_evaluation(batch_id,employee_id,employee_no_snapshot,summary_type,period_key,original_final_score,remark) values(?,?,?,?,?,?,?)",id,eid,text(d.get("employeeNo")),type,period,decimalNullable(d,"finalScore"),null);Long legacy=lastId();List<Map<String,Object>>components=new ArrayList<>();for(var cr:db.queryForList("select raw_json from history_import_row where batch_id=? and row_type='EVALUATION_COMPONENT' and employee_no=? and state in ('VALID','WARNING')",id,text(d.get("employeeNo")))){Map<String,Object>c=jsonMap(String.valueOf(cr.get("raw_json")));if(!type.equals(text(c.get("summaryType")))||!period.equals(text(c.get("periodKey"))))continue;db.update("insert into legacy_evaluation_component(evaluation_id,component_code,source_key,source_name,raw_score,max_score,weight,weighted_score,evaluator_name,comment,snapshot_json) values(?,?,?,?,?,?,?,?,?,?,cast(? as json))",legacy,text(c.get("componentCode")),blank(text(c.get("sourceKey")),null),blank(text(c.get("sourceName")),null),decimalNullable(c,"rawScore"),decimalNullable(c,"maxScore"),decimalNullable(c,"weight"),decimalNullable(c,"weightedScore"),blank(text(c.get("evaluatorName")),null),blank(text(c.get("comment")),null),toJson(c));components.add(c);}int version=db.queryForObject("select coalesce(max(version),0)+1 from score_summary where employee_id=? and summary_type=? and period_key=?",Integer.class,eid,type,period);Map<String,Object>snap=new LinkedHashMap<>();snap.put("source","HISTORICAL");snap.put("components",components);snap.put("originalFinalScore",decimalNullable(d,"finalScore"));db.update("insert into score_summary(employee_id,summary_type,period_key,version,source_type,source_batch_id,read_only,exam_score,task_score,mentor_score,station_score,training_score,defense_score,bonus,deduction,final_score,status,component_snapshot,generated_at,published_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,cast(? as json),now(),now())",eid,type,period,version,"HISTORICAL",id,true,componentScore(components,"EXAM"),componentScore(components,"TASK"),componentScore(components,"MENTOR"),componentScore(components,"STATION"),componentScore(components,"TRAINING"),componentScore(components,"DEFENSE"),componentScore(components,"BONUS"),componentScore(components,"DEDUCTION"),decimalNullable(d,"finalScore"),"PUBLISHED",toJson(snap));}}
   private void deactivateRevision(Map<String,Object>b){Long old=nullableLong(b.get("revision_of_batch_id"));if(old==null)return;db.update("update legacy_exam set active=false where batch_id=?",old);db.update("update legacy_exam_result set active=false where batch_id=?",old);db.update("update legacy_evaluation set active=false where batch_id=?",old);db.update("update score_summary set status='REVOKED' where source_type='HISTORICAL' and source_batch_id=?",old);}
 
@@ -128,8 +216,7 @@ public class HistoryImportController {
   private void requireAdmin(){if(!Set.of("ADMIN","SUPER_ADMIN").contains(SecurityUtils.current().role()))throw new BusinessException(403,"仅管理员可发布或撤销历史数据");}
   private void validateRowType(String t){if(!Set.of("EXAM_RESULT","EVALUATION","EVALUATION_COMPONENT").contains(t))throw new BusinessException(400,"不支持的行类型");}
   private int nextRow(Long id,String sheet){Integer n=db.queryForObject("select coalesce(max(row_no),0)+1 from history_import_row where batch_id=? and sheet_name=?",Integer.class,id,sheet);return n==null?1:n;}
-  private Long findEmployee(String no){if(no==null||no.isBlank())return null;var r=db.queryForList("select id from employee where employee_no=?",no.trim());return r.isEmpty()?null:((Number)r.get(0).get("id")).longValue();}
-  private String employeeName(Long id){return db.queryForObject("select name from employee where id=?",String.class,id);}
+  private Long findEmployee(String no){if(no.isBlank())return null;var ids=db.queryForList("select id from employee where employee_no=?",Long.class,no);return ids.size()==1?ids.get(0):null;}
   private static String text(Object x){return x==null?"":String.valueOf(x).trim();} private static String blank(String x,String f){return x==null||x.isBlank()?f:x.trim();} private static String join(List<String>x){return x.isEmpty()?null:String.join("；",x);} private static int number(Object x){return x==null?0:((Number)x).intValue();}
   private static String key(Map<String,Object>d){return text(d.get("employeeNo"))+"|"+text(d.get("summaryType"))+"|"+text(d.get("periodKey"));} private static void req(Map<String,Object>d,String k,String l,List<String>e){if(text(d.get(k)).isBlank())e.add(l+"不能为空");}
   private static BigDecimal decimal(Map<String,Object>d,String k,List<String>e){String x=text(d.get(k));if(x.isBlank()){e.add(k+"不能为空");return null;}try{BigDecimal value=new BigDecimal(x);if(value.stripTrailingZeros().scale()>2)e.add(k+"最多保留两位小数");return value;}catch(Exception ex){e.add(k+"必须为数字");return null;}}

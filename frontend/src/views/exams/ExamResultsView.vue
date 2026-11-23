@@ -12,8 +12,8 @@ import {clearRoleTodos} from '@/utils/roleTodo'
 import {dateTimeParts,resultStatusLabels,scoreMonth} from './examUi'
 import '@/styles/exam-center.css'
 
-type ExamResult={employee_id:number;employee_name:string;source_type?:string;[key:string]:any}
-type EmployeeResultGroup={employeeId:number;employeeName:string;results:ExamResult[]}
+type ExamResult={employee_id:number;employee_name:string;employee_no:string;exam_date:string;source_type?:string;[key:string]:any}
+type EmployeeResultGroup={employeeId:number;employeeName:string;employeeNo:string;results:ExamResult[]}
 
 const scheduleDialog=ref<InstanceType<typeof ScheduleDialog>>()
 const auth=useAuthStore(),route=useRoute(),router=useRouter(),canManage=computed(()=>auth.can('exam:manage'))
@@ -30,7 +30,7 @@ const employeeResultGroups=computed<EmployeeResultGroup[]>(()=>{
   const groups=new Map<number,EmployeeResultGroup>()
   for(const result of results.value){
     const employeeId=Number(result.employee_id)
-    if(!groups.has(employeeId))groups.set(employeeId,{employeeId,employeeName:result.employee_name||'未命名学徒',results:[]})
+    if(!groups.has(employeeId))groups.set(employeeId,{employeeId,employeeName:result.employee_name||'未命名学徒',employeeNo:result.employee_no,results:[]})
     groups.get(employeeId)!.results.push(result)
   }
   return [...groups.values()]
@@ -65,7 +65,7 @@ async function openReview(row:any){reviewVisible.value=true;reviewLoading.value=
 function answerText(value:any){if(value===null||value===undefined)return '未作答';if(typeof value==='string')return value;return Array.isArray(value)?value.join('、'):JSON.stringify(value)}
 async function gradeQuestion(question:any){const grade=grades[question.id];await api.put(`/exams/attempts/${reviewAttempt.value.id}/questions/${question.id}/grade`,grade);ElMessage.success('本题评分已保存');clearRoleTodos(auth.user?.id);const refreshed=(await api.get<any,Envelope<any>>(`/exams/attempts/${reviewAttempt.value.id}`)).data;reviewAttempt.value=refreshed;await load();if(refreshed.status==='GRADED')ElMessage.success('该答卷已完成阅卷，将在整场考试结束后自动下发')}
 async function openPlan(row:any){
-  selectedPlan.value=row;detailKeyword.value='';detailClassId.value=null;detailStatus.value='';detailVisible.value=true;detailLoading.value=true
+  selectedPlan.value=row;detailKeyword.value='';detailClassId.value=null;detailClassPositionId.value=null;detailStatus.value='';detailVisible.value=true;detailLoading.value=true
   try{planResults.value=(await api.get<any,Envelope<any[]>>(`/exams/results/manage/plans/${row.id}`)).data}
   finally{detailLoading.value=false}
 }
@@ -162,6 +162,7 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
             <div class="apprentice-result-detail">
               <el-table :data="row.results" empty-text="暂无已发布成绩">
                 <el-table-column prop="exam_name" label="考试" min-width="220"><template #default="s"><span>{{s.row.exam_name}}</span><el-tag v-if="s.row.source_type==='HISTORICAL'" size="small" type="warning" effect="plain" class="history-tag">历史导入</el-tag></template></el-table-column>
+                <el-table-column prop="exam_date" label="考试日期" min-width="120"/>
                 <el-table-column prop="total_score" label="成绩" min-width="100"><template #default="{row:result}">{{scoreText(result.total_score)}}</template></el-table-column>
                 <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="resultStatus(s.row).type" effect="plain">{{resultStatus(s.row).label}}</el-tag></template></el-table-column>
                 <el-table-column label="计分月份" min-width="110"><template #default="s">{{scoreMonth(s.row.score_month)}}</template></el-table-column>
@@ -170,6 +171,7 @@ onMounted(async()=>{if(canManage.value)[classOptions.value,classPositionOptions.
           </template>
         </el-table-column>
         <el-table-column prop="employeeName" label="学徒" min-width="160"><template #default="{row}"><span class="apprentice-name">{{row.employeeName}}</span></template></el-table-column>
+        <el-table-column prop="employeeNo" label="工号" min-width="120"/>
         <el-table-column label="成绩条数" width="120" align="center"><template #default="{row}"><el-tag type="info" effect="plain">{{row.results.length}} 条</el-tag></template></el-table-column>
       </el-table>
       <el-table v-else :data="results" empty-text="暂无已发布成绩">

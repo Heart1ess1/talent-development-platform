@@ -186,7 +186,7 @@ public class EmployeeController {
     db.update("""
         insert into sys_user(username,password_hash,display_name,role,enabled,must_change_password)
         values(?,?,?,'EMPLOYEE',?,true)
-        """, availableUsername(request.employeeNo(), null),
+        """, availableUsername(request.employeeNo()),
         encoder.encode(UUID.randomUUID().toString()), request.name(),
         "ACTIVE".equals(normalizedStatus(request.status(), "ACTIVE")));
     Long userId = db.queryForObject("select last_insert_id()", Long.class);
@@ -220,9 +220,10 @@ public class EmployeeController {
     permissions.require(Permissions.EMPLOYEE_UPDATE);
     validateReferences(request);
     var before = db.queryForMap("select * from employee where id=? for update", id);
-    Long userId = ((Number) before.get("user_id")).longValue();
+    Long userId = number(before.get("user_id"));
     Long previousStationId = number(before.get("station_id"));
     String previousStatus = String.valueOf(before.get("status"));
+    String status = normalizedStatus(request.status(), previousStatus);
     db.update("""
         update employee
         set employee_no=?,name=?,gender=?,batch_id=?,class_id=?,class_position_id=?,training_cycle_id=?,business_unit_id=?,station_id=?,
@@ -237,22 +238,30 @@ public class EmployeeController {
         request.nativePlace(), request.residence(), request.phone(), request.email(),
         request.onboardDate(), request.politicalStatus(), request.hobbies(),
         request.speciality(), request.idCard(), request.notes(),
-        normalizedStatus(request.status(), previousStatus), id);
-    db.update("""
-        update sys_user
-        set username=?,display_name=?,version=version+1,security_version=security_version+1
-        where id=?
-        """, availableUsername(request.employeeNo(), userId), request.name(), userId);
+        status, id);
+    if (userId != null && !Objects.equals(before.get("employee_no"), request.employeeNo())) {
+      db.update("""
+          update sys_user
+          set username=?,display_name=?,version=version+1,security_version=security_version+1
+          where id=?
+          """, availableUsername(request.employeeNo()), request.name(), userId);
+    } else if (userId != null && !Objects.equals(before.get("name"), request.name())) {
+      db.update("""
+          update sys_user
+          set display_name=?,version=version+1,security_version=security_version+1
+          where id=?
+          """, request.name(), userId);
+    }
     // 仅当账号的唯一角色是 EMPLOYEE 时才联动停用/启用；多角色账号（如员工+导师）只调整员工档案，不锁账号。
     // 兼容尚未写入 sys_user_role 的历史账号：没有任何角色行时仍按 sys_user.role 判断。
-    db.update("""
+    if (userId != null && !previousStatus.equals(status)) db.update("""
         update sys_user u
         set enabled=?,security_version=security_version+1
         where u.id=?
           and ((u.role='EMPLOYEE' and not exists(select 1 from sys_user_role r where r.user_id=u.id))
                or (exists(select 1 from sys_user_role r where r.user_id=u.id and r.role_code='EMPLOYEE')
                    and (select count(*) from sys_user_role r where r.user_id=u.id)=1))
-        """, "ACTIVE".equals(normalizedStatus(request.status(), previousStatus)), userId);
+        """, "ACTIVE".equals(status), userId);
     if (!Objects.equals(previousStationId, request.stationId())) {
       var currentUser = SecurityUtils.current();
       db.update("""
@@ -590,18 +599,11 @@ public class EmployeeController {
     return value == null ? null : ((Number) value).longValue();
   }
 
-  private String availableUsername(String employeeNo, Long currentUserId) {
+  private String availableUsername(String employeeNo) {
     String base = employeeNo.trim();
     if (db.queryForList(
         "select username from sys_user where username=?", String.class, base).isEmpty()) {
       return base;
-    }
-    if (currentUserId != null) {
-      String current = db.queryForObject(
-          "select username from sys_user where id=?", String.class, currentUserId);
-      if (base.equals(current) || (current != null && current.startsWith(base + "-"))) {
-        return current;
-      }
     }
     while (true) {
       String candidate = base.substring(0, Math.min(base.length(), 55)) + "-"

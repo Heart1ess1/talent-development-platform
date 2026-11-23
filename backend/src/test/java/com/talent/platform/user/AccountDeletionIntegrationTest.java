@@ -128,6 +128,37 @@ class AccountDeletionIntegrationTest {
     assertThat(count("select count(*) from sys_user where id=?",account)).isZero();
   }
 
+  @Test void deletionUsesEmployeeIdAndRequiresBothIdentifiersForUnlinkedHistory() {
+    String defenseSql="""
+        insert into defense_result(employee_id,employee_no,employee_name,period_month,created_by)
+        values(?,?,?,'2026-01-01',?)
+        """;
+    long ownDefense=insert(defenseSql,employee,tag+"-old","旧姓名",operator);
+    long otherDefense=insert(defenseSql,otherEmployee,tag,tag,operator);
+    long matchingDefense=insert(defenseSql,null,tag,tag,operator);
+    long unknownDefense=insert(defenseSql,null,tag,null,operator);
+    long batch=insert("""
+        insert into history_import_batch(import_type,original_filename,file_sha256,created_by)
+        values('EXAM',?,sha2(?,256),?)
+        """,tag,tag,operator);
+    String historySql="""
+        insert into history_import_row(batch_id,sheet_name,row_no,row_type,employee_id,employee_no,raw_json,row_hash)
+        values(?,'test',?,'EXAM_RESULT',?,?,json_object('employeeNo',?,'employeeName',?),repeat('0',64))
+        """;
+    long ownHistory=insert(historySql,batch,1,employee,tag+"-old",tag+"-old","旧姓名");
+    long otherHistory=insert(historySql,batch,2,otherEmployee,tag,tag,tag);
+    long matchingHistory=insert(historySql,batch,3,null,null,tag,tag);
+    long unmatchedHistory=insert(historySql,batch,4,null,tag,tag,"另一人");
+    long unknownHistory=insert(historySql,batch,5,null,tag,tag,null);
+
+    service.deleteEmployee(employee);
+
+    assertThat(count("select count(*) from defense_result where id in (?,?)",ownDefense,matchingDefense)).isZero();
+    assertThat(count("select count(*) from defense_result where id in (?,?)",otherDefense,unknownDefense)).isEqualTo(2);
+    assertThat(count("select count(*) from history_import_row where id in (?,?)",ownHistory,matchingHistory)).isZero();
+    assertThat(count("select count(*) from history_import_row where id in (?,?,?)",otherHistory,unmatchedHistory,unknownHistory)).isEqualTo(3);
+  }
+
   @Test void unlinkedAccountCanBeDeleted() {
     long id=user("-unused","MENTOR");
     service.deleteAccount(id);

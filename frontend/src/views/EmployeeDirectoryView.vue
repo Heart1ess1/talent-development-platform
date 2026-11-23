@@ -73,7 +73,14 @@ const exporting=ref(false)
 const importing=ref(false)
 const importOpen=ref(false)
 const importFile=ref<File|null>(null)
-const importResult=ref<any|null>(null)
+type EmployeeImportResult={
+  inserted:number
+  updated:number
+  unchanged:number
+  errors:{row:number;field:string;message:string}[]
+  createdAccounts?:{employeeNo:string;name:string;username:string}[]
+}
+const importResult=ref<EmployeeImportResult|null>(null)
 const importUploadRef=ref<any>()
 const saving=ref(false)
 const pendingCount=ref(0)
@@ -623,7 +630,7 @@ async function upload(){
   try{
     const formData=new FormData()
     formData.append('file',importFile.value)
-    const response=await api.post<any,Envelope<any>>('/imports/employees',formData)
+    const response=await api.post<any,Envelope<EmployeeImportResult>>('/imports/employees',formData)
     importResult.value=response.data
     if(response.data.errors.length){
       ElMessage.error('导入未执行，请根据错误明细修改文件')
@@ -1427,7 +1434,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
           <span class="import-step-number">1</span>
           <div>
             <strong>下载并填写导入模板</strong>
-            <p>工号+姓名相同则更新其他字段，任一不同则新增人员；完全一致的数据会跳过。</p>
+            <p>新工号新增人员。工号和姓名均匹配才更新，资料一致则跳过。同工号异名或文件内重复工号会报错。</p>
           </div>
           <el-button :icon="Download" @click="downloadTemplate">下载导入模板</el-button>
         </section>
@@ -1435,7 +1442,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
           <span class="import-step-number">2</span>
           <div>
             <strong>选择填写完成的 Excel 文件</strong>
-            <p>仅支持 .xlsx；请保留模板表头。更新时留空字段会清空原值。</p>
+            <p>仅支持 .xlsx，请保留模板表头。更新时，缺少的列和留空的状态保留原值，其他空白单元格会清空对应字段。</p>
           </div>
         </section>
       </div>
@@ -1457,15 +1464,21 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
       </el-upload>
 
       <template v-if="importResult">
-        <el-alert
-          v-if="!importResult.errors.length"
-          class="import-result-alert"
-          type="success"
-          :closable="false"
-          :title="`导入完成：新增 ${importResult.inserted} 人，更新 ${importResult.updated} 人，未变化 ${importResult.unchanged} 人`"
-          :description="importResult.inserted?'新增在职账号已启用，初始密码为身份证后六位（x 按大写 X 输入）；更新人员不会重置密码。':'本次没有新增账号，更新人员不会重置密码。'"
-          show-icon
-        />
+        <template v-if="!importResult.errors.length">
+          <el-alert
+            class="import-result-alert"
+            type="success"
+            :closable="false"
+            :title="`导入完成：新增 ${importResult.inserted} 人，更新 ${importResult.updated} 人，未变化 ${importResult.unchanged} 人`"
+            :description="importResult.inserted?'新增在职账号已启用，初始密码为身份证后六位（x 按大写 X 输入）。':'更新人员的登录密码保持原值。'"
+            show-icon
+          />
+          <el-table v-if="importResult.createdAccounts?.length" :data="importResult.createdAccounts" class="import-error-table" size="small" max-height="240">
+            <el-table-column prop="employeeNo" label="工号" min-width="110"/>
+            <el-table-column prop="name" label="姓名" min-width="100"/>
+            <el-table-column prop="username" label="实际登录名" min-width="150" show-overflow-tooltip/>
+          </el-table>
+        </template>
         <template v-else>
           <el-alert
             class="import-result-alert"
