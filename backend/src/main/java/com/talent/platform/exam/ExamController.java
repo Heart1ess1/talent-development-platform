@@ -65,7 +65,7 @@ public class ExamController {
     var args=new ArrayList<Object>();
     if(bankId!=null){where.append(" and q.bank_id=?");args.add(bankId);}
     if(type!=null&&!type.isBlank()){where.append(" and q.question_type=?");args.add(type);}
-    if(keyword!=null&&!keyword.isBlank()){where.append(" and q.stem like ?");args.add("%"+keyword.trim()+"%");}
+    if(keyword!=null&&!keyword.isBlank()){where.append(" and (q.stem like ? or b.name like ?)");var kw="%"+keyword.trim()+"%";args.add(kw);args.add(kw);}
     if("ENABLED".equalsIgnoreCase(status))where.append(" and q.enabled=1 and b.enabled=1");
     else if("DISABLED".equalsIgnoreCase(status))where.append(" and (q.enabled=0 or b.enabled=0)");
     Long total=db.queryForObject("select count(*)"+where,Long.class,args.toArray());
