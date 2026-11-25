@@ -457,7 +457,8 @@ public class DailyPracticeService {
       }
       if (retried == 0) {
         // 已成功生成时仍允许补齐后来追加的参与人；无人缺失则直接跳过，保证定时轮询不重复干活。
-        if (!"SUCCESS".equals(status)) {
+        // SKIPPED 只表示当天被周末/排除日期跳过，并非失败；条件解除后应允许重新生成。
+        if (!"SUCCESS".equals(status) && !"SKIPPED".equals(status)) {
           Map<String, Object> skipped = new LinkedHashMap<>();
           skipped.put("generated", 0);
           skipped.put("failed", 0);
@@ -472,6 +473,13 @@ public class DailyPracticeService {
           skipped.put("failed", 0);
           skipped.put("message", "今天已生成或正在生成");
           return skipped;
+        }
+        if ("SKIPPED".equals(status)) {
+          // 从跳过状态重新生成时，清空旧的跳过原因并按本次重跑时间计时。
+          db.update("""
+              update exam_daily_job_run set generated_count=0,failed_count=0,error_message=null,started_at=now()
+              where plan_id=? and practice_date=? and status='SKIPPED'
+              """, planId, Date.valueOf(date));
         }
         baseGenerated = number(runs.get(0).get("generated_count"));
         baseFailed = number(runs.get(0).get("failed_count"));
