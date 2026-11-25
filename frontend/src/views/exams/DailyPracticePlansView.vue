@@ -402,7 +402,7 @@ onMounted(load)
             <el-form-item label="每题分值" required><el-input-number v-model="plan.scorePerQuestion" :min="0.01" :max="100" :precision="2" :step="1" controls-position="right" :disabled="locked"/></el-form-item>
             <el-form-item label="及格分（可选）"><el-input-number v-model="plan.passScore" :min="0" :max="totalScore" :precision="2" :step="1" controls-position="right" :disabled="locked"/></el-form-item>
             <el-form-item label="题库不足时的策略">
-              <el-select v-model="plan.repeatPolicy" :disabled="locked">
+              <el-select v-model="plan.repeatPolicy" filterable :disabled="locked">
                 <el-option label="循环复用已做过的题" value="ALLOW_REPEAT"/><el-option label="能抽多少抽多少" value="REDUCE_COUNT"/><el-option label="当天不生成" value="FAIL"/>
               </el-select>
             </el-form-item>
@@ -500,7 +500,7 @@ onMounted(load)
       <div class="filters results-filters">
         <el-date-picker v-model="resultsFilters.dates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" unlink-panels/>
         <el-input v-model="resultsFilters.keyword" clearable placeholder="工号或姓名" :prefix-icon="Search" @keyup.enter="searchResults"/>
-        <el-select v-model="resultsFilters.status" clearable placeholder="全部状态">
+        <el-select v-model="resultsFilters.status" clearable filterable placeholder="全部状态">
           <el-option label="待开始" value="PENDING"/><el-option label="作答中" value="IN_PROGRESS"/>
           <el-option label="已提交" value="SUBMITTED"/><el-option label="已过期" value="EXPIRED"/>
         </el-select>
