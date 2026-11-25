@@ -27,14 +27,17 @@ public class ExamController {
   private final JdbcTemplate db;private final PermissionService permissions;private final AuditService audit;private final ObjectMapper mapper;private final ExamScoringService scoring;
   public ExamController(JdbcTemplate db,PermissionService permissions,AuditService audit,ObjectMapper mapper,ExamScoringService scoring){this.db=db;this.permissions=permissions;this.audit=audit;this.mapper=mapper;this.scoring=scoring;}
   @org.springframework.beans.factory.annotation.Autowired private com.talent.platform.schedule.ScheduleService schedules;
+  @org.springframework.beans.factory.annotation.Value("${app.exam.import-max-rows:20000}") private int importMaxRows;
   private static final Set<String> QUESTION_TYPES=Set.of("SINGLE","MULTIPLE","TRUE_FALSE");
   private static final ZoneId EXAM_ZONE=ZoneId.of("Asia/Shanghai");
+  private static final int IMPORT_BATCH_SIZE=500;
+  private static final int IMPORT_MAX_ERRORS=100;
   public record QuestionBankRequest(@NotBlank @Size(max=128) String name,@Size(max=500) String description,Boolean enabled){}
   public record QuestionRequest(@NotNull Long bankId,@Pattern(regexp="SINGLE|MULTIPLE|TRUE_FALSE") String type,@NotBlank String stem,JsonNode options,@NotNull JsonNode answer,String explanation,@DecimalMin(value="0",inclusive=false) @jakarta.validation.constraints.Digits(integer=5,fraction=2) BigDecimal score,List<@NotBlank @Size(max=32) String> tags){}
   public record PaperQuestion(@NotNull Long questionId,@NotNull @DecimalMin(value="0",inclusive=false) @jakarta.validation.constraints.Digits(integer=5,fraction=2) BigDecimal score,@NotNull Integer sortOrder){}
   public record RandomRule(@Pattern(regexp="SINGLE|MULTIPLE|TRUE_FALSE") String type,@Min(0) int count,@NotNull @DecimalMin(value="0",inclusive=false) @jakarta.validation.constraints.Digits(integer=5,fraction=2) BigDecimal score,List<@NotBlank @Size(max=32) String> tags,List<Long> bankIds){}
   public record PaperRequest(@NotBlank String name,String description,boolean randomAssembly,boolean dynamicAssembly,boolean randomizeQuestions,boolean randomizeOptions,List<@Valid PaperQuestion> questions,List<@Valid RandomRule> randomRules){}
-  public record RowError(int row,String field,String message){} public record ImportResult(int imported,List<RowError> errors){}
+  public record RowError(int row,String field,String message){} public record ImportResult(int imported,int errorCount,int skipped,List<RowError> errors){}
   public record PlanRequest(@NotNull Long paperId,@NotBlank String name,List<Long> batchIds,List<Long> businessUnitIds,LocalDateTime startsAt,@NotNull LocalDateTime endsAt,@Min(1) int durationMinutes,@Min(1) int maxAttempts,@Min(1) @Max(20) Integer violationLimit,@Min(5) @Max(300) Integer violationGraceSeconds,@NotEmpty List<Long> employeeIds,String scheduleMode,LocalDate baseDate,Integer offsetDays){}
   public record StartAttemptRequest(@Pattern(regexp="FULLSCREEN_STRICT|MOBILE_COMPATIBLE") String proctorMode,Boolean fullscreenCapable,@Size(max=255) String clientContext){}
   public record AnswerRequest(@NotNull Long questionId,JsonNode answer){} public record GradeRequest(@NotNull @DecimalMin("0") @jakarta.validation.constraints.Digits(integer=5,fraction=2) BigDecimal score,@Size(max=500) String comment){} public record EventRequest(@NotBlank @Pattern(regexp="BLUR|HIDDEN|EXIT_FULLSCREEN|RECONNECT") String type,@NotBlank @Size(max=64) String eventId,@Size(max=500) String detail){} public record RecoverViolationRequest(@NotBlank @Size(max=64) String eventId){} public record EventResult(int violationCount,int violationLimit,int violationGraceSeconds,Long violationDeadlineEpochMillis,boolean autoSubmitted,String status){} public record AttemptStatusResult(String status,int violationCount,int violationLimit,int violationGraceSeconds,Long violationDeadlineEpochMillis,long serverNowEpochMillis,long deadlineEpochMillis){}
@@ -51,8 +54,48 @@ public class ExamController {
   @PostMapping("/questions") public ApiResponse<Long> question(@Valid @RequestBody QuestionRequest q)throws Exception{permissions.require(Permissions.EXAM_MANAGE);requireEnabledBank(q.bankId());validateQuestion(q.type(),q.options(),q.answer());db.update("insert into question_bank(bank_id,question_type,stem,options_json,answer_json,explanation,default_score,created_by,tags) values(?,?,?,?,?,?,?,?,?)",q.bankId(),q.type(),q.stem().trim(),json(q.options()),json(q.answer()),trim(q.explanation()),q.score(),SecurityUtils.current().id(),jsonTags(q.tags()));Long id=lastId();audit.log("CREATE_QUESTION","QUESTION",id,null,q);return ApiResponse.ok(id);}
   @PutMapping("/questions/{id}") public ApiResponse<Void> updateQuestion(@PathVariable Long id,@Valid @RequestBody QuestionRequest q)throws Exception{permissions.require(Permissions.EXAM_MANAGE);requireEnabledBank(q.bankId());validateQuestion(q.type(),q.options(),q.answer());if(db.update("update question_bank set bank_id=?,question_type=?,stem=?,options_json=?,answer_json=?,explanation=?,default_score=?,tags=? where id=?",q.bankId(),q.type(),q.stem().trim(),json(q.options()),json(q.answer()),trim(q.explanation()),q.score(),jsonTags(q.tags()),id)==0)throw new BusinessException(404,"题目不存在");audit.log("UPDATE_QUESTION","QUESTION",id,null,q);return ApiResponse.ok(null);}
   @GetMapping("/questions") public ApiResponse<List<Map<String,Object>>> questions(@RequestParam(required=false)Long bankId,@RequestParam(required=false)String type,@RequestParam(required=false)String keyword){permissions.require(Permissions.EXAM_MANAGE);StringBuilder sql=new StringBuilder("select q.id,q.bank_id,b.name bank_name,b.enabled bank_enabled,q.question_type,q.stem,q.options_json,q.answer_json,q.explanation,q.default_score,q.enabled,q.created_at,q.tags from question_bank q join exam_question_bank b on b.id=q.bank_id where q.question_type in ('SINGLE','MULTIPLE','TRUE_FALSE')");var args=new ArrayList<Object>();if(bankId!=null){sql.append(" and q.bank_id=?");args.add(bankId);}if(type!=null&&!type.isBlank()){sql.append(" and q.question_type=?");args.add(type);}if(keyword!=null&&!keyword.isBlank()){sql.append(" and q.stem like ?");args.add("%"+keyword.trim()+"%");}sql.append(" order by q.id desc");return ApiResponse.ok(db.queryForList(sql.toString(),args.toArray()));}
+  /**
+   * 题库管理页专用分页接口：题库可达上万题，一次性返回全量会把浏览器渲染拖死。
+   * 保留上面的 /questions 全量接口供试卷选择等场景使用。
+   */
+  @GetMapping("/questions/page") public ApiResponse<PageResult<Map<String,Object>>> questionPage(@RequestParam(required=false)Long bankId,@RequestParam(required=false)String type,@RequestParam(required=false)String keyword,@RequestParam(required=false)String status,@RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size){
+    permissions.require(Permissions.EXAM_MANAGE);
+    int safePage=Math.max(1,page),safeSize=Math.min(100,Math.max(1,size));
+    StringBuilder where=new StringBuilder(" from question_bank q join exam_question_bank b on b.id=q.bank_id where q.question_type in ('SINGLE','MULTIPLE','TRUE_FALSE')");
+    var args=new ArrayList<Object>();
+    if(bankId!=null){where.append(" and q.bank_id=?");args.add(bankId);}
+    if(type!=null&&!type.isBlank()){where.append(" and q.question_type=?");args.add(type);}
+    if(keyword!=null&&!keyword.isBlank()){where.append(" and q.stem like ?");args.add("%"+keyword.trim()+"%");}
+    if("ENABLED".equalsIgnoreCase(status))where.append(" and q.enabled=1 and b.enabled=1");
+    else if("DISABLED".equalsIgnoreCase(status))where.append(" and (q.enabled=0 or b.enabled=0)");
+    Long total=db.queryForObject("select count(*)"+where,Long.class,args.toArray());
+    var pageArgs=new ArrayList<>(args);
+    pageArgs.add(safeSize);pageArgs.add((safePage-1)*safeSize);
+    var rows=db.queryForList("select q.id,q.bank_id,b.name bank_name,b.enabled bank_enabled,q.question_type,q.stem,q.options_json,q.answer_json,q.explanation,q.default_score,q.enabled,q.created_at,q.tags"+where+" order by q.id desc limit ? offset ?",pageArgs.toArray());
+    return ApiResponse.ok(new PageResult<>(rows,total==null?0L:total,safePage,safeSize));
+  }
+  /** 题库管理页顶部的全局统计与标签选项，避免为算总数而拉取全量题目。 */
+  @GetMapping("/questions/stats") public ApiResponse<Map<String,Object>> questionStats(){
+    permissions.require(Permissions.EXAM_MANAGE);
+    var row=db.queryForMap("""
+        select count(*) total,coalesce(sum(case when q.enabled and b.enabled then 1 else 0 end),0) enabled
+        from question_bank q join exam_question_bank b on b.id=q.bank_id
+        where q.question_type in ('SINGLE','MULTIPLE','TRUE_FALSE')
+        """);
+    long total=((Number)row.get("total")).longValue(),enabled=((Number)row.get("enabled")).longValue();
+    List<String> tags=db.queryForList("""
+        select distinct jt.tag from question_bank q
+        join exam_question_bank b on b.id=q.bank_id
+        join json_table(q.tags,'$[*]' columns(tag varchar(64) path '$')) jt
+        where q.question_type in ('SINGLE','MULTIPLE','TRUE_FALSE') and jt.tag is not null and jt.tag<>''
+        order by jt.tag
+        """,String.class);
+    var result=new LinkedHashMap<String,Object>();
+    result.put("total",total);result.put("enabled",enabled);result.put("disabled",total-enabled);result.put("tags",tags);
+    return ApiResponse.ok(result);
+  }
   @PutMapping("/questions/{id}/enabled") public ApiResponse<Void> questionEnabled(@PathVariable Long id,@RequestBody Map<String,Boolean> body){permissions.require(Permissions.EXAM_MANAGE);if(db.update("update question_bank set enabled=? where id=?",Boolean.TRUE.equals(body.get("enabled")),id)==0)throw new BusinessException(404,"题目不存在");return ApiResponse.ok(null);}
-  @DeleteMapping("/questions/{id}") public ApiResponse<Void> deleteQuestion(@PathVariable Long id){permissions.require(Permissions.EXAM_MANAGE);Integer used=db.queryForObject("select (select count(*) from exam_paper_question where question_id=?)+(select count(*) from exam_attempt_question where question_id=?)",Integer.class,id,id);if(used!=null&&used>0)throw new BusinessException(400,"题目已被试卷或答卷使用，请停用后保留历史");if(db.update("delete from question_bank where id=?",id)==0)throw new BusinessException(404,"题目不存在");audit.log("DELETE_QUESTION","QUESTION",id,null,null);return ApiResponse.ok(null);}
+  @DeleteMapping("/questions/{id}") public ApiResponse<Void> deleteQuestion(@PathVariable Long id){permissions.require(Permissions.EXAM_MANAGE);Integer used=db.queryForObject("select (select count(*) from exam_paper_question where question_id=?)+(select count(*) from exam_attempt_question where question_id=?)+(select count(*) from exam_daily_session_question where question_id=?)",Integer.class,id,id,id);if(used!=null&&used>0)throw new BusinessException(400,"题目已被试卷、答卷或每日练习使用，请停用后保留历史");if(db.update("delete from question_bank where id=?",id)==0)throw new BusinessException(404,"题目不存在");audit.log("DELETE_QUESTION","QUESTION",id,null,null);return ApiResponse.ok(null);}
   @GetMapping("/questions/template")
   public void questionTemplate(HttpServletResponse response)throws Exception{
     permissions.require(Permissions.EXAM_MANAGE);
@@ -62,7 +105,36 @@ public class ExamController {
       input.transferTo(response.getOutputStream());
     }
   }
-  @PostMapping("/questions/import") @Transactional public ApiResponse<ImportResult> importQuestions(@RequestParam Long bankId,@RequestParam MultipartFile file)throws Exception{permissions.require(Permissions.EXAM_MANAGE);requireEnabledBank(bankId);List<QuestionImportRow> rows=EasyExcel.read(file.getInputStream()).head(QuestionImportRow.class).sheet(0).doReadSync();if(rows.isEmpty())throw new BusinessException(400,"导入文件没有题目数据");var errors=new ArrayList<RowError>();var parsed=new ArrayList<QuestionRequest>();for(int i=0;i<rows.size();i++){try{parsed.add(parseImportRow(bankId,rows.get(i)));}catch(IllegalArgumentException e){errors.add(new RowError(i+2,"题目",e.getMessage()));}}if(!errors.isEmpty())return ApiResponse.ok(new ImportResult(0,errors));for(var q:parsed)db.update("insert into question_bank(bank_id,question_type,stem,options_json,answer_json,explanation,default_score,created_by,tags) values(?,?,?,?,?,?,?,?,?)",q.bankId(),q.type(),q.stem(),json(q.options()),json(q.answer()),q.explanation(),q.score(),SecurityUtils.current().id(),jsonTags(q.tags()));audit.log("IMPORT_QUESTIONS","QUESTION",null,null,Map.of("bankId",bankId,"count",parsed.size()));return ApiResponse.ok(new ImportResult(parsed.size(),List.of()));}
+  @PostMapping("/questions/import") @Transactional public ApiResponse<ImportResult> importQuestions(@RequestParam Long bankId,@RequestParam MultipartFile file)throws Exception{
+    permissions.require(Permissions.EXAM_MANAGE);
+    requireEnabledBank(bankId);
+    List<QuestionImportRow> rows=EasyExcel.read(file.getInputStream()).head(QuestionImportRow.class).sheet(0).doReadSync();
+    if(rows.isEmpty())throw new BusinessException(400,"导入文件没有题目数据");
+    if(rows.size()>importMaxRows)throw new BusinessException(400,"单次最多导入 "+importMaxRows+" 行，当前 "+rows.size()+" 行，请拆分文件后分批导入");
+    var errors=new ArrayList<RowError>();
+    int errorCount=0;
+    var parsed=new ArrayList<QuestionRequest>();
+    for(int i=0;i<rows.size();i++){
+      try{parsed.add(parseImportRow(bankId,rows.get(i)));}
+      catch(IllegalArgumentException e){errorCount++;if(errors.size()<IMPORT_MAX_ERRORS)errors.add(new RowError(i+2,"题目",e.getMessage()));}
+    }
+    if(errorCount>0)return ApiResponse.ok(new ImportResult(0,errorCount,0,errors));
+    var existing=new HashSet<String>();
+    for(var row:db.queryForList("select question_type,stem from question_bank where bank_id=?",bankId))
+      existing.add(dedupeKey(String.valueOf(row.get("question_type")),String.valueOf(row.get("stem"))));
+    var fresh=new ArrayList<QuestionRequest>();
+    int skipped=0;
+    for(var q:parsed){if(existing.add(dedupeKey(q.type(),q.stem())))fresh.add(q);else skipped++;}
+    Long createdBy=SecurityUtils.current().id();
+    for(int from=0;from<fresh.size();from+=IMPORT_BATCH_SIZE){
+      var chunk=fresh.subList(from,Math.min(from+IMPORT_BATCH_SIZE,fresh.size()));
+      var args=new ArrayList<Object[]>(chunk.size());
+      for(var q:chunk)args.add(new Object[]{q.bankId(),q.type(),q.stem(),json(q.options()),json(q.answer()),q.explanation(),q.score(),createdBy,jsonTags(q.tags())});
+      db.batchUpdate("insert into question_bank(bank_id,question_type,stem,options_json,answer_json,explanation,default_score,created_by,tags) values(?,?,?,?,?,?,?,?,?)",args);
+    }
+    audit.log("IMPORT_QUESTIONS","QUESTION",null,null,Map.of("bankId",bankId,"imported",fresh.size(),"skipped",skipped));
+    return ApiResponse.ok(new ImportResult(fresh.size(),0,skipped,List.of()));
+  }
   @PostMapping("/papers")
   @Transactional
   public ApiResponse<Long> paper(@Valid @RequestBody PaperRequest q) throws Exception {
@@ -684,6 +756,7 @@ public class ExamController {
     validateQuestion(type,options,answer);
     return new QuestionRequest(bankId,type,stem,options,answer,trim(row.getExplanation()),row.getScore(),parseTags(row.getTags()));
   }
+  private String dedupeKey(String type,String stem){return (type==null?"":type.trim().toUpperCase(Locale.ROOT))+"\u0000"+(stem==null?"":stem.trim());}
   private List<String> parseTags(String raw) {
     if(raw==null||raw.isBlank())return List.of();
     var tags = Arrays.stream(raw.split("[,，、;；]+"))
