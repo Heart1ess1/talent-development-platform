@@ -30,10 +30,12 @@ const examChildren=computed<MenuItem[]>(()=>{
       {to:'/exams/questions',label:'题库管理'},
       {to:'/exams/papers',label:'试卷管理'},
       {to:'/exams/plans',label:'考试计划'},
+      {to:'/exams/daily-plans',label:'每日练习计划'},
       {to:'/exams/results',label:'成绩管理'}
     ]
     :[{to:'/exams/results',label:'考试成绩'}]
   if(auth.can('history:import'))children.push({to:'/exams/results/history-imports',label:'历史成绩导入'})
+  children.push({to:'/exams/daily',label:'每日练习'})
   return children
 })
 const courseChildren=computed<MenuItem[]>(()=>{
@@ -103,7 +105,7 @@ const menus=computed<MenuItem[]>(()=>{
   ),
   {label:'综合评价',permission:'evaluation:view',children:evaluationChildren.value},
   ...(isEmployee.value
-    ?[{to:'/exams/my',label:'我的考试'}]
+    ?[{to:'/exams/my',label:'我的考试'},{to:'/exams/daily',label:'每日练习'}]
     :[{label:'考试中心',children:examChildren.value}]
   ),
   {to:'/users',label:'账号管理',permission:'user:employee:manage'}
