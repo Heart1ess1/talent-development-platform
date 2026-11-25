@@ -189,7 +189,7 @@ CREATE TABLE exam_daily_session_question (
   sort_order INT NOT NULL,
   repeated BOOLEAN NOT NULL DEFAULT FALSE COMMENT '题库不足时是否重复抽到',
   PRIMARY KEY(session_id,question_id),
-  UNIQUE KEY uk_edsq_plan_employee_question(plan_id,employee_id,question_id),
+  INDEX idx_edsq_plan_employee_question(plan_id,employee_id,question_id),
   CONSTRAINT fk_edsq_session FOREIGN KEY(session_id) REFERENCES exam_daily_session(id) ON DELETE CASCADE,
   CONSTRAINT fk_edsq_question FOREIGN KEY(question_id) REFERENCES question_bank(id),
   INDEX idx_edsq_session_sort(session_id,sort_order)
@@ -239,10 +239,17 @@ ALTER TABLE question_bank ADD INDEX idx_question_bank_bank_type_enabled(bank_id,
 
 ### 5.3 设计说明
 
-- **`uk_edsq_plan_employee_question` 是「每人每天去重」的最终保障**：应用层先排除已做题，数据库再用唯一键兜底，即使并发或重跑也不会重复插同一个人同一道题。
-- `exam_daily_session_question` 冗余 `plan_id`、`employee_id` 是为了这个唯一键和批量查询历史题；否则每次都要回表 `session`。
+- **同一套练习内不重复由主键 `(session_id,question_id)` 保证**；跨天去重由应用层 `questionHistory()` 排除本人已做题保证。`(plan_id,employee_id,question_id)` 只是普通索引，用于批量查询历史题（V56 起不再唯一，原因见 5.4）。
+- `exam_daily_session_question` 冗余 `plan_id`、`employee_id` 是为了历史题查询与排障；否则每次都要回表 `session`。
 - `exam_daily_job_run` 的 `uk(plan_id, practice_date)` 是「不漏推/不重推」的开关：同一天只有一条记录，重跑只更新状态。
 - 所有表都不动既有表结构（只给 `question_bank` 加一个索引）。
+
+### 5.4 V56 / V57 / V58 变更与回退
+
+- **V56 将 `uk_edsq_plan_employee_question` 降级为普通索引**：`ALLOW_REPEAT` 需要在题库不足时跨天复用旧题，唯一键会让 `INSERT IGNORE` 静默跳过复用题、生成 0 题会话，两者数据模型冲突，必须移除唯一约束。移除后不会产生「同一天同一人同题两次」（session 唯一键限制每人每天一套）或「同一套内重复」（主键限制）。
+- **V57 将 `fk_edpa_employee`、`fk_eds_employee` 改为 `ON DELETE CASCADE`**：员工做过练习后删除账号时，参与人、会话及级联的题目快照/答案自动清理，避免外键阻断删号。
+- **V58 新增 `idx_eds_status_deadline(status, deadline_at)`**：过期扫描按这两个字段过滤，避免每 60 秒全表扫描。
+- **回退策略**：V56 不可逆（若已跨天复用旧题，重建唯一键会失败），回退时只回退 JAR、不回滚 schema——旧代码不访问 `exam_daily_*`，可在 V56+ 结构上正常启动。V57/V58 仅新增约束/索引，回退 JAR 同样无需回滚。
 
 ---
 
@@ -438,7 +445,7 @@ spring:
 ### 10.4 并发与多实例
 
 - 生产目前是单台 ECS、单个 app 容器，不存在多实例并发。
-- 仍按多实例安全设计：`uk_exam_daily_job_run(plan_id, practice_date)` + `INSERT IGNORE` 抢占；`uk_exam_daily_session` 防重复；题目快照唯一键防重复抽题。
+- 仍按多实例安全设计：`uk_exam_daily_job_run(plan_id, practice_date)` + `INSERT IGNORE` 抢占；`uk_exam_daily_session` 防重复；题目快照用主键 `(session_id,question_id)` 防同套重复，跨天复用由应用层历史题排除控制。
 - 管理端两个浏览器同时点「立即推送」也只会生成一次。
 
 ---

@@ -416,11 +416,13 @@ Authorization: Bearer <token>
 | `PUT` | `/api/v1/exams/question-banks/{id}` | `exam:manage` | 编辑或启停题库 | `name`、`description`、`enabled` | 空 |
 | `POST` | `/api/v1/exams/questions` | `exam:manage` | 创建题目 | `bankId`、`type=SINGLE|MULTIPLE|TRUE_FALSE`、`stem`、`options`、`answer`、`explanation`、`score`、可选 `tags` | 题目 ID |
 | `PUT` | `/api/v1/exams/questions/{id}` | `exam:manage` | 编辑题目 | 同创建题目 | 空 |
-| `GET` | `/api/v1/exams/questions` | `exam:manage` | 查询题目 | 可选 `bankId`、`type`、`keyword` | 题目及所属题库列表 |
+| `GET` | `/api/v1/exams/questions` | `exam:manage` | 查询题目（全量，供试卷选择等场景） | 可选 `bankId`、`type`、`keyword`（题干） | 题目及所属题库列表 |
+| `GET` | `/api/v1/exams/questions/page` | `exam:manage` | 分页查询题目（题库管理页） | 可选 `bankId`、`type`、`keyword`（题干或题库名）、`status=ENABLED|DISABLED`、`page`（默认 1）、`size`（默认 20，最大 100） | 分页结构：`records`、`total`、`page`、`size` |
+| `GET` | `/api/v1/exams/questions/stats` | `exam:manage` | 题库总量与标签聚合 | 无 | `total`、`enabled`、`disabled`、`tags` |
 | `PUT` | `/api/v1/exams/questions/{id}/enabled` | `exam:manage` | 启用或停用题目 | `enabled` | 空 |
 | `DELETE` | `/api/v1/exams/questions/{id}` | `exam:manage` | 删除未被使用的题目 | 路径 `id` | 空 |
 | `GET` | `/api/v1/exams/questions/template` | `exam:manage` | 下载题库导入模板 | 无 | Excel 文件 |
-| `POST` | `/api/v1/exams/questions/import` | `exam:manage` | 导入到指定题库 | `multipart/form-data` 字段 `bankId`、`file` | `imported`、`errors` |
+| `POST` | `/api/v1/exams/questions/import` | `exam:manage` | 导入到指定题库（单次上限 2 万行，按题型+题干去重，500 条一批写入） | `multipart/form-data` 字段 `bankId`、`file` | `imported`、`errorCount`、`skipped`、`errors`（最多前 100 条） |
 | `POST` | `/api/v1/exams/papers` | `exam:manage` | 创建试卷 | `name`、`description`、`randomAssembly`、`dynamicAssembly`、`randomizeQuestions`、`randomizeOptions`、`questions` 或含 `tags`、`bankIds` 的 `randomRules` | 试卷 ID |
 | `GET` | `/api/v1/exams/papers` | `exam:manage` | 查询试卷 | 无 | 试卷列表 |
 | `GET` | `/api/v1/exams/papers/{id}` | `exam:manage` | 查看试卷结构详情 | 路径 `id` | 固定题目或随机抽题规则 |
@@ -621,4 +623,3 @@ Authorization: Bearer <token>
 | `GET` | `/plans/{id}/results/export` | 按当前筛选导出 Excel | 同上（不分页） | `.xlsx` 文件流，列：工号、姓名、批次、练习日期、题数、正确数、得分、状态、提交时间 |
 
 导出没有匹配数据时返回 400「当前筛选条件下没有可导出的练习成绩」，不生成空文件；日期格式错误返回 400，结束日期早于开始日期返回 400。
-
