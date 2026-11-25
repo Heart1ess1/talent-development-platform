@@ -567,3 +567,58 @@ Authorization: Bearer <token>
 - `PUT /api/v1/organization-folders/{domain}/items`：批量移动，正文 `{itemIds, folderId}`；`folderId=null` 表示移出文件夹。每次最多 500 项，事务内校验全部内容与目标文件夹，任一不存在则拒绝整批操作。
 
 计划列表、题库列表新增 `folder_id`。历史和新建内容默认未分类；页面提供全部、未分类、自定义文件夹，支持与原搜索/状态筛选组合。计划下的任务、已下发任务、题库内题目及组卷引用关系保持不变。数据库迁移为 `V38__organization_folders.sql`。
+
+## 考试中心：每日随机推题
+
+以下路径均以 `/api/v1/exam-daily` 为前缀，`/my` 与 `/sessions/**` 为学员端接口，其余要求 `exam:manage`。时间均按 `Asia/Shanghai` 计算；计划发布后题库、题型、标签、题数、分值、重复策略等规则锁定，只能延长结束日期、调整未来日期的推送/截止时刻、追加参与人。
+
+### 计划管理
+
+| 方法 | 路径 | 用途 | 关键入参 | 关键返回 |
+| --- | --- | --- | --- | --- |
+| `GET` | `/plans` | 计划列表 | 无 | 计划字段、题库名称、可用题数、参与人数、今日生成/提交数、今日状态 |
+| `POST` | `/plans` | 新建草稿计划 | `name`、`bankIds`、`questionTypes`、`tags`、`dailyCount`、`scorePerQuestion`、`passScore`、`startDate`、`endDate`、`pushTime`、`deadlineTime`、`randomizeOptions`、`repeatPolicy`、`includeWeekends`，范围 `batchIds`/`businessUnitIds` 与勾选人员 `employeeIds` | 计划 ID |
+| `GET` | `/plans/{id}` | 计划详情 | 路径 `id` | 计划字段、`batch_ids`、`business_unit_ids`、`employee_ids`、`participants`、`exclusions`、`today` |
+| `PUT` | `/plans/{id}` | 编辑计划 | 同新建；发布后仅允许延长结束日期、追加参与人 | 空 |
+| `DELETE` | `/plans/{id}` | 删除草稿 | 路径 `id` | 空；仅 `DRAFT` 可删 |
+| `POST` | `/plans/{id}/publish` | 发布并固化参与人快照 | 路径 `id` | 空；没有可推送在职员工时 400 |
+| `POST` | `/plans/{id}/pause` | 暂停生成 | 路径 `id` | 空 |
+| `POST` | `/plans/{id}/resume` | 恢复生成 | 路径 `id` | 空 |
+| `GET` | `/candidates` | 匹配候选人员 | `batchIds`、`businessUnitIds`（逗号分隔）、`keyword`（工号/姓名） | 在职且已开通账号的员工及批次、板块、班级展示字段 |
+| `POST` | `/plans/{id}/participants/refresh` | 按当前范围补齐参与人 | 路径 `id` | 新增人数 |
+| `PUT` | `/plans/{id}/participants/{employeeId}` | 停止/恢复单个参与人 | `active` | 空 |
+| `POST` | `/plans/{id}/exclusions` | 新增排除日期 | `date`、`reason` | 空 |
+| `DELETE` | `/plans/{id}/exclusions/{date}` | 删除排除日期 | 路径参数 | 空 |
+| `GET` | `/plans/{id}/runs` | 每日生成记录 | 路径 `id` | 最近 90 天 `job_run`：日期、状态、生成/失败人数、错误摘要 |
+| `POST` | `/plans/{id}/push` | 立即推送今天 | 路径 `id` | `practice_date`、`participant_count`、`generated`、`failed`、`message`；已生成或正在生成时 `generated=0`，缺人时只补缺失人员 |
+
+范围筛选已下线班级/班级职务；历史计划中遗留的 `CLASS`、`CLASS_POSITION` 范围行会被忽略但不删除。没有批次/板块范围时，勾选人员会以 `EMPLOYEE` 范围保存，保证“刷新参与人”可用。
+
+### 每日生成与状态
+
+- `DailyPracticeScheduler` 每 30 秒扫描 `PUBLISHED` 且在有效期内的计划：周末（计划未含周末）、排除日期记 `SKIPPED`；未到 `push_time` 或已过 `deadline_time` 跳过；其余按 `exam_daily_job_run(plan_id, practice_date)` 唯一键抢占后逐人生成。
+- 抽题按计划题库/题型/标签过滤，应用层排除本人已做题，随机种子由「计划 + 日期 + 员工」确定，同一天重跑不换题。题库不足由 `repeatPolicy` 决定：`ALLOW_REPEAT` 循环复用历史题、`REDUCE_COUNT` 能抽多少抽多少、`FAIL` 当天不生成并记录失败原因。
+- 会话状态：`PENDING`（待开始）、`IN_PROGRESS`（作答中）、`SUBMITTED`（已提交）、`EXPIRED`（超过截止时刻未提交，由每 60 秒的过期扫描置位）。
+
+### 学员端
+
+| 方法 | 路径 | 用途 | 关键返回 |
+| --- | --- | --- | --- |
+| `GET` | `/my` | 今日任务与历史 | `is_employee`、`employee`、`today`（含 `remaining_seconds`、`deadline_epoch_ms`、`pass_score`）、`history`（不含今天） |
+| `POST` | `/sessions/{id}/start` | 开始/继续作答 | 会话及题目；已提交时直接返回详情 |
+| `GET` | `/sessions/{id}` | 取题 | 题目与已保存答案；未提交不返回正确答案与解析 |
+| `PUT` | `/sessions/{id}/answers` | 保存单题答案 | `{questionId, answer}`，幂等 |
+| `POST` | `/sessions/{id}/submit` | 提交判分 | 幂等；客观题即时判分，多选少选/多选/错选均不得分 |
+| `GET` | `/sessions/{id}/result` | 提交后逐题结果 | 得分、正确数、逐题正确答案与解析 |
+
+仅 `EMPLOYEE` 身份可作答；超过截止时刻提交返回 400 且会话置 `EXPIRED`。
+
+### 成绩查询与导出
+
+| 方法 | 路径 | 用途 | 关键入参 | 关键返回 |
+| --- | --- | --- | --- | --- |
+| `GET` | `/plans/{id}/results` | 分页查询成绩 | `dateFrom`、`dateTo`（`yyyy-MM-dd`）、`keyword`（工号/姓名）、`status`（`PENDING`/`IN_PROGRESS`/`SUBMITTED`/`EXPIRED`）、`page`（默认 1）、`size`（默认 20，最大 100） | 分页结构，`records` 含 `employee_no`、`employee_name`、`batch_name`、`practice_date`、`question_count`、`correct_count`、`total_score`、`status`、`submitted_at` |
+| `GET` | `/plans/{id}/results/export` | 按当前筛选导出 Excel | 同上（不分页） | `.xlsx` 文件流，列：工号、姓名、批次、练习日期、题数、正确数、得分、状态、提交时间 |
+
+导出没有匹配数据时返回 400「当前筛选条件下没有可导出的练习成绩」，不生成空文件；日期格式错误返回 400，结束日期早于开始日期返回 400。
+
