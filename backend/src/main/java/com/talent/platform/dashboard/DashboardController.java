@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
@@ -117,12 +118,18 @@ public class DashboardController {
         where employee_id=? and summary_type='MONTH' and status='PUBLISHED'
         order by period_key desc,version desc limit 1
         """, employeeId);
+    Object pendingDailyPractices = scalarOrNull("""
+        select count(*) from exam_daily_session s join exam_daily_plan p on p.id=s.plan_id
+        where s.employee_id=? and s.practice_date=? and s.status in ('PENDING','IN_PROGRESS')
+          and s.deadline_at>now() and p.status in ('PUBLISHED','PAUSED')
+        """, employeeId, java.sql.Date.valueOf(LocalDate.now(ZONE)));
 
     var metrics = new LinkedHashMap<String, Object>();
     metrics.put("pending_tasks", number(task.get("pending_tasks")));
     metrics.put("completed_tasks", number(task.get("completed_tasks")));
     metrics.put("upcoming_courses", number(course.get("upcoming_courses")));
     metrics.put("pending_exams", number(exam.get("pending_exams")));
+    metrics.put("pending_daily_practices", number(pendingDailyPractices));
     metrics.put("latest_month_score", latestMonthScore);
     metrics.put("task_completion_rate", percent(task.get("completed_tasks"), task.get("task_total")));
     metrics.put("course_attendance_rate", percent(course.get("attended_courses"), course.get("finished_courses")));
@@ -174,6 +181,17 @@ public class DashboardController {
       actions.add(action("EXAM", text(row.get("name")),
           "UPCOMING".equals(status) ? "考试即将开放，请提前安排复习" : "考试已开放，请在截止前完成",
           row.get("ends_at"), status, "IN_PROGRESS".equals(status) ? "DANGER" : "PRIMARY", "/exams/my"));
+    }
+    for (var row : db.queryForList("""
+        select s.id,p.name,s.deadline_at,s.status
+        from exam_daily_session s join exam_daily_plan p on p.id=s.plan_id
+        where s.employee_id=? and s.practice_date=? and s.status in ('PENDING','IN_PROGRESS')
+          and s.deadline_at>now() and p.status in ('PUBLISHED','PAUSED')
+        order by s.deadline_at limit 4
+        """, employeeId, java.sql.Date.valueOf(LocalDate.now(ZONE)))) {
+      actions.add(action("DAILY_PRACTICE", "每日练习：" + text(row.get("name")),
+          "IN_PROGRESS".equals(text(row.get("status"))) ? "练习作答中，请在截止前提交" : "今日练习已推送，请在截止前完成",
+          row.get("deadline_at"), text(row.get("status")), "WARNING", "/exams/daily"));
     }
     for (var leave : db.queryForList("""
         select r.id,v.end_at,r.status from leave_request r
