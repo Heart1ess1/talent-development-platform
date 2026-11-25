@@ -11,6 +11,10 @@ spring:
       max-request-size: ${FILE_MAX_REQUEST_SIZE:250MB}
   jackson:
     time-zone: Asia/Shanghai
+  task:
+    scheduling:
+      pool:
+        size: 4
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
@@ -20,6 +24,8 @@ app:
   jwt:
     secret: ${JWT_SECRET:change-this-development-secret-at-least-32-bytes}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
+  exam:
+    import-max-rows: ${EXAM_IMPORT_MAX_ROWS:20000}
   bootstrap:
     username: ${SUPER_ADMIN_USERNAME:superadmin}
     password: ${SUPER_ADMIN_PASSWORD:ChangeMe123!}

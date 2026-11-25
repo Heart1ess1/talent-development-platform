@@ -11,11 +11,11 @@ const CACHE_TTL=300000;
 function requestId(){return globalThis.crypto?.randomUUID?.()??`role-todo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}
 function headers(token:string){return {Authorization:`Bearer ${token}`,'X-Request-Id':requestId()}}
 
-/** 从 /dashboard 的指标里取出“该身份待处理事项”：管理身份用 pending_actions，员工身份用待办任务 + 待参加考试。 */
+/** 从 /dashboard 的指标里取出“该身份待处理事项”：管理身份用 pending_actions，员工身份用待办任务 + 待参加考试 + 今日未完成练习。 */
 export function todoCount(payload:any):number{
   const metrics=payload?.metrics||{};
   if(typeof metrics.pending_actions==='number')return metrics.pending_actions;
-  return Number(metrics.pending_tasks||0)+Number(metrics.pending_exams||0);
+  return Number(metrics.pending_tasks||0)+Number(metrics.pending_exams||0)+Number(metrics.pending_daily_practices||0);
 }
 
 function cacheKey(userId:number){return `${CACHE_PREFIX}${userId}`}

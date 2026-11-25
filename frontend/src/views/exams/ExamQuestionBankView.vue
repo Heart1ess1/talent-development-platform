@@ -9,11 +9,22 @@ import '@/styles/exam-center.css'
 import OrganizationFolders from '@/components/OrganizationFolders.vue'
 import {inFolder,type FolderSelection} from '@/utils/organizationFolder'
 
-type ImportResult={imported:number;errors:{row:number;field:string;message:string}[]}
+type ImportResult={imported:number;errorCount:number;skipped:number;errors:{row:number;field:string;message:string}[]}
 const banks=ref<any[]>([]),questions=ref<any[]>([]),activeBankId=ref<number>(),loading=ref(false)
+// 题库可达上万题：列表改为服务端分页，避免一次性拉取并渲染全部行导致页面卡死。
+const page=ref(1),pageSize=ref(20),total=ref(0)
+const stats=reactive({total:0,enabled:0,disabled:0,tags:[] as string[]})
 const folderFilter=ref<FolderSelection>('ALL')
 const visibleBanks=computed(()=>banks.value.filter(bank=>inFolder(bank,folderFilter.value)))
-watch(visibleBanks,items=>{if(!items.some(item=>item.id===activeBankId.value))activeBankId.value=items[0]?.id})
+// load() 内部会主动刷新列表，这里静默切换选中题库，避免重复请求。
+let suppressBankFetch=false
+watch(visibleBanks,items=>{
+  if(items.some(item=>item.id===activeBankId.value))return
+  activeBankId.value=items[0]?.id
+  if(suppressBankFetch)return
+  page.value=1
+  void loadQuestions()
+})
 const keyword=ref(''),typeFilter=ref(''),statusFilter=ref('')
 const bankDialog=ref(false),questionDialog=ref(false),importDialog=ref(false),saving=ref(false),importing=ref(false),importFile=ref<File>()
 const bank=reactive<any>({id:null,name:'',description:'',enabled:true})
@@ -21,33 +32,46 @@ const question=reactive<any>(createEmptyQuestion())
 
 const enabledBanks=computed(()=>banks.value.filter(x=>truthy(x.enabled)))
 const activeBank=computed(()=>banks.value.find(x=>x.id===activeBankId.value))
-const filteredQuestions=computed(()=>questions.value.filter(row=>{
-  const matchesBank=visibleBanks.value.some(bank=>bank.id===row.bank_id)&&(!activeBankId.value||row.bank_id===activeBankId.value)
-  const matchesKeyword=!keyword.value||`${row.stem} ${row.bank_name}`.toLowerCase().includes(keyword.value.trim().toLowerCase())
-  const matchesType=!typeFilter.value||row.question_type===typeFilter.value
-  const matchesStatus=!statusFilter.value||(statusFilter.value==='ENABLED'?truthy(row.enabled):!truthy(row.enabled))
-  return matchesBank&&matchesKeyword&&matchesType&&matchesStatus
-}))
-const summary=computed(()=>({
-  banks:banks.value.length,
-  questions:questions.value.length,
-  enabled:questions.value.filter(x=>truthy(x.enabled)&&truthy(x.bank_enabled)).length,
-  disabled:questions.value.filter(x=>!truthy(x.enabled)||!truthy(x.bank_enabled)).length
-}))
-const tagOptions=computed(()=>Array.from(new Set(questions.value.flatMap(tagsOf))).sort())
+// 统计与标签来自轻量聚合接口，不再依赖全量题目列表。
+const summary=computed(()=>({banks:banks.value.length,questions:stats.total,enabled:stats.enabled,disabled:stats.disabled}))
+const tagOptions=computed(()=>stats.tags)
 
 function truthy(value:any){return value===true||value===1}
 async function load(){
   loading.value=true
+  suppressBankFetch=true
   try{
-    const [bankRes,questionRes]=await Promise.all([
-      api.get<any,Envelope<any[]>>('/exams/question-banks'),
-      api.get<any,Envelope<any[]>>('/exams/questions')
-    ])
-    banks.value=bankRes.data;questions.value=questionRes.data
+    const bankRes=await api.get<any,Envelope<any[]>>('/exams/question-banks')
+    banks.value=bankRes.data
     if(!visibleBanks.value.some(item=>item.id===activeBankId.value))activeBankId.value=visibleBanks.value[0]?.id
-  }finally{loading.value=false}
+    await Promise.all([loadStats(),loadQuestions()])
+  }finally{suppressBankFetch=false;loading.value=false}
 }
+async function loadStats(){
+  stats.total=0
+  const res=await api.get<any,Envelope<{total:number;enabled:number;disabled:number;tags:string[]}>>('/exams/questions/stats')
+  stats.total=Number(res.data.total||0);stats.enabled=Number(res.data.enabled||0);stats.disabled=Number(res.data.disabled||0);stats.tags=res.data.tags||[]
+}
+async function loadQuestions(){
+  if(!activeBankId.value){questions.value=[];total.value=0;return}
+  const res=await api.get<any,Envelope<{records:any[];total:number}>>('/exams/questions/page',{params:{
+    bankId:activeBankId.value,type:typeFilter.value||undefined,keyword:keyword.value.trim()||undefined,
+    status:statusFilter.value||undefined,page:page.value,size:pageSize.value
+  }})
+  questions.value=res.data.records;total.value=Number(res.data.total||0)
+}
+function selectBank(id:number){
+  if(activeBankId.value===id)return
+  activeBankId.value=id;page.value=1;void loadQuestions()
+}
+let keywordTimer:ReturnType<typeof setTimeout>|undefined
+watch(keyword,()=>{
+  if(keywordTimer)clearTimeout(keywordTimer)
+  keywordTimer=setTimeout(()=>{page.value=1;void loadQuestions()},300)
+})
+watch([typeFilter,statusFilter],()=>{page.value=1;void loadQuestions()})
+watch(page,()=>void loadQuestions())
+watch(pageSize,()=>{page.value=1;void loadQuestions()})
 function openBank(row?:any){Object.assign(bank,row?{id:row.id,name:row.name,description:row.description||'',enabled:truthy(row.enabled)}:{id:null,name:'',description:'',enabled:true});bankDialog.value=true}
 async function saveBank(){
   if(!bank.name.trim())return ElMessage.warning('请输入题库名称')
@@ -79,13 +103,15 @@ async function saveQuestion(){
     const payload={bankId:question.bankId,type:question.type,stem:question.stem.trim(),options,answer:question.answer,score:question.score,explanation:question.explanation,tags:question.tags}
     if(question.id)await api.put(`/exams/questions/${question.id}`,payload)
     else await api.post('/exams/questions',payload)
-    ElMessage.success(question.id?'题目已更新':'题目已加入题库');questionDialog.value=false;await load()
+    ElMessage.success(question.id?'题目已更新':'题目已加入题库');questionDialog.value=false;page.value=1;await load()
   }finally{saving.value=false}
 }
 async function toggleQuestion(row:any){await api.put(`/exams/questions/${row.id}/enabled`,{enabled:truthy(row.enabled)});ElMessage.success(truthy(row.enabled)?'题目已启用':'题目已停用');await load()}
 async function deleteQuestion(row:any){
   await ElMessageBox.confirm('删除后无法恢复；若题目已被试卷使用，系统会自动阻止删除。','删除题目',{type:'warning',confirmButtonText:'确认删除'})
-  await api.delete(`/exams/questions/${row.id}`);ElMessage.success('题目已删除');await load()
+  await api.delete(`/exams/questions/${row.id}`);ElMessage.success('题目已删除')
+  if(questions.value.length===1&&page.value>1)page.value-=1
+  await load()
 }
 function pickImportFile(e:Event){importFile.value=(e.target as HTMLInputElement).files?.[0]}
 async function downloadTemplate(){
@@ -98,10 +124,10 @@ async function importQuestions(){
   importing.value=true
   try{
     const form=new FormData();form.append('bankId',String(activeBankId.value));form.append('file',importFile.value)
-    const result=(await api.post<any,Envelope<ImportResult>>('/exams/questions/import',form)).data
+    const result=(await api.post<any,Envelope<ImportResult>>('/exams/questions/import',form,{timeout:180000})).data
     const firstError=result.errors[0]
-    if(firstError)ElMessage.error(`导入失败：第 ${firstError.row} 行 ${firstError.message}`)
-    else{ElMessage.success(`成功导入 ${result.imported} 道题`);importFile.value=undefined;importDialog.value=false;await load()}
+    if(result.errorCount>0)ElMessage.error(`导入失败：共 ${result.errorCount} 行有问题，第 ${firstError?.row} 行 ${firstError?.message}`)
+    else{ElMessage.success(`成功导入 ${result.imported} 道题${result.skipped?`，跳过重复 ${result.skipped} 道`:''}`);importFile.value=undefined;importDialog.value=false;page.value=1;await load()}
   }finally{importing.value=false}
 }
 function displayAnswer(row:any){const value=parseJson(row.answer_json);if(Array.isArray(value))return value.join('、');if(value===true)return '正确';if(value===false)return '错误';return value}
@@ -128,7 +154,7 @@ onMounted(load)
       <aside class="exam-selector">
         <div class="exam-selector-head"><div><h2>题库目录</h2><span>{{visibleBanks.length}} 个题库</span></div><el-button link type="primary" :icon="FolderAdd" @click="openBank()">新建</el-button></div>
         <div class="exam-selector-list">
-          <button v-for="item in visibleBanks" :key="item.id" :class="{active:activeBankId===item.id}" @click="activeBankId=item.id">
+          <button v-for="item in visibleBanks" :key="item.id" :class="{active:activeBankId===item.id}" @click="selectBank(item.id)">
             <span class="selector-icon"><el-icon><Collection/></el-icon></span>
             <span class="selector-copy"><strong>{{item.name}}</strong><small>{{item.question_count}} 题 · {{item.enabled_count}} 可用</small></span>
             <el-tag size="small" :type="truthy(item.enabled)?'success':'info'" effect="plain">{{truthy(item.enabled)?'启用':'停用'}}</el-tag>
@@ -146,15 +172,18 @@ onMounted(load)
           <el-input v-model="keyword" clearable :prefix-icon="Search" placeholder="搜索题干或题库"/>
           <el-select v-model="typeFilter" clearable filterable placeholder="全部题型"><el-option v-for="key in objectiveQuestionTypes" :key="key" :label="typeLabels[key]" :value="key"/></el-select>
           <el-select v-model="statusFilter" clearable filterable placeholder="全部状态"><el-option label="已启用" value="ENABLED"/><el-option label="已停用" value="DISABLED"/></el-select>
-          <span class="exam-result-count">显示 {{filteredQuestions.length}} / {{questions.length}} 道</span>
+          <span class="exam-result-count">显示 {{questions.length}} / {{total}} 道</span>
         </div>
-        <el-table :data="filteredQuestions" class="exam-table" empty-text="当前题库暂无题目">
+        <el-table :data="questions" class="exam-table" empty-text="当前题库暂无题目">
           <el-table-column label="题目" min-width="240"><template #default="s"><div class="question-title"><el-tag size="small" effect="plain">{{typeLabels[s.row.question_type]}}</el-tag><div><strong>{{s.row.stem}}</strong><span>{{s.row.bank_name}} · {{s.row.default_score==null?'默认分值未设置':`默认 ${s.row.default_score} 分`}}</span></div></div></template></el-table-column>
           <el-table-column label="专业标签" min-width="110"><template #default="s"><div class="tag-list"><el-tag v-for="tag in tagsOf(s.row)" :key="tag" size="small" effect="plain">{{tag}}</el-tag><span v-if="!tagsOf(s.row).length" class="muted">公共题</span></div></template></el-table-column>
           <el-table-column label="正确答案" min-width="96" show-overflow-tooltip><template #default="s">{{displayAnswer(s.row)}}</template></el-table-column>
           <el-table-column label="状态" width="72"><template #default="s"><el-switch v-model="s.row.enabled" @change="toggleQuestion(s.row)"/></template></el-table-column>
           <el-table-column label="操作" width="104" fixed="right"><template #default="s"><div class="exam-table-actions"><el-button link type="primary" @click="openQuestion(s.row)">编辑</el-button><el-button link type="danger" @click="deleteQuestion(s.row)">删除</el-button></div></template></el-table-column>
         </el-table>
+        <div class="exam-table-pager">
+          <el-pagination background layout="total, sizes, prev, pager, next, jumper" :total="total" v-model:current-page="page" v-model:page-size="pageSize" :page-sizes="[20,50,100]"/>
+        </div>
       </main>
     </section>
 
@@ -186,5 +215,5 @@ onMounted(load)
 </template>
 
 <style scoped>
-.question-filter{grid-template-columns:minmax(240px,1fr) 150px 150px auto}.question-title{display:flex;align-items:flex-start;gap:10px}.question-title>div{display:flex;min-width:0;flex-direction:column;gap:5px}.question-title strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.question-title span{color:#959595;font-size:14px}.tag-list{display:flex;align-items:center;flex-wrap:wrap;gap:4px}.import-target{display:flex;gap:8px;margin-bottom:12px;color:#888888}.import-target strong{color:#3f3f3f}.exam-upload-zone{display:flex;min-height:190px;align-items:center;justify-content:center;flex-direction:column;border:1px dashed #d8d8d8;border-radius:10px;background:var(--app-primary-soft)}.exam-upload-zone>.el-icon{color:var(--app-primary);font-size:34px}.exam-upload-zone strong{margin-top:10px}.exam-upload-zone span{margin:7px 0 14px;color:#959595;font-size:14px}.exam-upload-zone label{padding:7px 14px;border-radius:6px;color:#fff;background:var(--app-primary);cursor:pointer}.exam-upload-zone input{display:none}@media(max-width:900px){.question-filter{grid-template-columns:1fr}}
+.question-filter{grid-template-columns:minmax(240px,1fr) 150px 150px auto}.exam-table-pager{display:flex;justify-content:flex-end;padding:12px 16px;border-top:1px solid #f0f0f0}.question-title{display:flex;align-items:flex-start;gap:10px}.question-title>div{display:flex;min-width:0;flex-direction:column;gap:5px}.question-title strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.question-title span{color:#959595;font-size:14px}.tag-list{display:flex;align-items:center;flex-wrap:wrap;gap:4px}.import-target{display:flex;gap:8px;margin-bottom:12px;color:#888888}.import-target strong{color:#3f3f3f}.exam-upload-zone{display:flex;min-height:190px;align-items:center;justify-content:center;flex-direction:column;border:1px dashed #d8d8d8;border-radius:10px;background:var(--app-primary-soft)}.exam-upload-zone>.el-icon{color:var(--app-primary);font-size:34px}.exam-upload-zone strong{margin-top:10px}.exam-upload-zone span{margin:7px 0 14px;color:#959595;font-size:14px}.exam-upload-zone label{padding:7px 14px;border-radius:6px;color:#fff;background:var(--app-primary);cursor:pointer}.exam-upload-zone input{display:none}@media(max-width:900px){.question-filter{grid-template-columns:1fr}}
 </style>
