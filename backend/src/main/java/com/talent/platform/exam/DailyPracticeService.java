@@ -396,7 +396,7 @@ public class DailyPracticeService {
         LocalDateTime deadlineAt = today.atTime(localTime(plan.get("deadline_time")));
         if (now.isBefore(pushAt) || !now.isBefore(deadlineAt)) continue;
         plansRun++;
-        var result = generatePlanDay(plan, today, now);
+        var result = generatePlanDay(plan, today, now, false);
         generated += intOf(result.get("generated"));
         failed += intOf(result.get("failed"));
       } catch (Exception e) {
@@ -426,8 +426,8 @@ public class DailyPracticeService {
         """, planId, Date.valueOf(date), reason);
   }
 
-  /** 生成某个计划某一天的全部练习：先抢占 job_run，再逐人用独立事务生成。 */
-  private Map<String, Object> generatePlanDay(Map<String, Object> plan, LocalDate date, LocalDateTime now) {
+  /** 生成某个计划某一天的全部练习：先抢占 job_run，再逐人用独立事务生成。manual=true 表示管理端「立即推送」，可重试已失败任务。 */
+  private Map<String, Object> generatePlanDay(Map<String, Object> plan, LocalDate date, LocalDateTime now, boolean manual) {
     Long planId = ((Number) plan.get("id")).longValue();
     int baseGenerated = 0, baseFailed = 0;
     int acquired = db.update("""
@@ -438,16 +438,35 @@ public class DailyPracticeService {
       var runs = db.queryForList("select status,generated_count,failed_count from exam_daily_job_run where plan_id=? and practice_date=?",
           planId, Date.valueOf(date));
       String status = runs.isEmpty() ? "" : String.valueOf(runs.get(0).get("status"));
-      int retried = "FAILED".equals(status)
-          ? db.update("""
-              update exam_daily_job_run set status='RUNNING',generated_count=0,failed_count=0,error_message=null,
-                     started_at=now(),finished_at=null
-              where plan_id=? and practice_date=? and status='FAILED'
-              """, planId, Date.valueOf(date))
-          : 0;
+      int retried = 0;
+      if ("FAILED".equals(status) && manual) {
+        // 自动轮询不再重试失败任务；仅管理端「立即推送」允许人工重试。
+        retried = db.update("""
+            update exam_daily_job_run set status='RUNNING',generated_count=0,failed_count=0,error_message=null,
+                   started_at=now(),finished_at=null
+            where plan_id=? and practice_date=? and status='FAILED'
+            """, planId, Date.valueOf(date));
+      } else if ("RUNNING".equals(status)) {
+        // 生成中途崩溃/重启会留下 RUNNING；超过 10 分钟视为陈旧锁，允许接管重跑。
+        retried = db.update("""
+            update exam_daily_job_run set generated_count=0,failed_count=0,error_message=null,
+                   started_at=now(),finished_at=null
+            where plan_id=? and practice_date=? and status='RUNNING'
+              and started_at < date_sub(now(), interval 10 minute)
+            """, planId, Date.valueOf(date));
+      }
       if (retried == 0) {
         // 已成功生成时仍允许补齐后来追加的参与人；无人缺失则直接跳过，保证定时轮询不重复干活。
-        if ("RUNNING".equals(status) || missingSessionCount(planId, date) == 0) {
+        if (!"SUCCESS".equals(status)) {
+          Map<String, Object> skipped = new LinkedHashMap<>();
+          skipped.put("generated", 0);
+          skipped.put("failed", 0);
+          skipped.put("message", "RUNNING".equals(status)
+              ? "今天正在生成中，请稍后查看生成记录"
+              : "今天生成已失败，修复题库或参与范围后可立即推送重试");
+          return skipped;
+        }
+        if (missingSessionCount(planId, date) == 0) {
           Map<String, Object> skipped = new LinkedHashMap<>();
           skipped.put("generated", 0);
           skipped.put("failed", 0);
@@ -479,9 +498,10 @@ public class DailyPracticeService {
         }
       }
       db.update("""
-          update exam_daily_job_run set status='SUCCESS',generated_count=?,failed_count=?,error_message=?,finished_at=now()
+          update exam_daily_job_run set status=?,generated_count=?,failed_count=?,error_message=?,finished_at=now()
           where plan_id=? and practice_date=?
-          """, baseGenerated + generated, baseFailed + failed, summarize(errors), planId, Date.valueOf(date));
+          """, generated == 0 && failed > 0 ? "FAILED" : "SUCCESS",
+          baseGenerated + generated, baseFailed + failed, summarize(errors), planId, Date.valueOf(date));
       Map<String, Object> result = new LinkedHashMap<>();
       result.put("generated", generated);
       result.put("failed", failed);
@@ -652,7 +672,7 @@ public class DailyPracticeService {
     int participants = activeParticipantCount(id);
     if (participants == 0) throw new BusinessException(400, "计划没有可推送的在职参与人");
     requirePublishable(plan);
-    var generated = generatePlanDay(plan, today, now);
+    var generated = generatePlanDay(plan, today, now, true);
     audit.log("PUSH_DAILY_PRACTICE", "EXAM_DAILY_PLAN", id, null,
         Map.of("practiceDate", today.toString(), "participants", participants, "generated", generated.get("generated")));
     Map<String, Object> result = new LinkedHashMap<>();
