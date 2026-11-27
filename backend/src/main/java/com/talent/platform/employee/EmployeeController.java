@@ -4,6 +4,7 @@ import com.talent.platform.common.ApiResponse;
 import com.talent.platform.common.BusinessException;
 import com.talent.platform.common.PageResult;
 import com.talent.platform.security.AuditService;
+import com.talent.platform.security.InitialPassword;
 import com.talent.platform.security.PermissionService;
 import com.talent.platform.security.Permissions;
 import com.talent.platform.security.SecurityUtils;
@@ -187,7 +188,7 @@ public class EmployeeController {
         insert into sys_user(username,password_hash,display_name,role,enabled,must_change_password)
         values(?,?,?,'EMPLOYEE',?,true)
         """, availableUsername(request.employeeNo()),
-        encoder.encode(UUID.randomUUID().toString()), request.name(),
+        encoder.encode(InitialPassword.fromEmployeeNo(request.employeeNo())), request.name(),
         "ACTIVE".equals(normalizedStatus(request.status(), "ACTIVE")));
     Long userId = db.queryForObject("select last_insert_id()", Long.class);
     db.update("insert ignore into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,'EMPLOYEE',true,?)",

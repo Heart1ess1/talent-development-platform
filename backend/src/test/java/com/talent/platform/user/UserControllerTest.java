@@ -29,18 +29,18 @@ class UserControllerTest {
 
   @Test void adminCanCreateOperationalRoles(){
     authenticate("ADMIN");
-    var result=controller.create(new UserController.UserRequest("mentor1","导师一","MENTOR",null));
+    var result=controller.create(new UserController.UserRequest("mentor01","导师一","MENTOR",null));
     assertThat(result.data()).containsEntry("id",10L).containsKey("temporaryPassword");
   }
 
   @Test void adminCannotCreateSystemAdminRoles(){
     authenticate("ADMIN");
-    assertThatThrownBy(()->controller.create(new UserController.UserRequest("admin1","管理员","ADMIN",null))).isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(()->controller.create(new UserController.UserRequest("admin01","管理员","ADMIN",null))).isInstanceOf(AccessDeniedException.class);
   }
 
   @Test void stationManagerMustHaveStationScope(){
     authenticate("ADMIN");
-    assertThatThrownBy(()->controller.create(new UserController.UserRequest("station1","站点负责人","STATION_MANAGER",List.of()))).isInstanceOf(BusinessException.class).hasMessageContaining("站长至少需要绑定一个服务站");
+    assertThatThrownBy(()->controller.create(new UserController.UserRequest("station01","站点负责人","STATION_MANAGER",List.of()))).isInstanceOf(BusinessException.class).hasMessageContaining("站长至少需要绑定一个服务站");
   }
 
   @Test void superAdminCanChangeLinkedAccountToEmployeeRole(){
@@ -90,15 +90,16 @@ class UserControllerTest {
     verify(db).update(eq("update employee set name=?,version=version+1 where user_id=?"),eq("新姓名"),eq(2L));
   }
 
-  @Test void employeePasswordResetUsesRandomTemporaryPassword(){
+  @Test void employeePasswordResetUsesLastSixCharactersOfEmployeeNumber(){
     authenticate("ADMIN");
     when(db.queryForObject(eq("select role from sys_user where id=?"),eq(String.class),eq(2L))).thenReturn("EMPLOYEE");
+    when(db.queryForObject(eq("select coalesce(e.employee_no,u.username) from sys_user u left join employee e on e.user_id=u.id where u.id=?"),eq(String.class),eq(2L))).thenReturn("010200001111");
 
     var result=controller.reset(2L);
 
     String temporaryPassword=result.data().get("temporaryPassword");
-    assertThat(temporaryPassword).matches("Tmp\\d{6}!a");
-    verify(encoder).encode(temporaryPassword);
+    assertThat(temporaryPassword).isEqualTo("001111");
+    verify(encoder).encode("001111");
   }
 
   @Test void superAdminCanChangeUsernameAndRevokeTheTargetSession(){

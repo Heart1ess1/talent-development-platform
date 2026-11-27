@@ -2,15 +2,15 @@ package com.talent.platform.user;
 
 import com.talent.platform.common.*;import com.talent.platform.security.*;import jakarta.validation.Valid;import jakarta.validation.constraints.*;import org.springframework.jdbc.core.JdbcTemplate;import org.springframework.security.access.AccessDeniedException;import org.springframework.security.crypto.password.PasswordEncoder;import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;import org.springframework.web.bind.annotation.*;
-import java.nio.charset.StandardCharsets;import java.security.MessageDigest;import java.security.SecureRandom;import java.util.*;
+import java.nio.charset.StandardCharsets;import java.security.MessageDigest;import java.util.*;
 
 @RestController @RequestMapping("/api/v1/users")
 public class UserController {
   private static final List<String> OPS_ROLES=List.of("MENTOR","STATION_MANAGER","AREA_MANAGER","TRAINING_DIRECTOR","TRAINING_ADMIN");
   private static final List<String> SYSTEM_ROLES=List.of("ADMIN","SUPER_ADMIN");
   private static final List<String> CHANGE_ROLES=List.of("EMPLOYEE","MENTOR","STATION_MANAGER","AREA_MANAGER","TRAINING_ADMIN","ADMIN","SUPER_ADMIN");
-  private final JdbcTemplate db;private final PasswordEncoder encoder;private final PermissionService permissions;private final AuditService audit;private final SecureRandom random=new SecureRandom();public UserController(JdbcTemplate db,PasswordEncoder encoder,PermissionService permissions,AuditService audit){this.db=db;this.encoder=encoder;this.permissions=permissions;this.audit=audit;}
-  public record UserRequest(@NotBlank String username,@NotBlank String displayName,@Pattern(regexp="MENTOR|STATION_MANAGER|AREA_MANAGER|TRAINING_ADMIN|ADMIN") String role,List<Long> stationIds){}
+  private final JdbcTemplate db;private final PasswordEncoder encoder;private final PermissionService permissions;private final AuditService audit;public UserController(JdbcTemplate db,PasswordEncoder encoder,PermissionService permissions,AuditService audit){this.db=db;this.encoder=encoder;this.permissions=permissions;this.audit=audit;}
+  public record UserRequest(@NotBlank @Size(max=64) String username,@NotBlank String displayName,@Pattern(regexp="MENTOR|STATION_MANAGER|AREA_MANAGER|TRAINING_ADMIN|ADMIN") String role,List<Long> stationIds){}
   public record EnableRequest(boolean enabled){}
   public record DisplayNameRequest(@NotBlank String displayName){}
   public record UsernameRequest(@NotBlank @Size(max=64) @Pattern(regexp="[A-Za-z0-9._-]+",message="用户名仅支持字母、数字、点、下划线和连字符") String username){}
@@ -63,7 +63,7 @@ public class UserController {
   }
   @PostMapping("/bulk/preview") public ApiResponse<Map<String,Object>> bulkPreview(@RequestBody BulkRequest request){validateBulkRequest(request);permissions.require(Permissions.USER_EMPLOYEE_MANAGE);var ids=resolveBulkIds(request.selection());validateBulkChanges(ids,request);var versions=userVersions(ids);var operationId=UUID.randomUUID().toString();int changed=countChanged(ids,request.changes());return ApiResponse.ok(Map.of("operationId",operationId,"selectionHash",selectionHash(versions),"matched",ids.size(),"changed",changed,"unchanged",ids.size()-changed,"blocked",List.of(),"status","PREVIEWED"));}
   @PostMapping("/bulk/execute") @Transactional(isolation=Isolation.READ_COMMITTED) public ApiResponse<Map<String,Object>> bulkExecute(@RequestBody BulkRequest request){validateBulkRequest(request);permissions.require(Permissions.USER_EMPLOYEE_MANAGE);ensureRequestNotUsed(request.requestId(),"BULK_UPDATE_USERS");var ids=resolveBulkIds(request.selection());lockBulkUsers(ids);validateBulkChanges(ids,request);var versions=userVersions(ids);if(request.expectedCount()!=null&&request.expectedCount()!=ids.size())throw new BusinessException(409,"账号筛选结果已变化，请重新预览");if(request.selectionHash()!=null&&!request.selectionHash().equals(selectionHash(versions)))throw new BusinessException(409,"账号数据已变化，请重新预览");var operationId=UUID.randomUUID().toString();int changed=0;for(Long id:ids)if(updateBulkUser(id,request))changed++;audit.logWithRequestId(request.requestId(),"BULK_UPDATE_USERS","USER",null,Map.of("operationId",operationId,"ids",ids,"count",ids.size()),Map.of("operationId",operationId,"changes",request.changes(),"changed",changed));return ApiResponse.ok(Map.of("operationId",operationId,"matched",ids.size(),"changed",changed,"unchanged",ids.size()-changed,"blocked",List.of(),"status","COMPLETED"));}
-  @PostMapping @Transactional(isolation=Isolation.READ_COMMITTED) public ApiResponse<Map<String,Object>> create(@Valid @RequestBody UserRequest q){requireRoleManage(q.role());String pwd=temp();db.update("insert into sys_user(username,password_hash,display_name,role,enabled,must_change_password) values(?,?,?,?,true,true)",q.username(),encoder.encode(pwd),q.displayName(),q.role());Long id=db.queryForObject("select last_insert_id()",Long.class);db.update("insert ignore into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,?,true,?)",id,q.role(),SecurityUtils.current().id());saveStations(id,q.role(),q.stationIds());audit.log("CREATE_USER","USER",id,null,Map.of("role",q.role()));return ApiResponse.ok(Map.of("id",id,"temporaryPassword",pwd));}
+  @PostMapping @Transactional(isolation=Isolation.READ_COMMITTED) public ApiResponse<Map<String,Object>> create(@Valid @RequestBody UserRequest q){requireRoleManage(q.role());String pwd=InitialPassword.fromEmployeeNo(q.username());db.update("insert into sys_user(username,password_hash,display_name,role,enabled,must_change_password) values(?,?,?,?,true,true)",q.username(),encoder.encode(pwd),q.displayName(),q.role());Long id=db.queryForObject("select last_insert_id()",Long.class);db.update("insert ignore into sys_user_role(user_id,role_code,is_primary,assigned_by) values(?,?,true,?)",id,q.role(),SecurityUtils.current().id());saveStations(id,q.role(),q.stationIds());audit.log("CREATE_USER","USER",id,null,Map.of("role",q.role()));return ApiResponse.ok(Map.of("id",id,"temporaryPassword",pwd));}
   @PutMapping("/{id}/enabled") @Transactional(isolation=Isolation.READ_COMMITTED) public ApiResponse<Void> enabled(@PathVariable Long id,@RequestBody EnableRequest q){var current=SecurityUtils.current();String role=db.queryForObject("select role from sys_user where id=?",String.class,id);requireAccountManage(id,role);if(id.equals(current.id())&&!q.enabled())throw new BusinessException(400,"不能停用当前账号");if(!q.enabled()&&hasPendingTaskScores(id))throw new BusinessException(409,"该账号仍有未完成的任务评分，请先完成或转交后再停用");if(!q.enabled())ensureLeaveTransfer(id);if(!q.enabled()&&ownsSuperAdmin(id,role)&&wouldLeaveNoSuperAdmin(id))throw new BusinessException(400,"必须保留至少一个启用的超级管理员");db.update("update sys_user set enabled=?,version=version+1,security_version=security_version+1 where id=?",q.enabled(),id);audit.log("SET_USER_ENABLED","USER",id,Map.of("enabled",!q.enabled()),Map.of("enabled",q.enabled()));return ApiResponse.ok(null);}
   /** 旧接口保留：语义降级为“设为唯一角色”，内部与角色集合写入共用同一套事务逻辑。 */
   @PutMapping("/{id}/role") @Transactional(isolation=Isolation.READ_COMMITTED) public ApiResponse<Void> role(@PathVariable Long id,@RequestBody Map<String,Object> q){
@@ -129,7 +129,8 @@ public class UserController {
   @PostMapping("/{id}/reset-password") @Transactional(isolation=Isolation.READ_COMMITTED) public ApiResponse<Map<String,String>> reset(@PathVariable Long id){
     String role=db.queryForObject("select role from sys_user where id=?",String.class,id);
     requireAccountManage(id,role);
-    String pwd=temp();
+    String employeeNo=db.queryForObject("select coalesce(e.employee_no,u.username) from sys_user u left join employee e on e.user_id=u.id where u.id=?",String.class,id);
+    String pwd=InitialPassword.fromEmployeeNo(employeeNo);
     db.update("update sys_user set password_hash=?,must_change_password=true,version=version+1,security_version=security_version+1 where id=?",encoder.encode(pwd),id);
     audit.log("RESET_PASSWORD","USER",id,null,null);
     return ApiResponse.ok(Map.of("temporaryPassword",pwd));
@@ -402,5 +403,4 @@ public class UserController {
     if(count!=null&&count>0)throw new BusinessException(409,"该身份仍有请假审批或未销假责任，请先转交");
   }
   private void ensureLeaveTransfer(Long id){db.queryForList("select id from sys_user where id=? for update",id);Integer n=db.queryForObject("select count(*) from leave_request_version v join leave_request r on r.id=v.request_id where v.approver_user_id=? and (v.status='PENDING' or (v.version_no=r.current_version and r.status='APPROVED'))",Integer.class,id);if(n!=null&&n>0)throw new BusinessException(409,"该账号仍有请假审批或未销假责任，请先转交");}
-  private String temp(){return "Tmp"+(100000+random.nextInt(900000))+"!a";}
 }

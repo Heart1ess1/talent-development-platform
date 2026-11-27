@@ -122,8 +122,8 @@ class EmployeeSpreadsheetTest {
       assertThat(instructions.getRow(4).getCell(0).getStringCellValue()).isEqualTo("性别");
       assertThat(instructions.getRow(6).getCell(0).getStringCellValue()).isEqualTo("班级");
       assertThat(instructions.getRow(7).getCell(0).getStringCellValue()).isEqualTo("班级职务");
-      assertThat(instructions.getRow(15).getCell(1).getStringCellValue()).isEqualTo("新增必填");
-      assertThat(instructions.getRow(15).getCell(2).getStringCellValue()).contains("大写X");
+      assertThat(instructions.getRow(15).getCell(1).getStringCellValue()).isEqualTo("否");
+      assertThat(instructions.getRow(15).getCell(2).getStringCellValue()).contains("工号后六位");
       assertThat(instructions.getRow(28).getCell(0).getStringCellValue()).isEqualTo("状态");
     }
   }
@@ -161,7 +161,7 @@ class EmployeeSpreadsheetTest {
     var result = controller.employees(file);
 
     assertThat(result.data().imported()).isEqualTo(1);
-    verify(encoder).encode("01000X");
+    verify(encoder).encode("260002");
     var accountArguments = ArgumentCaptor.forClass(Object[].class);
     verify(db).update(contains("insert into sys_user"), accountArguments.capture());
     assertThat(accountArguments.getValue()).endsWith(false);
@@ -202,7 +202,7 @@ class EmployeeSpreadsheetTest {
     var result = controller.employees(file);
 
     assertThat(result.data().imported()).isEqualTo(1);
-    verify(encoder).encode("01000X");
+    verify(encoder).encode("260003");
     var accountArguments = ArgumentCaptor.forClass(Object[].class);
     verify(db).update(contains("insert into sys_user"), accountArguments.capture());
     assertThat(accountArguments.getValue()).endsWith(true);

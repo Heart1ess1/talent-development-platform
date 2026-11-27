@@ -741,7 +741,7 @@ onMounted(load)
     <el-dialog v-model="dialog" class="account-dialog" title="创建账号" width="560px" destroy-on-close>
       <div class="dialog-intro">
         <div class="intro-icon"><UserFilled/></div>
-        <div><strong>新增平台账号</strong><span>创建后会自动生成一次性临时密码</span></div>
+        <div><strong>新增平台账号</strong><span>用户名按工号填写，初始密码为工号后六位，首次登录必须修改</span></div>
       </div>
       <el-form ref="formRef" :model="form" :rules="formRules" label-position="top">
         <div class="form-row">
@@ -749,7 +749,7 @@ onMounted(load)
             <el-input v-model="form.displayName" maxlength="40" placeholder="请输入账号使用人姓名"/>
           </el-form-item>
           <el-form-item label="用户名" prop="username">
-            <el-input v-model="form.username" maxlength="64" placeholder="如 zhangsan"/>
+            <el-input v-model="form.username" maxlength="64" placeholder="请输入工号或登录账号"/>
           </el-form-item>
         </div>
         <el-form-item label="账号角色" prop="role">
