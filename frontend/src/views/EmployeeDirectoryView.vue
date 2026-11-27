@@ -1470,7 +1470,7 @@ onBeforeUnmount(()=>narrowMedia?.removeEventListener('change',syncNarrow))
             type="success"
             :closable="false"
             :title="`导入完成：新增 ${importResult.inserted} 人，更新 ${importResult.updated} 人，未变化 ${importResult.unchanged} 人`"
-            :description="importResult.inserted?'新增在职账号已启用，初始密码为身份证后六位（x 按大写 X 输入）。':'更新人员的登录密码保持原值。'"
+            :description="importResult.inserted?'新增在职账号已启用，初始密码为工号后六位；身份证号码可留空。':'更新人员的登录密码保持原值。'"
             show-icon
           />
           <el-table v-if="importResult.createdAccounts?.length" :data="importResult.createdAccounts" class="import-error-table" size="small" max-height="240">

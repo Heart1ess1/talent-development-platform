@@ -143,9 +143,7 @@ public class ImportController {
 
             if (text(r.getGender()) != null && normalizeGender(r.getGender()) == null)
                 errors.add(new RowError(line, "性别", "仅支持“男”或“女”"));
-            if (existing == null && text(r.getIdCard()) == null)
-                errors.add(new RowError(line, "身份证号码", "新增人员不能为空；用于生成首次登录密码"));
-            else if (text(r.getIdCard()) != null && !EmployeeInitialPassword.supports(r.getIdCard().trim()))
+            if (text(r.getIdCard()) != null && !EmployeeInitialPassword.supports(r.getIdCard().trim()))
                 errors.add(new RowError(line, "身份证号码", "必须为18位，末位仅支持数字或X/x"));
             if (existing == null && text(r.getBatch()) == null)
                 errors.add(new RowError(line, "批次", "新增人员不能为空"));
@@ -222,7 +220,7 @@ public class ImportController {
 
     private CreatedAccount insertEmployee(EmployeeImportRow r, Map<String, Object> values) {
         String status = (String) values.get("status");
-        String initialPassword = EmployeeInitialPassword.fromIdCard(r.getIdCard().trim());
+        String initialPassword = InitialPassword.fromEmployeeNo(r.getEmployeeNo());
         String username = availableUsername(r.getEmployeeNo());
         db.update("""
             insert into sys_user(username, password_hash, display_name, role, enabled, must_change_password)
@@ -446,7 +444,7 @@ public class ImportController {
                 instruction("指导老师（技能）", "否", "填写已启用导师的用户名；也可填写不重名的导师姓名。", "mentor2"),
                 instruction("技能老师联系方式", "否", "填写技能指导老师的联系电话。", "13800000002"),
                 instruction("培养周期", "否", "必须与字典值管理中已启用的培养周期完全一致，如3个月、6个月、1年。", "3个月"),
-                instruction("身份证号码", "新增必填", "必须为18位并按文本填写；新增人员初始密码为后六位（X/x登录时统一输入大写X），更新不会重置密码。", "11010120020101000X"),
+                instruction("身份证号码", "否", "可留空；如填写则必须为18位并按文本填写，末位支持数字或X/x。新增人员初始密码统一为工号后六位，更新不会重置密码。", "11010120020101000X"),
                 instruction("毕业学校", "否", "填写毕业院校全称。", "示例大学"),
                 instruction("所学专业", "否", "填写专业名称。", "车辆工程"),
                 instruction("学历", "否", "建议使用高中、大专、本科、硕士、博士等统一名称。", "本科"),
